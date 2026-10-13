@@ -58,6 +58,15 @@ Run `npm run typecheck` and `npm run build` for local validation. The
 acceptance. The [conformance package](conformance/README.md) describes the API
 checks and disposable resources required to run them.
 
+Snapshot persistence and isolated build/metadata copies stream at most four
+files concurrently, draining pending transfers before cleanup and committing
+manifests only after all transfers succeed. Git operations and publication gates
+remain serialized. Focused checks run with:
+
+```sh
+node --test test/runtime/file-trees.test.mjs test/build/cache.test.mjs
+```
+
 Keep installation inventories, customer identities, domains, source and release
 IDs, operational receipts, and resumable production work records in private
 operator storage. Public examples must use synthetic names and reserved example
