@@ -47,6 +47,7 @@ export TIMDS_ACCESS_TEAM_DOMAIN='https://<team>.cloudflareaccess.com'
 export TIMDS_ACCESS_AUD='<access-application-audience>'
 export TIMDS_DESIGNER_PRINCIPAL_ID=''
 export TIMDS_DESIGNER_MODEL='gpt-6-sol'
+export TIMDS_STUDIO_FRAME_ORIGINS='https://*.<workers-subdomain>.workers.dev'
 ```
 
 The Worker name must match `[a-z0-9][a-z0-9-]{0,48}`. Both origins are exact
@@ -55,6 +56,20 @@ leave its two settings empty: interactive authentication fails closed. Set them
 and redeploy after configuring the application. Leaving origin/account/queue
 settings unset on a later deployment replaces their values with defaults;
 retain the installation's environment outside the checkout.
+
+`TIMDS_STUDIO_FRAME_ORIGINS` is the only list of origins Studio may embed in
+`<iframe>`s (its CSP `frame-src`): live views of sessions and drafts, and
+submission Previews. Use space-separated `https://` origins or one-level
+wildcard patterns, each matching `^https://(\*\.)?[a-z0-9.-]+$`. Today that is
+the account's own `workers.dev` subdomain (`https://*.<workers-subdomain>.workers.dev`);
+later, whatever custom domain masks live and Preview URLs. Nothing wider:
+`https://*.workers.dev` and `https://*.pages.dev` are refused, as is any token
+that does not match. Invalid tokens are dropped silently; an empty or wholly
+invalid setting yields `frame-src 'none'`, and Studio then shows an
+open-in-new-tab card instead of each frame. Studio itself keeps
+`frame-ancestors 'none'`. The framed live and Preview responses must in turn
+allow Studio's origin in their own `frame-ancestors` (see the Studio section of
+the [architecture](architecture.md)).
 
 The Artifacts map binds each approved organization namespace to one unique
 `ARTIFACTS_...` binding. Add and deploy a namespace entry before provisioning or

@@ -625,6 +625,30 @@ package before adding it. Existing Node read-MCP filesystem handlers cannot
 be imported wholesale into the Worker. Studio static assets consume the same
 host API and OAuth session and need actual phone/browser verification.
 
+Studio is a steering console, not an editor: agents are the only writers.
+Humans direct through Requests and decide with publish, rollback, close and
+invite; claims are shown read-only, and conflicts go back to an agent as a
+follow-up Request generated from the conflict receipt. Studio refuses the
+snapshot, `update`, `submit` and `claims` session routes client-side. The
+session/draft live URL and each submission's Preview URL are embedded in
+sandboxed iframes (`allow-scripts allow-same-origin allow-forms`, no referrer).
+Studio's CSP `frame-src` comes only from `TIMDS_STUDIO_FRAME_ORIGINS` (validated
+`https://` origins or one-level wildcards; empty means `'none'`), and Studio
+keeps `frame-ancestors 'none'` for itself. Frames reload in place on `updated`,
+`request_submitted` and `live_state: ready` feed events for their session.
+
+<!-- TODO(phase-4, orchestrator): the framed responses must allow Studio as an
+ancestor. In runtime/index.mjs `LivePreview.fetch`, wrap the LiveSession
+response: for non-101/non-WebSocket responses, copy the headers, delete
+`X-Frame-Options`, and set `Content-Security-Policy` so that its
+`frame-ancestors` directive is exactly the Studio origin (env.TIMDS_STUDIO_ORIGIN
+when set, else env.HOST_ORIGIN; e.g. `frame-ancestors https://studio.timds.com`),
+replacing any `frame-ancestors` the dev server sent and keeping its other
+directives. Preview assets are served by Workers Builds preview Workers from
+the Design System's own build output; host code cannot set their headers, so
+verify in a browser that they send no `X-Frame-Options`/`frame-ancestors` that
+excludes Studio. -->
+
 ## Per-system portal cutover
 
 Migration is a resumable operation with an import UUID, source UUID, authority
