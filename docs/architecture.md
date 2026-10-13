@@ -477,6 +477,45 @@ restarted, with readiness probed every 100 ms. The injected frame script polls
 `/__timds_live/version` every 500 ms and reloads when the version changes.
 Frame fetches refresh the idle deadline at most once every five seconds.
 
+### Live dependency cache
+
+A wake clones the session fork and then needs the source repository's
+dependencies, because the live dev server is the checkout's own
+`node_modules/.bin/timds`. Instead of `npm ci` from the registry on every
+wake, `LiveSessionRuntime.installDependencies` (`runtime/live-session.mjs`)
+reuses the publication dependency cache: the same `SNAPSHOTS` bucket, the
+`dependency-cache/objects/` archive prefix, the `dependency-cache/records/`
+receipts and `dependencyCacheKey` from `src/build/cache.mjs`. The key covers
+`package.json`, `package-lock.json`, the install flags, the toolkit version and
+the container's Node version, ABI, platform and architecture, plus the image
+name, so the live image (`agent`) and the build image (`build`) never share an
+archive even when their lockfile matches.
+
+- **Order.** The backup host is registered with `DirectoryBackup.intercept()`
+  right after the container starts and before the catch-all egress intercept,
+  which otherwise takes every hostname registered after it. The restore runs
+  after the clone and before the supervisor and dev server start, so no source
+  program runs while the one-object read grant is open.
+- **Hit.** A receipt whose `key`, `image` and archive SHA match is restored
+  into `/workspace/repo/node_modules`. The SDK verifies the archive SHA before
+  it swaps the directory in; on any error the target is untouched and the
+  runtime falls back to `npm ci`.
+- **Miss.** `npm ci --ignore-scripts --no-audit --no-fund` runs as before, then
+  the directory is archived and the receipt is written with
+  `onlyIf: {etagDoesNotMatch: '*'}`. A lost race deletes the loser's archive.
+  A failed archive or receipt write is recorded and ignored: the install
+  already succeeded.
+- **Bypass.** No lockfile, a lockfile `validateDependencyInputs` refuses
+  (workspaces, non-registry or unpinned packages), a receipt with a different
+  identity, or a runtime without the backup SDK all run plain `npm ci`.
+- **Diagnostics.** `LiveSession.diagnostics()` reports `dependencyCache` as
+  `{state, key?}` with `state` one of `hit`, `miss`, `bypass`,
+  `restore-failed` or `backup-failed`. The key is a digest, never source
+  content.
+
+The cache changes nothing about what is warm or for how long: it shortens the
+wake, and the idle rule above still decides when the container is destroyed.
+
 ## Publication Workflow and failure recovery
 
 Use publication UUID as Workflow identity. The coordinator reserves one
