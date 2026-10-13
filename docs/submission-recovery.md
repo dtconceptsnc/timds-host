@@ -55,5 +55,9 @@ fork revision `560c366a…`. The returned snapshot retains the original
 `docs/studio-manual-proof.md` (114 bytes, SHA-256
 `c557363da72aa5e5a0770c64492705398f10d7b2abbe4cf133e30a0d323bcf89`).
 No lease, source/session/submission identity, review branch or saved file was
-replaced. Phone review, publication and rollback remain separate acceptance
-steps; successful submission recovery does not claim those are complete.
+replaced. The same original submission subsequently completed normal API
+publication as `.13`; the session closed and API rollback to `.12` followed by
+restore to `.13` preserved both pinned stamps. See the
+[completed acceptance receipt](evidence/manual-recovery-publication.md).
+The user stopped additional UI testing, so this does not claim a further phone
+publish/rollback journey.

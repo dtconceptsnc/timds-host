@@ -1,5 +1,12 @@
 # Standalone Studio browser acceptance
 
+Historical browser journey. The original recovered manual submission later
+completed normal API publication, cleanup, rollback and restore; see the
+[final receipt](manual-recovery-publication.md). The user stopped additional UI
+testing, so no further phone publish/rollback journey is claimed. Current host
+URLs use the `timds.workers.dev` account subdomain; URLs below record the earlier
+browser session.
+
 Live acceptance on October 13, 2026 uses only the disposable host source
 `6ffb48ea-862e-42de-9303-5edcbe8829d5` (`timds/cf-preview-source-proof`).
 The host is `https://timds-host-69.ratebucket.workers.dev`; no production source
