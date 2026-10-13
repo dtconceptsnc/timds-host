@@ -47,6 +47,52 @@ persisted session identity; the callback factory also checks coordinator source
 ownership. The edge must not expose this capability as an unauthenticated HTTP
 route.
 
+Request transitions append source feed events with `originating_request_id`
+and `details_json.requestId`: `request_received` with the reservation,
+`request_started` once the runner accepts the Request, `request_submitted`
+in the same transaction as (and just before) its `submitted` event, and
+`request_failed` on a job failure or dead letter, a completion conflict, or a
+runner `failed` state. `live-state` may name the runner's current Request; the
+callback attributes it only when that Request is bound to the same source and
+session. Errors in these rows are host-authored safe messages and sanitized
+diagnostics, never model output or credentials.
+
+Requests that name a session or draft run one at a time, in arrival order
+(`created_at`, then job id). `due()` offers only the oldest pending job for each
+target session and skips it while another job for that session holds a live
+lease, or while the session's last runtime `live_state` is `running` (a report
+older than 15 minutes no longer holds it). `nextAlarm()` counts only those head
+jobs; a runner-held session contributes a one-minute fallback, and the
+`ready`/`failed`/`sleeping`/`closed` live-state callbacks re-arm the alarm within a
+second when a job is due. If dispatch still meets a busy runner (the designer's
+pre-check or the runtime's 409 "Another Request is running in this session"),
+`execute` calls `requestStore.requeue`: the job returns to `queued` with
+`available_at` 5 s ahead, its `attempt_count` restored and no `request_failed`.
+Real failures keep `fail` and dead-letter after `max_attempts`. Requests that
+start their own session are not ordered. The Request read returns
+`targetSessionId` and `queuePosition`: 0 when running, finished or next, else the
+number of Requests ahead including the one whose runner holds the session.
+
+Before `request_started` the designer claims its intent once per Request as an
+advisory `claimed` row: the paths of the session's latest submission diff when
+1–100 safe paths exist, otherwise `tokens.json`, `tokens/**`, `src/**`, with the
+prompt's first 200 characters as its note. An identical existing claim is not
+rewritten. `presence(view)` adds `runner` (`LiveSession.status()` only; no
+container start) and `queueLength` to `active-work` and session `status` views.
+
+Sessions sleep: `LiveSession` destroys its container 10 minutes after its last
+activity, unless a feed viewer still watches it (`watch`, see "Warm drafts and
+wake" in `docs/architecture.md`). A Request to a sleeping session is not
+delayed or refused. After its busy check, the designer writes `live_state`
+`waking` when `LiveSession.status()` says `sleeping`, and the runtime's
+`start()` wakes the container (clone, `npm ci`, dev server) before running the
+model. The runtime then reports `starting`, then `running`, then `ready`. If
+the start fails before the runtime is called, the designer writes `sleeping`
+again, so the session is never left showing `waking`. A viewer opening a
+sleeping session gets the same `waking` row and a `LiveSession.resume()`, which
+wakes from the session's own alarm. Neither path waits for the container in the
+coordinator's writer queue.
+
 Local validation uses real SQLite adapters for reservations, lease takeover,
 bounded retries and durable receipt recovery, with explicit native RPC tests:
 

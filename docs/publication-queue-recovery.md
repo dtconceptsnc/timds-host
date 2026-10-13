@@ -38,7 +38,7 @@ deployment `04d8b165-67ab-463b-bac8-3b2739ec7471`. The instance was queued again
 at `14:09:06Z`, started at `14:09:08Z`, and completed at `14:13:03Z`. Its original
 publication had begun before that deployment. This proves the observed restart
 used the newer Workflow version; it is not a general provider versioning
-guarantee. See the [sanitized observation](evidence/workflow-restart-version.json).
+guarantee. See the sanitized observation (private operational record).
 
 For an old queue, capture the exact source, publication, submission, Workflow
 instance status and version ID first. Recover only the earliest unfinished
@@ -64,5 +64,5 @@ after recovery.
 Local validation of the queue change: JavaScript syntax, `npm run typecheck`,
 and a complete `npm run build` passed. No tests were added or run. The original
 ten-publication queue subsequently completed through the coordinated sequence
-above; see the [actual recovery receipt](evidence/n10-recovery.md), including
+above; see the actual recovery receipt (private operational record), including
 the limitation on direct lease visibility and the observed Workflow versions.

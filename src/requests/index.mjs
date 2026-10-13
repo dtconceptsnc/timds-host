@@ -13,7 +13,9 @@ export function createHostRequests({sourceId,storage,catalog,store,sessions,auth
   const requestStore=createRequestStore({storage,sourceId,catalog,store,clock});
   let requests;
   const designer=createDesigner({designerPrincipalId,authorization,sessions,store,live,getRequestBinding:id=>requests.binding(id),reconcilePush,ensurePreview,runMutation});
-  requests=createDesignerRequests({sourceId,store,requestStore,authorization,sessions,designer,schedule,runMutation});
-  const callback=createLiveCallbacks({sourceId,store,sessions,live,designer,clock});
+  requests=createDesignerRequests({sourceId,store,requestStore,authorization,sessions,designer,live,schedule,runMutation});
+  // A runner leaving its Request wakes the alarm so the session's next queued Request starts within a second.
+  const onRunnerIdle=async()=>{const at=requestStore.nextAlarm();if(at!=null && at<Date.now()+5_000)await schedule();};
+  const callback=createLiveCallbacks({sourceId,store,sessions,live,designer,requestBinding:id=>requests.binding(id),onRunnerIdle,clock});
   return {...requests,live,designer,callback};
 }

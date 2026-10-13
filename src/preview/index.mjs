@@ -1,5 +1,5 @@
 // Portable Workers Builds controller adapted from toperator 74bceaa.
-// cf beta.14 commands/migration/delete route proved in docs/evidence/cf-preview-builds.md.
+// cf beta.14 preview creation, migration and deletion use the configured provider API.
 import {requestDiagnostic,safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 const fail=(statusCode,message)=>Object.assign(new Error(message),{statusCode});
 // Opt-in for sources with the reviewed static dist -> Vite packaging config.

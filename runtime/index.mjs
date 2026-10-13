@@ -61,11 +61,24 @@ export class LiveSession extends DurableObject {
   diagnostics(input){return this.live.diagnostics(input);}
   retryCompletion(input){return this.live.retryCompletion(input);}
   pushed(input){return this.live.pushed(input);}
+  // Feed keepalive and viewer wake. Neither starts a container in the caller's call.
+  watch(input){if(this.ctx.storage.kv.get('authority')?.sessionId!==input?.sessionId||typeof input?.watched!=='boolean')throw new Error('Live authority unavailable');return this.live.watch(input);}
+  resume(id){if(this.ctx.storage.kv.get('authority')?.sessionId!==id)throw new Error('Live authority unavailable');return this.live.requestWake();}
   close(id){return this.live.locked(()=>this.live.beginClose(id));}
   fetch(request){return this.live.fetch(request);}
   alarm(){return this.live.alarm();}
 }
 // Service binding only. The public host router must not dispatch this class.
+// Studio embeds live views, so only the Studio origin may frame them; the
+// container's own headers must neither block that nor widen it.
+function frameableByStudio(response,env){
+  if(response.status===101||response.webSocket)return response;
+  const ancestor=env.TIMDS_STUDIO_ORIGIN||env.HOST_ORIGIN;if(!ancestor)return response;
+  const headers=new Headers(response.headers);headers.delete('X-Frame-Options');
+  const directives=(headers.get('Content-Security-Policy')||'').split(';').map(part=>part.trim()).filter(part=>part&&!/^frame-ancestors\b/i.test(part));
+  headers.set('Content-Security-Policy',[...directives,`frame-ancestors ${ancestor}`].join('; '));
+  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+}
 export class LivePreview extends WorkerEntrypoint {
-  fetch(request){const id=request.headers.get('x-timds-live-session');if(!sessionIdPattern.test(id||''))return new Response('Not found',{status:404});return this.ctx.exports.LiveSession.getByName(id).fetch(request);}
+  async fetch(request){const id=request.headers.get('x-timds-live-session');if(!sessionIdPattern.test(id||''))return new Response('Not found',{status:404});return frameableByStudio(await this.ctx.exports.LiveSession.getByName(id).fetch(request),this.env);}
 }

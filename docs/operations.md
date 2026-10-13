@@ -1,7 +1,7 @@
 # Operate a TimDS host
 
 These commands target the repository's pinned `cf@1.0.0-beta.14`. They reproduce
-the [isolated deployment](evidence/phase-3-deployment.md), whose authenticated
+the isolated deployment (private operational record), whose authenticated
 acceptance is still in progress. Use a fresh installation name and disposable
 source for initial acceptance. Existing-system import/cutover is separate;
 provisioning below does not adopt existing repositories.
@@ -38,6 +38,7 @@ Set and preserve this **nonsecret** environment for every API deployment:
 export TIMDS_WORKER_NAME='timds-example'
 export CLOUDFLARE_ACCOUNT_ID='<account-id>'
 export TIMDS_HOST_ORIGIN='https://timds-example.<workers-subdomain>.workers.dev'
+export TIMDS_STUDIO_ORIGIN='' # optional additional exact HTTPS origin for Studio
 export TIMDS_PUBLIC_ORIGIN='https://timds-example-public.<workers-subdomain>.workers.dev'
 export TIMDS_AGENT_PUSH_QUEUE_ID='<queue-id-from-next-step>'
 export TIMDS_ARTIFACTS_BINDINGS='{"example":"ARTIFACTS_EXAMPLE"}'
@@ -46,6 +47,7 @@ export TIMDS_ACCESS_TEAM_DOMAIN='https://<team>.cloudflareaccess.com'
 export TIMDS_ACCESS_AUD='<access-application-audience>'
 export TIMDS_DESIGNER_PRINCIPAL_ID=''
 export TIMDS_DESIGNER_MODEL='gpt-6-sol'
+export TIMDS_STUDIO_FRAME_ORIGINS='https://*.<workers-subdomain>.workers.dev'
 ```
 
 The Worker name must match `[a-z0-9][a-z0-9-]{0,48}`. Both origins are exact
@@ -54,6 +56,20 @@ leave its two settings empty: interactive authentication fails closed. Set them
 and redeploy after configuring the application. Leaving origin/account/queue
 settings unset on a later deployment replaces their values with defaults;
 retain the installation's environment outside the checkout.
+
+`TIMDS_STUDIO_FRAME_ORIGINS` is the only list of origins Studio may embed in
+`<iframe>`s (its CSP `frame-src`): live views of sessions and drafts, and
+submission Previews. Use space-separated `https://` origins or one-level
+wildcard patterns, each matching `^https://(\*\.)?[a-z0-9.-]+$`. Today that is
+the account's own `workers.dev` subdomain (`https://*.<workers-subdomain>.workers.dev`);
+later, whatever custom domain masks live and Preview URLs. Nothing wider:
+`https://*.workers.dev` and `https://*.pages.dev` are refused, as is any token
+that does not match. Invalid tokens are dropped silently; an empty or wholly
+invalid setting yields `frame-src 'none'`, and Studio then shows an
+open-in-new-tab card instead of each frame. Studio itself keeps
+`frame-ancestors 'none'`. The framed live and Preview responses must in turn
+allow Studio's origin in their own `frame-ancestors` (see the Studio section of
+the [architecture](architecture.md)).
 
 The Artifacts map binds each approved organization namespace to one unique
 `ARTIFACTS_...` binding. Add and deploy a namespace entry before provisioning or
@@ -107,6 +123,22 @@ bucket with other rules. Released bytes and provenance are copied to
 Snapshots stay in SNAPSHOTS. A release label cannot be reused for different
 bytes or a different source commit.
 
+## Deployment helper
+
+[`scripts/deploy-host.py`](../scripts/deploy-host.py) wraps the resource,
+catalog, lock, deploy and companion steps for one installation. It reads the
+installation record and the runtime secrets from the checkout's `.env`
+(gitignored, owner-only; start from
+[`scripts/deploy-host.example.env`](../scripts/deploy-host.example.env)) and
+keeps created resource ids in `.env.deploy-state.json`. Nothing
+installation-specific is tracked; see [verification](verification.md). The
+Cloudflare CLI OAuth tokens come from the local wrangler and cloudflare CLI
+config files, and `cf deploy` receives the runtime secrets through a fifo.
+
+```sh
+python3 scripts/deploy-host.py deploy
+```
+
 ## Runtime secrets and deployment
 
 Have your secret manager write a private flat JSON file outside the repository
@@ -127,7 +159,7 @@ CLI OAuth token is not a replacement for this registered runtime API token.
 Workers Scripts Write also authorizes event subscription creation/deletion, so
 a separate Queues Write grant is not required for those calls. No zone/DNS
 permissions are needed for workers.dev previews. See the exact
-[runtime authority inventory](evidence/runtime-cloudflare-auth.md).
+runtime authority inventory (private operational record).
 Do not paste credential-bearing Artifacts repository-create responses: creation
 issues a capability. The host captures and revokes that initial capability.
 
@@ -169,6 +201,15 @@ human identity provider and explicit allowed humans, plus a dedicated host
 service token only if machine identities are needed. Keep discovery, `/register`,
 `/token` and `/api/timds` reachable: OAuth protects the API itself. Applying an
 Access policy to the entire host blocks OAuth clients.
+
+An optional `TIMDS_STUDIO_ORIGIN` adds one exact HTTPS origin for Studio without
+changing `HOST_ORIGIN` or existing CLI/portal connections. Attach that hostname
+as a custom domain on the API Worker, and add its `/authorize`, `/bootstrap`,
+and `/service-auth` destinations to the same Access application, preserving its
+audience and policies. Keep this variable in the installation's deployment
+environment. OAuth discovery, consent and token resources remain bound to the
+origin used for that connection; users sign in again on the new address. Other
+origins remain rejected. The Studio origin is also allowed for public media CORS.
 
 The following emits a reviewable application/policy JSON plan; it does not
 create an Access application or credentials. Replace the example email/IDs with
@@ -405,7 +446,7 @@ Keep source/release identity and event correlation intact; do not clear
 coordinator or catalog state to force a retry.
 
 For existing systems, recapture the
-[migration baseline](evidence/migration-baseline.md) immediately before migration,
+migration baseline (private operational record) immediately before migration,
 preserve historical first-event version bindings and public domains, and verify
 all required public bytes before cutover. The baseline is read-only evidence,
 not an import or cutover receipt.
@@ -442,8 +483,8 @@ Worker-list call. Node container programs retain Node's supported redirect mode.
   There is no `cf workers secrets put`. Bucket locks are a separate R2 API/CLI
   operation, not a property of the R2 binding configuration.
 
-See [native toolchain evidence](evidence/phase-0.md),
-[Builds evidence](evidence/cf-preview-builds.md), and the
+See native toolchain evidence (private operational record),
+Builds evidence (private operational record), and the
 [Cloudflare configuration documentation](https://developers.cloudflare.com/cf/projects/cloudflare-config/).
 
 
@@ -457,3 +498,12 @@ the portal consumer attachment barrier migration and its short-lived server
 proof; a zero-consumer count alone is insufficient. See [the deletion protocol](lifecycle-deletion.md)
 for routes, recovery and retained-byte semantics. No production source deletion
 is part of the current implementation evidence.
+
+### Authenticated MCP on a configured Studio domain
+
+When the installation configures `TIMDS_STUDIO_ORIGIN`, its authenticated
+`/api/timds/mcp` endpoint accepts that exact origin alongside `HOST_ORIGIN`.
+The OAuth deployment must also enable that origin. Credentials remain scoped to
+their issuing origin/resource; do not relabel an existing local session or
+credential. Browser Origin checks still require the request's accepted origin,
+and anonymous `/mcp` remains on the separate public host.

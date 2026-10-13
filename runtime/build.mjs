@@ -1,6 +1,6 @@
 import {Files,DirectoryBackup,DirectoryBackupGateway} from '@cloudflare/sandbox';
 import {DurableObject,WorkerEntrypoint} from 'cloudflare:workers';
-import {readTreeManifest,readTreeFile,persistContainerTree,sha256} from '../src/repository/file-trees.mjs';
+import {readTreeManifest,readTreeFile,persistContainerTree,sha256,transferFiles} from '../src/repository/file-trees.mjs';
 import {dependencyCacheKey,INSTALL_FLAGS} from '../src/build/cache.mjs';
 import {nativeBuildResult,unwrapNativeBuildResult,safeRequestDiagnostic} from '../src/requests/diagnostics.mjs';
 export {DirectoryBackupGateway};
@@ -67,7 +67,7 @@ export class BuildSandbox extends DurableObject {
    for(const name of ['source',...(input.operation==='stamp'?['artifact']:['prior'])]){
     const tree=input[name];if(!tree?.ref?.startsWith(`snapshots/${input.sourceId}/`))throw fail('Metadata tree belongs to another source');
     stage('manifest');const manifest=await readTreeManifest(bucket,tree);trees[name]=manifest;stage('mkdir');await files.mkdir(`/input/${name}`,{recursive:true});
-    stage('copy');for(let i=0;i<manifest.files.length;i++)await files.writeFile(`/input/${name}/${i}`,(await readTreeFile(bucket,tree,manifest.files[i])).body);
+    stage('copy');await transferFiles(manifest.files,async(file,i)=>files.writeFile(`/input/${name}/${i}`,(await readTreeFile(bucket,tree,file)).body));
    }
    stage('control-input');
    await files.writeFile('/workspace/metadata-input.json',JSON.stringify({trees,sourceCommit:input.sourceCommit,systemId:input.systemId,preparedAt:input.preparedAt,note:input.note}));
@@ -96,10 +96,10 @@ export class BuildSandbox extends DurableObject {
    stage('source');
    const links=manifest.files.filter(file=>file.mode==='120000');
    for(const file of manifest.files){if(file.path==='node_modules'||file.path.startsWith('node_modules/')||links.some(link=>file.path.startsWith(link.path+'/')))throw fail('Build source shadows dependency or link paths');}
-   for(const file of manifest.files.filter(file=>file.mode!=='120000')){
+   await transferFiles(manifest.files.filter(file=>file.mode!=='120000'),async file=>{
     const slash=file.path.lastIndexOf('/'),parent=slash<0?'':file.path.slice(0,slash);if(parent)await files.mkdir('/work/'+parent,{recursive:true});
     const object=await readTreeFile(bucket,input.files,file);await files.writeFile('/work/'+file.path,object.body);if(file.mode==='100755')await execute(container,['chmod','755','/work/'+file.path]);
-   }
+   });
    stage('links');for(const file of links){const target=await(await readTreeFile(bucket,input.files,file)).text();let depth=file.path.split('/').length-1;if(!target||target.startsWith('/')||/[\\\x00-\x1f]/.test(target))throw fail('Unsafe source link');for(const part of target.split('/')){if(part==='..'){if(--depth<0)throw fail('Source link leaves workspace');}else if(part&&part!=='.')depth++;}const slash=file.path.lastIndexOf('/'),parent=slash<0?'':file.path.slice(0,slash);if(parent)await files.mkdir('/work/'+parent,{recursive:true});await execute(container,['ln','-s','--',target,'/work/'+file.path]);}
    await execute(container,['node','/opt/timds/build-driver.mjs','validate-links']);
    stage('ownership');await execute(container,['chown','-R','1000:1000','/work']);

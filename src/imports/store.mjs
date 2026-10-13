@@ -22,7 +22,8 @@ export function createImportStore({storage,sourceId,catalog,imports}) {
     // Preserve stamp property order: its authored JSON bytes are immutable.
     const id=table==='members'?`${row.session_id}:${row.principal_id}`:row.id;
     const prior=get(table,id),text=JSON.stringify(row);
-    if(prior){if(canonical(prior)!==canonical(row))throw fail(409,'Imported history conflicts with an existing row');return;}
+    // The coordinator numbers imported events after insert; a replay compares the original row.
+    if(prior){const {seq,...original}=prior;if(canonical(table==='events'?original:prior)!==canonical(row))throw fail(409,'Imported history conflicts with an existing row');return;}
     sql.exec(`INSERT INTO ${table}(id,row_json) VALUES(?,?)`,id,text);
     if(resourceKinds[table])enqueue('resource',{kind:resourceKinds[table],id:row.id,tombstone:table==='sessions'});
     if(table==='events')enqueue('event',row);
@@ -38,6 +39,7 @@ export function createImportStore({storage,sourceId,catalog,imports}) {
     if(['events','publication_events','publications'].includes(table)&&!result.actor_principal_id&&original.actor_user_id)result.actor_principal_id=map(original.actor_user_id);
     if(table==='sessions')Object.assign(result,{lease_token:null,lease_expires_at:null,live_state:'stopped',live_url:'',sandbox_id:'',token_id:'',kind:result.kind||'session'});
     if(table==='publications')Object.assign(result,{checkpoints_json:result.checkpoints_json||{},result_json:result.result_json||{}});
+    if(table==='events')delete result.seq;
     return result;
   }
   function validateRow(item,table){

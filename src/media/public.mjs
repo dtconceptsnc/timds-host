@@ -7,7 +7,7 @@ function cors(request,env,upload){
  if(!upload)return {'Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'ETag, Content-Length, Content-Range, Accept-Ranges'};
  let configured;try{configured=JSON.parse(env.TIMDS_MEDIA_ALLOWED_ORIGINS||'[]');}catch{throw fail(503,'Media origins are not configured');}
  if(!Array.isArray(configured))throw fail(503,'Media origins are not configured');
- const allowed=[env.HOST_ORIGIN,env.TIMDS_PORTAL_ORIGIN,...configured].filter(Boolean);
+ const allowed=[env.HOST_ORIGIN,env.TIMDS_STUDIO_ORIGIN,env.TIMDS_PORTAL_ORIGIN,...configured].filter(Boolean);
  if(origin&&!allowed.includes(origin))throw fail(403,'This origin cannot upload media');
  return {...(origin?{'Access-Control-Allow-Origin':origin,Vary:'Origin'}:{}),'Access-Control-Allow-Methods':'PUT, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Expose-Headers':'ETag','Access-Control-Max-Age':'300'};
 }

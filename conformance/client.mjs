@@ -43,6 +43,7 @@ export function createConformanceClient({ url, token, fetchImpl = fetch, onRespo
     startRequest: (id, input) => extension('POST', `${sourcePath(id)}/requests`, input),
     requestStatus: (id, requestId) => extension('GET', `${sourcePath(id)}/requests/${encodeURIComponent(requestId)}`),
     submissions: id => extension('GET', `${sourcePath(id)}/submissions`),
+    events: (id, after = 0, limit = 500) => extension('GET', `${sourcePath(id)}/events?after=${encodeURIComponent(after)}&limit=${encodeURIComponent(limit)}`),
     previewTokens: (id, ref, method = 'GET') => extension(method, `/api/public/design-system-previews/${encodeURIComponent(id)}/${encodeURIComponent(ref)}/tokens.css`, undefined, true),
   };
 }

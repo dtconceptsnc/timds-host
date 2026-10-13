@@ -3,20 +3,20 @@
 The isolated host now implements the coordinator/store, native repository and
 live containers, offline publication builds, seven-stage Workflow, OAuth/Access,
 public roots/MCP and Studio described here. The deployed resource and HTTP
-receipts are in [deployment evidence](evidence/phase-3-deployment.md). Authenticated
+receipts are in deployment evidence (private operational record). Authenticated
 host authoring and publication acceptance, phone usage and production migration
 remain in progress. The health endpoint deliberately reports integration status.
 
 The design was reviewed against portal commit `2b0148c` and toolkit OAuth
 [PR #100](https://github.com/dtconceptsnc/timds-toolkit/pull/100). The
-[production portal baseline passed](evidence/phase-1-portal-conformance.md), and
+production portal baseline passed (private operational record), and
 the subsequent Request recovery and fixture cleanup are settled in that receipt.
 The original proposed interfaces below remain design context; concrete modules
 under `src/` and `runtime/` are authoritative for implemented names. Migration
 and portal-client sections describe work still required before cutover.
 
-The detailed [store review](evidence/store-port-review.md) records the exact
-adapter methods and constraints; the [runtime extraction plan](evidence/runtime-extraction-plan.md)
+The detailed store review (private operational record) records the exact
+adapter methods and constraints; the runtime extraction plan (private operational record)
 records the latest Request recovery, binary transport and native refresh
 behavior that must survive the port. The OAuth client branch now includes
 upstream toolkit `0.1.470`; conformance and controlled publication remain pinned
@@ -85,7 +85,7 @@ store adapter initially, and the existing camelCase wire views at the boundary.
 | `server/design-system-submission-publish-worker.mjs` | `src/build/*` plus an image-baked adapter. Its filesystem, subprocess and Docker code cannot execute in a Worker. |
 | `server/design-system-publication-artifacts.mjs` | `src/artifacts/staging.ts`: R2 write-once staging with the same opaque-reference checks. |
 | `server/design-system-public-roots.mjs`, `design-system-read-mcp.mjs` | `src/public/*`, `src/mcp/*`: preserve byte selection and views; replace local-filesystem/Supabase access with R2 and catalog adapters. |
-| `server/design-system-public-urls.mjs` | Inject a configured URL builder; preserve imported timds.com/speed.style aliases and slug mappings. |
+| `server/design-system-public-urls.mjs` | Inject a configured URL builder; preserve imported configured domain aliases and slug mappings. |
 
 The session factory already accepts
 `createDesignSystemSessions({store,repository,authorization,cleanupAgentSession,onSessionReserved,onSessionStarted,now})`.
@@ -146,7 +146,7 @@ other long network work. The proposed tables are:
 | `publications` | UUID, unique submission, queue sequence, stored actor/note, stage/status, attempt fence, immutable source/build/stamp receipts, result and pointer event. |
 | `requests` | Stable Request UUID, requester/source/prompt, logical execution UUID, session/submission, runner state, callback deduplication and bounded error. |
 | `versions` | Immutable first label-to-version/digest/commit mapping. Later same-label attempts cannot replace pinned bytes. |
-| `events` | Immutable event UUID and per-source sequence, resource, actor identity/name snapshot, intent note, details and occurrence time. |
+| `events` | Immutable event UUID and per-source `seq` (virtual column over `row_json.seq`, unique index, counter `event_seq` in `coordinator_meta`), resource, actor identity/name snapshot, intent note, details and occurrence time. |
 | `outbox` | Unique event/target, payload hash, retry count/time and delivery receipt. Includes D1 audit, locators and public projections. |
 | `authority_mutations` | Operation UUID, expected/new D1 version, pending/confirmed state and primary-confirmed receipt. |
 | `operations`, `cleanup` | Idempotent provider-operation reservations, capability IDs, alarm deadlines and retryable cleanup obligations. No plaintext token retention. |
@@ -159,6 +159,84 @@ cannot overwrite a later close, migration epoch or revocation fence. Consume
 SQL results before awaiting external work. Use `ctx.storage.transactionSync`
 for explicit atomic groups; it accepts only synchronous operations.
 ([SQLite storage API](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/))
+
+### Event feed
+
+`events` is the only activity log and the only feed source; there is no stream
+product. `audit()` assigns `seq = event_seq + 1` and stores the counter in the
+same SQLite transaction as the row and its `event` outbox projection, so `seq`
+order is commit order and survives restarts. Construction numbers legacy or
+raw-imported rows without `seq` by `created_at`, then `id`. Every accepted
+command appends one row:
+
+| Event type | Written by |
+| --- | --- |
+| `session_started` / `draft_created` | session reservation (`insert`, or recovered D1 receipt) |
+| `member_joined` | `addMember` (owner at start, invitation/join, designer join) |
+| `claimed` | explicit advisory `claim`; automatic change claims are not audited |
+| `updated`, `submitted`, `closed` | session checkpoints (unchanged) |
+| `request_received` | Request store reservation |
+| `request_started` | designer start, once the runner accepts the Request |
+| `request_submitted` | the designer agent's submission checkpoint, immediately before `submitted` |
+| `request_failed` | job failure or dead letter, completion conflict, or a runner `failed` state |
+| `publication_queued` | `reservePublication` (new or re-queued) |
+| `publication_stage` | `recordPublicationStage`, called by the Workflow under its lease before each stage; once per stage per queue cycle |
+| `publication_failed` | `checkpointPublication` transition to `failed` |
+| `published` | `checkpointPublication` when the pointer commits (during `flip`) |
+| `live_state` | `live-state` callback when the state differs from the session's previous `live_state` row |
+
+`GET /api/timds/design-systems/{source}/events?after=&limit=` uses the
+`activeWork` read authorization and reads committed rows outside the writer
+queue, ascending by `seq` (`limit` defaults to 100 and is capped at 500).
+
+#### Live feed
+
+The same rows reach browsers live over the coordinator's hibernatable
+WebSockets (`src/coordinator/feed.mjs`); there is still no stream product.
+
+- **Ticket.** `POST /api/timds/design-systems/{source}/feed/tickets` runs under
+  OAuth and the `active-work` read authorization (the `sourceEvents` metadata
+  path, outside the writer queue). The coordinator stores only the SHA-256 of a
+  256-bit base64url ticket in its SQLite
+  `feed_tickets(ticket_hash PK, principal_id, source_id, name, type, expires_at, created_at)`,
+  pruning expired rows in the same transaction as each insert, and returns
+  `{apiVersion, ticket, expiresAt, url}`. Tickets live 60 seconds and survive a
+  Worker restart.
+- **Upgrade.** `GET /api/timds/design-systems/{source}/feed?ticket=&after=` is
+  routed in `entrypoint.mjs` before OAuth, because browsers cannot send a
+  bearer header on an upgrade. It requires the host origin, `Upgrade:
+  websocket` (426 otherwise), a same-origin `Origin` header when present and a
+  well-formed ticket, resolves the source with `Catalog.source`, and forwards to
+  `SystemCoordinator.fetch`. The coordinator consumes the ticket with one
+  `DELETE … RETURNING` (single use; expired, unknown or other-source tickets
+  fail with 401), refuses archived, deleting or deleted sources with 410, and
+  calls `ctx.acceptWebSocket(server, [principalId])`. The attachment is
+  `{principalId, sourceId, after, name, type, viewing}`.
+- **Replay and broadcast.** The store's `onEvent` hook receives each audit row
+  in a microtask after its synchronous transaction, whether that transaction
+  was the store's `atomic()` or an injected store's `transactionSync` (Request
+  jobs), and only if the row is still present (a rolled-back row is never
+  sent). Delivery resolves actor names once per batch (cached per object),
+  then sends `{type:'event', seq, event}` (the `events` route view) to each
+  socket whose attachment `after` is below `seq`, advancing `after` on every
+  send. Batches drain one at a time, so sends stay in `seq` order. A new
+  socket replays `seq > after` in pages of 500 (at most 5,000 rows per
+  connection, then close 4100 so the client resumes). Rows broadcast during
+  replay are buffered for that socket and applied past the replay cursor, so
+  replay and live delivery never send a row twice and never leave a gap.
+  Delivery never touches the repository or writer queue.
+- **Presence.** Clients send `{type:'viewing', sessionId|draftId}` or
+  `{type:'viewing', viewing:null}`; the attachment changes and every socket
+  gets `{type:'presence', viewers}` built from `getWebSockets()` attachments.
+  The same message goes out on connect, close and `{type:'presence'}`. Nothing
+  about presence is persisted.
+- **Heartbeat and closure.** `setWebSocketAutoResponse('ping','pong')` answers
+  the client's 25-second heartbeat without waking the object; the coordinator
+  has no timers or loops for the feed, so it hibernates between events. Sockets
+  close with 4410 when a deletion fence appears or on archive, and each client
+  message rechecks the source. 4401 closes a principal's sockets when its source
+  authority changes or it is deactivated; the client reconnects with a fresh
+  ticket, which rechecks authorization.
 
 The store also supplies source/version reads, session/member/claim lookups,
 submission/publication lists, `findFork`, `sessionForRequest`, `requestReceipt`,
@@ -320,6 +398,85 @@ and runner-token checks. Validate stored Request/session/runner identity,
 deduplicate completion and retain notes. Access authenticates the service;
 the existing narrowly scoped runner receipt remains an additional binding.
 
+### Agent presence and ordered Requests
+
+Humans read agent work; agents write it. `active-work` sessions/drafts and the
+session `status` view carry `runner: {state, requestId, submissionId, error}`
+and `queueLength`. The coordinator reads each open session's `LiveSession.status()`
+(its stored task/live record and `container.running` only; it never starts a
+container) at most eight at a time with a 1.5 s timeout, reporting `unknown`
+rather than failing the read, and `idle` when no Request has run. A Request that
+names a session or draft runs only after earlier Requests for that session and
+while no runner holds it: `due()` offers just the oldest pending job per target
+session, skips it beside a live lease or a session whose last `live_state` is
+`running`, and a runtime "Another Request is running in this session" at
+dispatch re-queues the job 5 s later without spending an attempt or writing
+`request_failed`. `ready`, `failed`, `sleeping` and `closed` runner reports
+re-arm the alarm so the next Request starts within about a second. Before
+`request_started` the designer declares an advisory `claimed` row (the paths
+its session last submitted, else `tokens.json`, `tokens/**`, `src/**`, with the
+prompt's first 200 characters as its note). `GET .../principals` lists active
+principals with a grant on the source, plus the designer agent, for invitations.
+
+### Warm drafts and wake
+
+A session or draft somebody is looking at stays warm; one nobody watches sleeps
+on the normal idle rule (10 minutes after its last activity); waking is visible
+in the feed. Nothing here is persisted on the coordinator, and it gains no
+timers, so it still hibernates between messages.
+
+- **Client cadence.** On a session or draft page the Studio feed client sends
+  `{type:'viewing', sessionId|draftId}` when the page opens, again after every
+  feed reconnect (`ready`), and then **every 5 minutes** while it stays on the
+  page, hidden or not. Leaving sends `{type:'viewing', viewing:null}`. The raw
+  25-second `ping` stays auto-answered and never wakes the coordinator, so it is
+  not a keepalive.
+- **Coordinator.** Every `viewing` message refreshes the keepalive, changed or
+  not; only a change broadcasts presence. The feed calls
+  `live.watch(id,{watched:true,opened})` (`src/live/sessions.mjs`), which checks
+  that the session belongs to this source and is open, then calls
+  `LiveSession.watch({sessionId, watched:true, until: now + 30 min})`. When a
+  socket changes away from a session or closes, the feed recomputes the watched
+  set from `getWebSockets()` attachments and, if no other socket views it,
+  calls `watch({sessionId, watched:false})`. A release lost to a server-side
+  close lapses on its own after 30 minutes.
+- **LiveSession.** `watch` touches storage and alarms only and never starts a
+  container. `watched:true` stores `watchedUntil` (epoch ms, capped at now +
+  30 minutes) on the `live` KV record and, if the container runs, refreshes
+  `lastActivityAt` and the idle alarm. `watched:false` clears `watchedUntil` and
+  re-arms the alarm at the normal idle deadline. When the idle alarm finds the
+  deadline passed but `watchedUntil` in the future, it re-arms for
+  `min(watchedUntil, now + idle)` instead of sleeping. The reply is `status()`
+  plus `reported`, the last state the runtime reported.
+- **Visible wake.** The host writes `live_state` `waking` (deduplicated by
+  `setLiveState`) in two places. The designer writes it when `LiveSession.status()`
+  says `sleeping` just after its busy check, and writes `sleeping` again if the
+  start fails before the runtime is called. The feed writes it when a viewer
+  arrives (a changed `viewing`) at a session whose status is `sleeping`, and
+  then calls `LiveSession.resume(id)`. `resume` sets `wakeRequested` and an
+  immediate alarm and returns at once; the alarm runs the same `wake()` a frame
+  fetch or Request uses. A periodic re-send wakes only a session that slept
+  normally (`reported: 'sleeping'`); it never retries a failed wake, but a viewer
+  who reopens the page does. The runtime then reports `starting` and `ready` or
+  `failed`.
+- **Ready after wake.** While the live record says `starting` and the container
+  runs, `touch()` arms a 1-second alarm that probes `/__timds_live/version` and
+  reports `ready` or `failed`. A fresh or resumed container reports `ready`
+  without a frame open or a Request running. After a Request, the runtime syncs
+  the frame's checkout before it reports `ready`.
+
+Warm reload after a push stays inside the five-second budget without timers on
+the coordinator. A session push reaches `LiveSession.pushed` directly through
+the repository sandbox's `fork-pushed` notification; the Artifacts event Queue
+(`maxBatchSize:10, maxBatchTimeout:1`) is a fallback that the runtime
+deduplicates by revision. The `updated` row reaches sockets in the same
+microtask drain as its commit. Inside the container, `sync()` (credential
+callback, fetch, reset) is followed by a 100 ms file-batch debounce, and the
+dev server is either refreshed in place (`timds.json` `live.strategy: "hmr"`) or
+restarted, with readiness probed every 100 ms. The injected frame script polls
+`/__timds_live/version` every 500 ms and reloads when the version changes.
+Frame fetches refresh the idle deadline at most once every five seconds.
+
 ## Publication Workflow and failure recovery
 
 Use publication UUID as Workflow identity. The coordinator reserves one
@@ -372,7 +529,7 @@ Toolkit merge is a supported pure package export. Publication helpers also
 import Node-oriented core and starter code today. Use an image-baked trusted
 toolkit RPC for release preparation/check/stamp operations unless a supported
 Worker-safe export is added. Never import helper code from the source being
-published. Details are in the [publication port review](evidence/publication-port-review.md).
+published. Details are in the publication port review (private operational record).
 
 ## OAuth, Access and route policy
 
@@ -468,6 +625,27 @@ package before adding it. Existing Node read-MCP filesystem handlers cannot
 be imported wholesale into the Worker. Studio static assets consume the same
 host API and OAuth session and need actual phone/browser verification.
 
+Studio is a steering console, not an editor: agents are the only writers.
+Humans direct through Requests and decide with publish, rollback, close and
+invite; claims are shown read-only, and conflicts go back to an agent as a
+follow-up Request generated from the conflict receipt. Studio refuses the
+snapshot, `update`, `submit` and `claims` session routes client-side. The
+session/draft live URL and each submission's Preview URL are embedded in
+sandboxed iframes (`allow-scripts allow-same-origin allow-forms`, no referrer).
+Studio's CSP `frame-src` comes only from `TIMDS_STUDIO_FRAME_ORIGINS` (validated
+`https://` origins or one-level wildcards; empty means `'none'`), and Studio
+keeps `frame-ancestors 'none'` for itself. Frames reload in place on `updated`,
+`request_submitted` and `live_state: ready` feed events for their session.
+
+Live Workers answer through `LivePreview` in `runtime/index.mjs`, which strips
+any `X-Frame-Options` from the container's response and sets the response's
+`frame-ancestors` directive to exactly the Studio origin (`TIMDS_STUDIO_ORIGIN`
+when set, else `HOST_ORIGIN`), keeping the dev server's other directives.
+Preview assets are served by Workers Builds preview Workers from the Design
+System's own build output; host code cannot set their headers, so a browser
+check that they send no `X-Frame-Options` or `frame-ancestors` excluding Studio
+is part of the acceptance receipt.
+
 ## Per-system portal cutover
 
 Migration is a resumable operation with an import UUID, source UUID, authority
@@ -528,12 +706,11 @@ incorrect external `script_name` validation. `cf dev` is the local loop;
 does not add Docker to the deployed host's operational architecture.
 
 Add and prove Workflow, OAuth KV and static asset declarations with the actual
-pinned `cf` API. The [configuration fixture](evidence/cf-config-surface.md) now
+pinned `cf` API. The configuration fixture (private operational record) now
 passes type generation, build and deploy dry-run for those declarations; it
 does not establish live Workflow or OAuth acceptance. A follow-up toolchain run proved `cf previews deploy` inside
 real Workers Builds, with successful main and review-branch builds, serving
-URLs and resource cleanup; its [receipt](evidence/cf-preview-builds.md) is in the evidence
-directory. Those successes do not prove the unimplemented host publication
+URLs and resource cleanup; its receipt is retained privately. Those successes do not prove the unimplemented host publication
 path. Keep any missing `cf` equivalent explicit in the README; do not silently
 introduce Wrangler.
 Artifacts development needs a disposable remote namespace, so distinguish
