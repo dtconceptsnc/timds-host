@@ -66,7 +66,7 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
  * serialization: live-credentials/state may be reentrant during native start;
  * complete and expired must use its normal durable mutation queue.
  */
-export function createLiveCallbacks({sourceId,store,sessions,live,designer,requestBinding = async () => null,clock = () => Date.now()}) {
+export function createLiveCallbacks({sourceId,store,sessions,live,designer,requestBinding = async () => null,onRunnerIdle = async () => {},clock = () => Date.now()}) {
   async function sessionBound(body) {
     if(!sessionIdPattern.test(body?.sessionId || ''))throw fail(404,'Session not found');
     const session=await store.get(body.sessionId);
@@ -84,7 +84,10 @@ export function createLiveCallbacks({sourceId,store,sessions,live,designer,reque
       const requestId=sessionIdPattern.test(body?.requestId || '')?body.requestId:null;
       const binding=requestId?await requestBinding(requestId):null;
       const bound=binding?.sourceId===sourceId && (binding.sessionId?binding.sessionId===session.id:session.originating_request_id===requestId);
-      return live.state({sessionId:body.sessionId,state:body?.state},bound?{requestId,agentPrincipalId:binding.agentPrincipalId || null,note:binding.note || ''}:null);
+      const result=await live.state({sessionId:body.sessionId,state:body?.state},bound?{requestId,agentPrincipalId:binding.agentPrincipalId || null,note:binding.note || ''}:null);
+      // ready/failed/sleeping/closed release the session to its next queued Request.
+      if(['ready','failed','sleeping','closed'].includes(body?.state))try{await onRunnerIdle(session.id);}catch{}
+      return result;
     }
     if(action==='expired') {
       const expired=Boolean(session.expires_at && Date.parse(session.expires_at)<=clock());

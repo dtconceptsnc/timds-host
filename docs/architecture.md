@@ -398,6 +398,26 @@ and runner-token checks. Validate stored Request/session/runner identity,
 deduplicate completion and retain notes. Access authenticates the service;
 the existing narrowly scoped runner receipt remains an additional binding.
 
+### Agent presence and ordered Requests
+
+Humans read agent work; agents write it. `active-work` sessions/drafts and the
+session `status` view carry `runner: {state, requestId, submissionId, error}`
+and `queueLength`. The coordinator reads each open session's `LiveSession.status()`
+(its stored task/live record and `container.running` only; it never starts a
+container) at most eight at a time with a 1.5 s timeout, reporting `unknown`
+rather than failing the read, and `idle` when no Request has run. A Request that
+names a session or draft runs only after earlier Requests for that session and
+while no runner holds it: `due()` offers just the oldest pending job per target
+session, skips it beside a live lease or a session whose last `live_state` is
+`running`, and a runtime "Another Request is running in this session" at
+dispatch re-queues the job 5 s later without spending an attempt or writing
+`request_failed`. `ready`, `failed`, `sleeping` and `closed` runner reports
+re-arm the alarm so the next Request starts within about a second. Before
+`request_started` the designer declares an advisory `claimed` row (the paths
+its session last submitted, else `tokens.json`, `tokens/**`, `src/**`, with the
+prompt's first 200 characters as its note). `GET .../principals` lists active
+principals with a grant on the source, plus the designer agent, for invitations.
+
 ## Publication Workflow and failure recovery
 
 Use publication UUID as Workflow identity. The coordinator reserves one

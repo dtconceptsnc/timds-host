@@ -104,6 +104,10 @@ export class SystemCoordinator extends DurableObject {
       else if(['prepareDeletion','readDeletion','confirmDeletion','deletionHistory'].includes(operation))value=await this.engine.runMutation(()=>this.deletion.invoke({operation:{prepareDeletion:'prepare',readDeletion:'read',confirmDeletion:'confirm',deletionHistory:'history'}[operation],actor,input:args[0]}));
       else if(operation==='createRequest'||operation==='readRequest')value=await this.engine.requestsInvoke({operation:operation==='createRequest'?'create':'read',actor,args});
       else if(operation==='feedTicket')value=await this.feed.ticket(actor,args[0]);
+      // Presence: committed rows plus each open session's stored runner record; never queued, never starts a container.
+      else if(operation==='activeWork'||operation==='status')value=await this.requests.presence(await this.engine.invoke({operation,actor,args}));
+      // Invite directory: activeWork's read authorization, D1 grants only, no writer queue.
+      else if(operation==='principals')value=await this.engine.runRead(actor,async verified=>{const source=await this.store.getSource(this.sourceId);if(!source||source.archived_at||source.lifecycle_status!=='ready')throw fail(404,'Design System not found');await this.authorization.authorizeSource(source,verified);return {apiVersion:1,sourceId:source.id,principals:await this.catalog.sourcePrincipals(source.id,this.env.TIMDS_DESIGNER_PRINCIPAL_ID)};});
       else if(operation==='rollback')value=await this.engine.rollbackVersion({actor,input:args[0],operationId:crypto.randomUUID()});
       else if(operation==='authority')value=await this.engine.mutateAuthority({...args[0],actor});
       else if(operation==='archive'||operation==='restore')value=await this.engine.setArchived({...args[0],actor,restore:operation==='restore'});

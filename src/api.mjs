@@ -64,6 +64,8 @@ export function createApi({ getCoordinator, provision, mcp }) {
       const operation=action==='claims'?'claim':action;
       return respond(await call(await located('session',id),operation,[id,...(method==='POST'&&action!=='close'?[input]:[])]));
     }
+    match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/principals$/);
+    if(match){if(method!=='GET')throw fail(405,'Use GET');const row=await source(segment(match[1]));return respond(await call(row.id,'principals',[]));}
     match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/(active-work|events|submissions|drafts|rollback|requests)(?:\/([^/]+))?(?:\/(snapshot|close))?$/);
     if(match) {
       const reference=segment(match[1]), action=match[2], child=match[3] && segment(match[3]), tail=match[4], row=await source(reference);

@@ -24,6 +24,15 @@ export class Catalog {
     const rows = await this.all('SELECT id,type,name,status FROM principals WHERE id>? ORDER BY id LIMIT 201', after);
     return {principals:rows.slice(0,200),nextPrincipalCursor:rows.length>200?rows[199].id:null};
   }
+  // Invite directory: active principals holding a read, write or publish grant on
+  // the source, plus the configured designer agent. Names and types only.
+  async sourcePrincipals(sourceId, designerId = null, limit = 500) {
+    const rows = await this.all(`SELECT p.id,p.name,p.type,p.status FROM principals p WHERE p.status='active' AND (p.id=?
+      OR EXISTS(SELECT 1 FROM system_access a WHERE a.source_id=? AND a.principal_id=p.id AND (a.can_read=1 OR a.can_write=1))
+      OR EXISTS(SELECT 1 FROM publishers g WHERE g.source_id=? AND g.principal_id=p.id)) ORDER BY p.name,p.id LIMIT ?`, designerId || '', sourceId, sourceId, limit);
+    return rows.map(row => ({ id: row.id, name: row.name || row.id, type: row.type, active: row.status === 'active' }))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  }
   async publisherPage(sourceId, after = '') {
     const rows = await this.all(`SELECT p.id,p.type,p.name,p.status FROM publishers g JOIN principals p ON p.id=g.principal_id
       WHERE g.source_id=? AND p.id>? ORDER BY p.id LIMIT 201`,sourceId,after);
