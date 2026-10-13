@@ -1,4 +1,5 @@
 import { fail } from '../store/errors.mjs';
+import { publishedBundle, publishedDocumentUrls } from '../public/urls.mjs';
 import { publishedFile, publicSystemUrls, safePublicPath } from '../public/index.mjs';
 
 const files={index:'index.json',tokens:'tokens.json',brand:'brand.json',llms:'llms.txt',formats:'formats.json',designs:'designs.json',changelog:'changelog.json',bundle:'bundle.json'};
@@ -16,7 +17,7 @@ async function bytesOf(file,remaining){
 
 /** One coordinator pointer resolution supplies every document. Storage refs,
  * authored source, grants and raw imported history never enter this response. */
-export async function readPublicDerivedLayer({resolved,bucket,readFile,publicOrigin,metadataOnly=false}){
+export async function readPublicDerivedLayer({resolved,bucket,readFile,publicOrigin,metadataOnly=false,pinned=false}){
   const {source,version,firstPublicationEventId,readView}=resolved;
   if(!readView?.currentVersion||readView.source?.id!==source.id||version.source_id!==source.id)throw fail(503,'Published read metadata is unavailable');
   const entry=safePublicPath(version.artifact?.entryPath||'index.html');
@@ -26,7 +27,8 @@ export async function readPublicDerivedLayer({resolved,bucket,readFile,publicOri
   const first=versions.find(item=>item.versionLabel===version.version_label);
   // Legacy same-label republications can have a current release distinct from
   // the first event pinned at /v/<label>/. Do not mislabel that asset base.
-  const base=first?.contentDigest===version.content_digest?urls.version:urls.root;
+  const immutableBase=pinned||first?.contentDigest===version.content_digest;
+  const base=immutableBase?urls.version:urls.root;
   const response={schemaVersion:1,source:{id:source.id,systemId:source.system_id,name:source.name||source.system_id},
     release:{id:version.id,versionLabel:version.version_label,sourceCommit:version.source_commit,contentDigest:version.content_digest,firstPublicationEventId},
     currentVersion:current,versions,versionsLimit:100,publicRoot:urls.root,publicUrls:urls,entryPath:entry};
@@ -60,6 +62,9 @@ export async function readPublicDerivedLayer({resolved,bucket,readFile,publicOri
     for(const item of Array.isArray(value)?value:Object.values(value))await rewrite(item);
   }
   for(const name of ['index','brand','designs'])await rewrite(documents[name]);
+  for(const name of ['index','brand','formats','designs','changelog'])publishedDocumentUrls(documents[name],base);
+  if(documents.designs)documents.designs.base=base;
+  if(documents.bundle)documents.bundle=publishedBundle(documents.bundle,{base,manifestPath:`${directory}bundle.json`,versionBase:immutableBase?urls.version:null});
   const layer={source:{kind:'published',base,artifact:{sourceId:source.id,contentDigest:version.content_digest}},
     system:{id:source.system_id,name:source.name||source.system_id,version:version.version_label},
     derived:Boolean(documents.index||documents.tokens||documents.brand),stale:false,

@@ -1,6 +1,10 @@
 const limit=1000;
 /** Imported catalogue rows are retained history, not public JSON wholesale. */
 export async function readImportedPublicMedia({catalog,storage,sourceId}){
+  // A positive native provision receipt is sufficient to avoid the optional
+  // import schema. Imported sources lack this receipt and still fail closed
+  // when their active-stage authority is unavailable.
+  if(await catalog.first('SELECT id FROM provision_operations WHERE source_id=?',sourceId))return null;
   const active=await catalog.first("SELECT stage_id FROM import_operations WHERE source_id=? AND state='active'",sourceId);
   if(!active)return null;
   const rows=storage.sql.exec(`SELECT row_json FROM import_history WHERE stage_id=? AND kind='assets'

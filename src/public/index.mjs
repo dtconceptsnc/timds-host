@@ -70,10 +70,18 @@ export function createPublicRoots({resolvePublished,bucket,hostOrigin,publicOrig
           return new Response(null,{status:308,headers:{Location:location,'Cache-Control':route.label?'public, max-age=31536000, immutable':'public, max-age=300, must-revalidate'}});
         }
         if (path.endsWith('/')) path+='index.html';
-        const stored=await publishedFile(readFile,bucket,version,path);
+        let stored=await publishedFile(readFile,bucket,version,path);
+        // Derived page URLs may omit the slash or .html extension. Resolve
+        // against the same captured release, preserving the browser base for
+        // directory pages and the exact current/pinned source prefix.
+        if(!stored&&!route.file.endsWith('/')&&!path.split('/').at(-1).includes('.')) {
+          const directory=await publishedFile(readFile,bucket,version,`${path}/index.html`);
+          if(directory){await directory.body?.cancel();return new Response(null,{status:308,headers:{Location:`${published}${url.pathname}/${url.search}`,'Cache-Control':route.label?'public, max-age=31536000, immutable':'public, max-age=300, must-revalidate'}});}
+          stored=await publishedFile(readFile,bucket,version,`${path}.html`);if(stored)path+='.html';
+        }
         if (!stored) throw fail(404,'Published file not found');
         const type=publicContentType(path);
-        const file=await nativeViewerFile(stored,{path,type,systemId:route.systemId,label:route.label});
+        const file=await nativeViewerFile(stored,{path,type,systemId:route.systemId,label:route.label,publicOrigin:published});
         const etag=`"${file.sha256 || `${version.id}:${version.content_digest}`}"`;
         const headers=new Headers({'Content-Type':type,'Cache-Control':route.label?'public, max-age=31536000, immutable':'public, max-age=300, must-revalidate','ETag':etag,'X-Content-Type-Options':'nosniff','Access-Control-Allow-Origin':'*','Referrer-Policy':'no-referrer'});
         if (Number.isSafeInteger(file.size)) headers.set('Content-Length',String(file.size));
