@@ -123,6 +123,39 @@ bucket with other rules. Released bytes and provenance are copied to
 Snapshots stay in SNAPSHOTS. A release label cannot be reused for different
 bytes or a different source commit.
 
+## The timds-host-69 installation
+
+The deployed installation behind `https://studio.timds.com` is Worker
+`timds-host-69` in account `e25df25724ba27024ad08e3096b5bd37`. Its deployment
+helper is [`scripts/deploy-timds-host-69.py`](../scripts/deploy-timds-host-69.py);
+run it from any checkout or worktree of this repository:
+
+```sh
+python3 scripts/deploy-timds-host-69.py deploy
+```
+
+The nonsecret environment described above is built inside the helper's
+`environment()` (host, Studio and public origins, Access team and audience,
+designer principal, Artifacts and legacy media bindings, subdomain aliases,
+`TIMDS_STUDIO_FRAME_ORIGINS`). Created resource ids are the installation
+record in [`scripts/deploy-timds-host-69.state.json`](../scripts/deploy-timds-host-69.state.json).
+Logs and the secrets fifo go to `TIMDS69_DEPLOY_DIR` (default
+`/tmp/timds-host-69-deploy`). No secret is stored in the repository; the
+helper reads each one at run time from these places:
+
+| Credential | Where it lives |
+| --- | --- |
+| Cloudflare deployment OAuth token (Workers, Containers, D1, R2, KV, Queues, Workflows) | `~/Library/Preferences/.wrangler/config/default.toml` |
+| Cloudflare Builds OAuth token | `~/Library/Preferences/cloudflare/config/default.json` |
+| `CLOUDFLARE_API_TOKEN`, `TIMDS_BUILDS_API_TOKEN`, `OPENAI_API_KEY` (runtime secrets) | Portal VPS, `root@ssh.dtconcepts.net:/var/www/portal.dtconcepts.net/.env.server`, read over SSH |
+| `TIMDS_BOOTSTRAP_SECRET` | Private `0600` file `/tmp/timds69-bootstrap-secret`, generated on the first deploy; move it under `~/.config/timds/` to survive reboots |
+| `TIMDS_PORTAL_TRANSFER_SECRET` | Private `0600` file `~/.config/timds/host69-transfer-secret` |
+
+The retired portal designer Worker `timds-designer` kept its own settings:
+`MODEL` and `PORTAL_ORIGIN` in the toperator repository at
+`cloudflare/timds-designer/wrangler.jsonc`, and the `OPENAI_API_KEY` and
+`TIMDS_SANDBOX_RUNNER_TOKEN` secrets stored on that Worker in Cloudflare.
+
 ## Runtime secrets and deployment
 
 Have your secret manager write a private flat JSON file outside the repository
