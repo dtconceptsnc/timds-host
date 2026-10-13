@@ -5,9 +5,11 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "strict": true,
+    "allowJs": true,
+    "checkJs": false,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": [],
+    "types": ["node"],
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true
