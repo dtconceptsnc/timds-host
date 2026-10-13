@@ -48,3 +48,35 @@ fresh remote MCP authorization. The executed local stdio OAuth read establishes
 transport, discovery, existing-grant resolution and authenticated host access;
 it must not be relabelled as a complete authoring journey. CLI OAuth or
 public/previously authenticated reads likewise do not establish fresh CIMD.
+
+## Completed follow-up acceptance — 18:48 UTC
+
+The previously unexercised journeys above are now completed:
+
+- [Local editing MCP mutation](local-mcp-mutation-2026-10-13.json): released
+  toolkit 0.1.472 started a native session, read the guide, claimed and edited
+  `tokens/motion.json`, checked, submitted, reviewed the diff and dry run, and
+  explicitly published disposable source release `2026.10.13-14`. An independent
+  immutable public read returned `--motion-mcpacceptance: 175ms`. Publication
+  replay returned the same publication/version; the session is closed.
+- [Fresh CIMD](fresh-cimd-2026-10-13.json): user-approved client metadata from
+  GitHub, PKCE S256 and a localhost callback exchanged a new one-hour token at
+  `https://studio.timds.com`. The SDK listed all five remote tools and read
+  `--motion-fast`. No refresh token was requested or issued. Revocation returned
+  200 afterward. Chrome blocked displaying the callback response, after the
+  local listener had already completed the exchange, MCP calls and revocation.
+- [Remote gap write/replay](remote-gap-replay-2026-10-13.json): identical reports
+  for the same pinned disposable release returned the same Request/job IDs.
+  The Request succeeded and produced one submission. Publication was not
+  requested for this documentation gap.
+
+The fresh Studio check initially found an authenticated MCP 404. The MCP origin
+check now accepts the exact configured `TIMDS_STUDIO_ORIGIN`, matching the
+existing OAuth origin selection, while retaining canonical-host support,
+exact browser Origin checks and a separate public MCP origin. Worker version
+`59a577be-f896-4669-9e6e-fc0936a2b35b` contains this correction. Typecheck, native
+build, the two relevant existing MCP authorization tests, and direct SDK origin
+checks passed. The live fresh-CIMD read above verified the deployed correction.
+
+This records a Codex-driven SDK client, not an interactive Claude Code session.
+No production design content or consumer pin was changed by these MCP checks.
