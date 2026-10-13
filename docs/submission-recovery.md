@@ -58,6 +58,6 @@ No lease, source/session/submission identity, review branch or saved file was
 replaced. The same original submission subsequently completed normal API
 publication as `.13`; the session closed and API rollback to `.12` followed by
 restore to `.13` preserved both pinned stamps. See the
-[completed acceptance receipt](evidence/manual-recovery-publication.md).
+completed acceptance receipt (private operational record).
 The user stopped additional UI testing, so this does not claim a further phone
 publish/rollback journey.

@@ -2,7 +2,7 @@
 
 Prepared 2026-10-13 from the issue-69 portal worktree. This is a removal plan,
 not a deletion receipt. No portal runtime file, service, source or stored byte
-was removed. The accompanying [symbol/import inventory](../evidence/phase7-removal-inventory.json)
+was removed. The accompanying symbol/import inventory (private operational record)
 records 40 modules, their exports and direct non-test server importers at the
 captured revision. Refresh that inventory at implementation time.
 

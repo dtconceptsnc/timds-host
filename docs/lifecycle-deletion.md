@@ -1,7 +1,7 @@
 # Source deletion
 
 Implementation has passed JavaScript syntax, typecheck and a real `cf build`.
-[Actual lifecycle verification](evidence/native-collaboration-acceptance.md#coordinated-source-lifecycle-verification)
+Actual lifecycle verification (private operational record)
 completed on the separate disposable collaboration source, including archive,
 restore, exact reviewed deletion, retained audit and rejected identity reuse.
 No production source was deleted. No new tests were added or run, as requested.
