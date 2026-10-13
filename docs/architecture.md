@@ -8,7 +8,7 @@ host authoring and publication acceptance, phone usage and production migration
 remain in progress. The health endpoint deliberately reports integration status.
 
 The design was reviewed against portal commit `2b0148c` and toolkit OAuth
-[PR #100](https://github.com/dtconceptsnc/timds-toolkit/pull/100). The
+[PR #100](https://github.com/sticktrk/timds-toolkit/pull/100). The
 production portal baseline passed (private operational record), and
 the subsequent Request recovery and fixture cleanup are settled in that receipt.
 The original proposed interfaces below remain design context; concrete modules
@@ -417,6 +417,8 @@ re-arm the alarm so the next Request starts within about a second. Before
 its session last submitted, else `tokens.json`, `tokens/**`, `src/**`, with the
 prompt's first 200 characters as its note). `GET .../principals` lists active
 principals with a grant on the source, plus the designer agent, for invitations.
+`GET /api/timds/me` returns the caller's own principal (`id`, `type`, `name`,
+`admin`), which is the id an owner or publisher passes to `join` to invite them.
 
 ### Warm drafts and wake
 

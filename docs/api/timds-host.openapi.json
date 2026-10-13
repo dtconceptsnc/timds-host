@@ -3248,6 +3248,95 @@
           }
         }
       }
+    },
+    "/api/timds/me": {
+      "get": {
+        "operationId": "readCurrentPrincipal",
+        "summary": "Read the authenticated principal",
+        "description": "The identity the bearer credential resolves to on this host. A session owner or publisher passes this id as principalId to join when inviting the caller. Never returns emails or credentials and never waits behind a source writer queue.",
+        "tags": [
+          "Collaboration"
+        ],
+        "parameters": [
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "apiVersion": {
+                      "type": "integer",
+                      "const": 1
+                    },
+                    "principal": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "type": {
+                          "enum": [
+                            "user",
+                            "agent"
+                          ]
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "admin": {
+                          "type": "boolean",
+                          "description": "Whether the principal is a host administrator."
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "type",
+                        "name",
+                        "admin"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "apiVersion",
+                    "principal"
+                  ]
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
     }
   },
   "components": {

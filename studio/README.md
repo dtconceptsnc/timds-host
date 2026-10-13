@@ -32,12 +32,16 @@ The Overview explains the three ways to make a change, each as a card:
    (`timds auth login --oauth`, then `timds mcp`). The card says that editing
    over MCP is not production-ready.
 3. **Edit locally with npm.** Install `@dtconcepts/timds` globally, log in
-   with OAuth against this origin, `timds start <systemId>` to pull a session
-   to disk, `timds dev`, and `timds submit` to send it back for review.
+   with OAuth against this origin, `timds start <systemId>` to pull a new
+   session to disk, `npm ci`, `timds dev`, and `timds submit` to send it back
+   for review. The card says that this starts a new session and points at the
+   join command under **Invite…** for one that is already open.
 
 Each snippet has a **Copy** button (the Clipboard API; no inline script). The
 toolkit version in the snippets is the `TOOLKIT` constant at the top of
-`app.js`; keep it in step with the root `package.json`. Below the cards the
+`app.js`; keep it in step with the root `package.json`. `timds start` carries
+`--portal-url <origin>`, because a toolkit that has no workspace yet does not
+otherwise know which host to call. Below the cards the
 Overview lists drafts and sessions, recent Requests and the last releases. The
 Request composer lives on the Sessions page.
 
@@ -116,9 +120,11 @@ areas (claims) are shown read-only; agents declare them as they edit.
   sign-in round trip; a failed join shows the host's error and the page then
   opens as usual. **Terminal** is the same invitation in the toolkit's words,
   `npx --yes --package @dtconcepts/timds timds join "<studio link>"`: the
-  command signs in through the link's host origin if needed and calls the same
-  join route as itself. The toolkit does not ship `timds join` yet; this is
-  the shape it is expected to take. Membership grants session access, not
+  command signs in through the link's host origin if needed, calls the same
+  join route as itself, and pulls the session into a new `./session-<id
+  prefix>` folder. `timds join` takes a session id in every release; it takes
+  the link only in toolkit releases after `0.1.472`, so this row works once
+  `TOOLKIT` names such a release. Membership grants session access, not
   publication. There is no principal picker; owners and publishers can still
   close sessions.
 
