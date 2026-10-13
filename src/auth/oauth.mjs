@@ -34,7 +34,9 @@ export function createHostOAuth(env, { api, publicFetch, claimInvitations=async(
     },
     apiHandler: {
       async fetch(request, bindings, context) {
-        const required = new URL(request.url).pathname==='/api/timds/mcp' || ['GET','HEAD','OPTIONS'].includes(request.method) ? ['timds:read'] : ['timds:read','timds:write'];
+        // A feed ticket only authorizes watching committed events, so a read-only token may request one.
+        const pathname = new URL(request.url).pathname;
+        const required = pathname==='/api/timds/mcp' || /^\/api\/timds\/design-systems\/[^/]+\/feed\/tickets$/.test(pathname) || ['GET','HEAD','OPTIONS'].includes(request.method) ? ['timds:read'] : ['timds:read','timds:write'];
         if (!context.auth || !required.every(scope => context.auth.scope.includes(scope))) return insufficientScope(context.auth, required);
         const principal = await new Catalog(bindings.CATALOG).principal(context.props?.principalId);
         if (principal?.status !== 'active' || principal.id !== context.auth.userId) throw fail(403, 'This TimDS identity is inactive');
