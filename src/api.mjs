@@ -64,10 +64,11 @@ export function createApi({ getCoordinator, provision, mcp }) {
       const operation=action==='claims'?'claim':action;
       return respond(await call(await located('session',id),operation,[id,...(method==='POST'&&action!=='close'?[input]:[])]));
     }
-    match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/(active-work|submissions|drafts|rollback|requests)(?:\/([^/]+))?(?:\/(snapshot|close))?$/);
+    match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/(active-work|events|submissions|drafts|rollback|requests)(?:\/([^/]+))?(?:\/(snapshot|close))?$/);
     if(match) {
       const reference=segment(match[1]), action=match[2], child=match[3] && segment(match[3]), tail=match[4], row=await source(reference);
       if(action==='active-work'&&!child&&method==='GET')return respond(await call(row.id,'activeWork',[reference]));
+      if(action==='events'&&!child&&method==='GET')return respond(await call(row.id,'sourceEvents',[reference,{after:url.searchParams.get('after'),limit:url.searchParams.get('limit')}]));
       if(action==='submissions'&&!child&&method==='GET')return respond(await call(row.id,'listSubmissions',[]));
       if(action==='drafts') {
         if(!child&&method==='GET')return respond(await call(row.id,'listDrafts',[reference]));

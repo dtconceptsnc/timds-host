@@ -103,6 +103,9 @@ export class SystemCoordinator extends DurableObject {
         value=await this.engine.runMutation(()=>{if(this.store.deletionFence())throw fail(409,'Publication is fenced by source deletion');return this.publicationApi.publish(actor,...args);});
         httpStatus=value.status;value=value.body;
         await this.store.flushOutbox();
+      } else if(operation==='sourceEvents') {
+        // Event feed: committed SQLite rows after the activeWork read check; never queued.
+        value=await this.engine.invoke({operation,actor,args});
       } else value=await this.engine.invoke({operation,actor,args});
       value=this.projectActiveUrls(value,{preflightSubmission:operation==='publish'&&value?.preflight?this.store.getSubmission(args[0]):undefined});
       return {ok:true,value,...(httpStatus?{httpStatus}:{})};

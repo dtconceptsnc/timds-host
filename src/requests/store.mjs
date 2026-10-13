@@ -25,6 +25,14 @@ export function createRequestStore({storage, sourceId, catalog, store, clock = (
     if (!job || !leaseToken || job.lease_token!==leaseToken || !['leased','running'].includes(job.status) || !(Date.parse(job.lease_expires_at)>clock())) throw fail(409,'Designer Request execution lease is unavailable');
     return job;
   };
+  // Request feed rows commit inside the same transaction as the job transition.
+  const requestEvent = (event_type,request,job,details = {}) => {
+    let sessionId = request?.session_id || null;
+    if (!sessionId) try { sessionId = store.sessionForRequest(sourceId,job.payload_json.requestId)?.id || null; } catch { sessionId = null; }
+    return store.recordEvent({event_type,session_id:sessionId,actor_principal_id:event_type === 'request_received' ? request.requested_by : request?.runner_principal_id || null,
+      originating_request_id:job.payload_json.requestId,note:request?.prompt?.slice(0,2000) || '',details_json:{requestId:job.payload_json.requestId,executionJobId:job.id,...details}});
+  };
+  const failed = (job,status,error,diagnostic = null) => requestEvent('request_failed',get('requests',job.payload_json.requestId),job,{attempt:job.attempt_count,status,error,...(diagnostic ? {diagnostic} : {})});
   return {
     async reserve({requestId,sourceId:id,requestedBy,runnerPrincipalId,prompt,sessionId = null}) {
       if(id!==sourceId || !uuid.test(requestId) || !uuid.test(requestedBy) || !uuid.test(runnerPrincipalId || '') || sessionId && !uuid.test(sessionId) || typeof prompt!=='string' || !prompt.trim() || Buffer.byteLength(prompt)>32*1024) throw fail(400,'Invalid Designer Request identity');
@@ -40,6 +48,7 @@ export function createRequestStore({storage, sourceId, catalog, store, clock = (
         if(saved) {if(binding(saved)!==binding(request))throw fail(409,'Request reservation identity mismatch');return {request:saved,job:this.jobForRequest(requestId)};}
         put('requests',receipt.request);put('request_jobs',receipt.job);
         store.enqueueResource('request',requestId);store.enqueueResource('request-job',receipt.job.id);
+        requestEvent('request_received',receipt.request,receipt.job,{runnerPrincipalId:receipt.request.runner_principal_id,targetSessionId:receipt.request.session_id || null});
         return receipt;
       });
     },
@@ -49,12 +58,12 @@ export function createRequestStore({storage, sourceId, catalog, store, clock = (
     claim({jobId,leaseToken,leaseOwner,leaseSeconds = 300}) {return atomic(()=>{
       const job=get('request_jobs',jobId);
       if(!job || !uuid.test(leaseToken || '') || !leaseOwner || terminal(job.status) || job.status==='succeeded' || job.available_at>timestamp() || job.lease_expires_at && Date.parse(job.lease_expires_at)>clock())return null;
-      if(job.attempt_count>=job.max_attempts){put('request_jobs',{...job,status:'dead_letter',lease_token:null,lease_expires_at:null,updated_at:timestamp()});return null;}
+      if(job.attempt_count>=job.max_attempts){put('request_jobs',{...job,status:'dead_letter',lease_token:null,lease_expires_at:null,updated_at:timestamp()});failed(job,'dead_letter','Designer Request execution did not finish');return null;}
       return put('request_jobs',{...job,status:'running',attempt_count:job.attempt_count+1,lease_token:leaseToken,lease_owner:leaseOwner,lease_expires_at:new Date(clock()+Math.max(30,Math.min(leaseSeconds,3600))*1000).toISOString(),updated_at:timestamp()});
     });},
     validateLease: leased,
     finish(input) {return atomic(()=>{const job=leased(input),request=get('requests',job.payload_json.requestId);put('requests',{...request,status:'processed',updated_at:timestamp()});return put('request_jobs',{...job,status:'succeeded',result_json:input.result || {},error_message:null,failure_diagnostic:null,lease_token:null,lease_owner:null,lease_expires_at:null,updated_at:timestamp()});});},
-    fail(input) {return atomic(()=>{const job=leased(input);return put('request_jobs',{...job,status:job.attempt_count>=job.max_attempts?'dead_letter':'queued',error_message:'Designer Request execution failed',failure_diagnostic:safeRequestDiagnostic(input.diagnostic),lease_token:null,lease_owner:null,lease_expires_at:null,available_at:new Date(clock()+60_000).toISOString(),updated_at:timestamp()});});},
+    fail(input) {return atomic(()=>{const job=leased(input),saved=put('request_jobs',{...job,status:job.attempt_count>=job.max_attempts?'dead_letter':'queued',error_message:'Designer Request execution failed',failure_diagnostic:safeRequestDiagnostic(input.diagnostic),lease_token:null,lease_owner:null,lease_expires_at:null,available_at:new Date(clock()+60_000).toISOString(),updated_at:timestamp()});failed(job,saved.status,saved.error_message,saved.failure_diagnostic);return saved;});},
     retry(jobId) {return atomic(()=>{const job=get('request_jobs',jobId);if(!job)throw fail(404,'Designer Request not found');if(!terminal(job.status))return job;return put('request_jobs',{...job,status:'queued',attempt_count:0,error_message:null,failure_diagnostic:null,lease_token:null,lease_owner:null,lease_expires_at:null,available_at:timestamp(),updated_at:timestamp()});});},
     due(limit = 10) {return sql.exec(`SELECT row_json FROM request_jobs WHERE json_extract(row_json,'$.status') IN ('queued','leased','running') AND json_extract(row_json,'$.available_at')<=? AND (json_extract(row_json,'$.lease_expires_at') IS NULL OR json_extract(row_json,'$.lease_expires_at')<=?) ORDER BY json_extract(row_json,'$.created_at'),id LIMIT ?`,timestamp(),timestamp(),Math.max(1,Math.min(Number.isInteger(limit)?limit:10,100))).toArray().map(row=>JSON.parse(row.row_json));},
     nextAlarm() {const pending=sql.exec("SELECT row_json FROM request_jobs WHERE json_extract(row_json,'$.status') IN ('queued','leased','running')").toArray().map(row=>JSON.parse(row.row_json));return pending.length?Math.min(...pending.map(job=>Math.max(clock()+1000,Date.parse(job.available_at) || 0,Date.parse(job.lease_expires_at) || 0))):null;},

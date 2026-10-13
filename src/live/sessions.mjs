@@ -41,11 +41,11 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
       const token=await artifacts.mintToken(source.artifacts_namespace,session.fork_repository,{permission:'read',ttlSeconds:900});
       return {remote:repo.remote,repoToken:token.token,baseRevision:session.base_revision,expiresAt:session.expires_at};
     },
-    async state({sessionId,state}) {
+    async state({sessionId,state},request = null) {
       if(!['sleeping','starting','ready','running','failed','closed'].includes(state))throw fail(400,'Invalid live state');
       const {session}=await owned(sessionId,{open:false});
       if(session.status!=='open' && state!=='closed')throw fail(410,'Live session is closed');
-      await store.updateSession(sessionId,{live_state:state},{expectedStatus:session.status});
+      await store.setLiveState(sessionId,state,{expectedStatus:session.status,request});
       return {ok:true};
     },
     async pushed(session,{revision}={}) {
@@ -66,7 +66,7 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
  * serialization: live-credentials/state may be reentrant during native start;
  * complete and expired must use its normal durable mutation queue.
  */
-export function createLiveCallbacks({sourceId,store,sessions,live,designer,clock = () => Date.now()}) {
+export function createLiveCallbacks({sourceId,store,sessions,live,designer,requestBinding = async () => null,clock = () => Date.now()}) {
   async function sessionBound(body) {
     if(!sessionIdPattern.test(body?.sessionId || ''))throw fail(404,'Session not found');
     const session=await store.get(body.sessionId);
@@ -78,7 +78,14 @@ export function createLiveCallbacks({sourceId,store,sessions,live,designer,clock
     const session=await sessionBound(body);
     if(action==='complete')return designer.complete(body);
     if(action==='live-credentials')return live.credentials(body);
-    if(action==='live-state')return live.state(body);
+    if(action==='live-state') {
+      // The runtime may name its current Request; only a binding to this
+      // source and session attributes the state (and a failed run) to it.
+      const requestId=sessionIdPattern.test(body?.requestId || '')?body.requestId:null;
+      const binding=requestId?await requestBinding(requestId):null;
+      const bound=binding?.sourceId===sourceId && (binding.sessionId?binding.sessionId===session.id:session.originating_request_id===requestId);
+      return live.state({sessionId:body.sessionId,state:body?.state},bound?{requestId,agentPrincipalId:binding.agentPrincipalId || null,note:binding.note || ''}:null);
+    }
     if(action==='expired') {
       const expired=Boolean(session.expires_at && Date.parse(session.expires_at)<=clock());
       if(!['closing','closed','expired'].includes(session.status) && !expired)throw fail(409,'Session has not expired');

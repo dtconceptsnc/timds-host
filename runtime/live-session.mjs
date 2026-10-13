@@ -27,7 +27,8 @@ export class LiveSessionRuntime {
   save(patch){const value={...this.record(),...patch};this.ctx.storage.kv.put('live',value);return value;}
   async schedule(at){const expires=Date.parse(this.record()?.expiresAt);await this.ctx.storage.setAlarm(Number.isFinite(expires)?Math.min(at,expires):at);}
   async touch(){this.save({lastActivityAt:Date.now()});if(!active(this.run()))await this.schedule(Date.now()+this.idleTimeout());}
-  async report(state){this.save({state});try{await this.portal(this.env,'live-state',{sessionId:this.record().id,state});}catch{}}
+  // requestId names the Request a running/failed task belongs to; the host verifies its binding.
+  async report(state,requestId){this.save({state});try{await this.portal(this.env,'live-state',{sessionId:this.record().id,state,...(requestId?{requestId}:{})});}catch{}}
   assertOpen(){const live=this.record();if(!live || ['closed','closing'].includes(live.state) || (live.expiresAt && Date.parse(live.expiresAt)<=Date.now()))throw Object.assign(new Error('Live session is closed'),{status:410});return live;}
   status(){const live=this.record(),run=this.run();return{state:['closed','closing'].includes(live?.state)?live.state:!this.ctx.container?.running?'sleeping':live?.state||'none',runner:run?{requestId:run.requestId,state:run.state,...(run.submissionId?{submissionId:run.submissionId}:{}),...(run.error?{error:run.error}:{}),...(run.diagnostics?{diagnostics:safeTaskDiagnostics(run.diagnostics)}:{}),...(run.conflicts?{conflicts:run.conflicts}:{})}:null};}
   async configure(id,{expiresAt=null,idleTimeoutMs,interruptCleanupOnce}={}){if(!sessionIdPattern.test(id))throw new Error('Invalid session');if(['closed','closing'].includes(this.record()?.state))throw Object.assign(new Error('Closed'),{status:410});if(expiresAt!==null&&!Number.isFinite(Date.parse(expiresAt)))throw new Error('Invalid expiry');if(idleTimeoutMs!==undefined&&(!Number.isInteger(idleTimeoutMs)||idleTimeoutMs<60_000||idleTimeoutMs>idleMs))throw new Error('Idle timeout must be between one and ten minutes');if(interruptCleanupOnce!==undefined&&typeof interruptCleanupOnce!=='boolean')throw new Error('Invalid cleanup interruption');if(interruptCleanupOnce&&(!expiresAt||!this.ctx.container?.running))throw new Error('Cleanup interruption requires a running finite session');this.save({id,expiresAt,...(idleTimeoutMs===undefined?{}:{idleTimeoutMs}),...(interruptCleanupOnce===undefined?{}:{interruptCleanupOnce}),state:this.record()?.state||'sleeping'});if(this.ctx.container?.running)await this.ctx.container.setInactivityTimeout(this.idleTimeout());if(active(this.run())||this.ctx.container?.running||expiresAt)await this.schedule(active(this.run())?Date.now()+1000:this.ctx.container?.running?Date.now()+this.idleTimeout():Date.parse(expiresAt));else await this.ctx.storage.deleteAlarm();return this.status();}
@@ -106,7 +107,7 @@ export class LiveSessionRuntime {
     this.ctx.storage.kv.put('task',{requestId:input.requestId,note:input.note||run.prompt.slice(0,2000),state:'starting',startedAt:Date.now()});
     await this.command(['rm','-f','/workspace/task/result.json','/workspace/task/progress.json']);
     await this.ctx.container.exec(['/bin/sh','-c','setsid node /usr/local/lib/timds-agent.mjs "$@" >/workspace/task/stdout.log 2>/workspace/task/stderr.log','agent',revision,this.env.MODEL,run.prompt],{cwd:'/workspace/repo',env:trust,stdout:'ignore',stderr:'ignore'});
-    this.ctx.storage.kv.put('task',{...this.run(),state:'running'});await this.report('running');await this.schedule(Date.now()+1000);return this.status();
+    this.ctx.storage.kv.put('task',{...this.run(),state:'running'});await this.report('running',input.requestId);await this.schedule(Date.now()+1000);return this.status();
   });}
   async diagnostics(input){
     if(input?.fetchProbe!==undefined)return this.locked(async()=>{
@@ -170,7 +171,7 @@ export class LiveSessionRuntime {
         if(response.status<500&&response.status!==429)throw new Error('Submission rejected');
       }
       await this.schedule(Date.now()+1000);
-    }catch{this.ctx.storage.kv.put('task',{...run,state:'failed',...(taskDiagnostics?{diagnostics:taskDiagnostics}:{}),error:'The Request failed or exceeded its time limit'});if(this.ctx.container?.running)await this.ctx.container.destroy();await this.report('failed');if(this.record()?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(this.record().expiresAt));}
+    }catch{this.ctx.storage.kv.put('task',{...run,state:'failed',...(taskDiagnostics?{diagnostics:taskDiagnostics}:{}),error:'The Request failed or exceeded its time limit'});if(this.ctx.container?.running)await this.ctx.container.destroy();await this.report('failed',run.requestId);if(this.record()?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(this.record().expiresAt));}
   });}
   async fetch(request){
     let phase='wake';

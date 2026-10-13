@@ -47,6 +47,16 @@ persisted session identity; the callback factory also checks coordinator source
 ownership. The edge must not expose this capability as an unauthenticated HTTP
 route.
 
+Request transitions append source feed events with `originating_request_id`
+and `details_json.requestId`: `request_received` with the reservation,
+`request_started` once the runner accepts the Request, `request_submitted`
+in the same transaction as (and just before) its `submitted` event, and
+`request_failed` on a job failure or dead letter, a completion conflict, or a
+runner `failed` state. `live-state` may name the runner's current Request; the
+callback attributes it only when that Request is bound to the same source and
+session. Errors in these rows are host-authored safe messages and sanitized
+diagnostics, never model output or credentials.
+
 Local validation uses real SQLite adapters for reservations, lease takeover,
 bounded retries and durable receipt recovery, with explicit native RPC tests:
 

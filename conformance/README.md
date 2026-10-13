@@ -12,10 +12,15 @@ is vendored at the repository's
 single authoritative spec used by this harness. Ajv's JSON Schema 2020-12 validator checks
 response status, media type, required response headers, nested schemas,
 formats, and error responses on every request. Unknown fields remain allowed
-as required by the v1 contract. Requests, submission listing, and public CSS
-use the same validating transport because toolkit 0.1.464 does not expose
-client methods for those operations. All other operations call
+as required by the v1 contract. Requests, submission listing, the source event
+feed, and public CSS use the same validating transport because toolkit 0.1.464
+does not expose client methods for those operations. All other operations call
 `createHostProvider` from `@dtconcepts/timds/hosted`.
+
+The host has since extended the vendored contract additively with
+`GET /api/timds/design-systems/{source}/events?after=<seq>&limit=<n>`
+(`getSourceEvents`, schema `EventFeed`) and an optional per-source `seq` on
+`Event`. Existing paths and response fields are unchanged.
 
 This pin includes the public preview CSS GET/HEAD `Cache-Control: no-store`
 contract correction from [portal PR #89](https://github.com/dtconceptsnc/toperator/pull/89).
@@ -107,6 +112,16 @@ ordinary approved lifecycle after examining the results.
    submission with the original instruction and exact requested file bytes. It
    has no publication and leaves the public pointer untouched. Session close is
    idempotent and history survives cleanup.
+8. The event feed rejects invalid cursors with 400, and every walk from a
+   cursor returns consecutive `seq` values that replay identically. It records
+   `draft_created`/`session_started`, `member_joined` (including the invited
+   member), `claimed`, `updated` and `closed` for the run's sessions. Each
+   publication has `publication_queued`, one `publication_stage` per Workflow
+   stage (`preflight`, `merge`, `build`, `prepare`, `release`, `flip`, `close`)
+   and `published`, which commits during `flip`. The designer Request records
+   `request_received` once (despite the retry), then `member_joined`,
+   `request_started`, `request_submitted` with its submission ID and
+   `submitted`, and no `request_failed`. `active-work` events carry `seq`.
 
 Every created session is tracked for test teardown, including on failure.
 Publication attempts are recorded before transport, so a lost or malformed

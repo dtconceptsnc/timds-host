@@ -1,6 +1,8 @@
 import { sessionIdPattern, agentPushEvent } from '../../runtime/policy.mjs';
 import { requestDiagnostic } from './diagnostics.mjs';
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
+const busy = 'This session is busy; retry when its current operation finishes';
+const conflicted = 'This Request overlaps a newer edit. Start a follow-up Request to resolve it.';
 
 /** Native live DO dispatch. The model can submit bounded changes, never publish. */
 export function createDesigner({designerPrincipalId, authorization, sessions, store, live, getRequestBinding, reconcilePush, ensurePreview = async()=>{}, runMutation = task=>task()}) {
@@ -29,7 +31,8 @@ export function createDesigner({designerPrincipalId, authorization, sessions, st
         let started;
         if(sessionId){
           if(!caller)throw fail(403,'A session owner must authorize the Request');
-          await runMutation(()=>sessions.join(caller,sessionId,{principalId:actor.principalId}));
+          // The requester's own Request binding attributes the designer's membership to it.
+          await runMutation(()=>sessions.join({...caller,requestId:request.id},sessionId,{principalId:actor.principalId}));
           started=await runMutation(()=>sessions.status(actor,sessionId));
           if(started.session.status!=='open' || started.session.expiresAt && Date.parse(started.session.expiresAt)<=Date.now())throw fail(410,'The target session is closed or expired');
         }else started=await runMutation(()=>sessions.start(actor,{systemId:source.system_id,idempotencyKey:`designer:${request.id}`}));
@@ -40,13 +43,16 @@ export function createDesigner({designerPrincipalId, authorization, sessions, st
         const activeWork=sessions.activeWork?await sessions.activeWork(actor,source.id):null;
         const claims=activeWork?.claims || activeWork?.sessions?.flatMap(item=>item.claims || []) || [];
         const taskPrompt=claims.length?`${prompt}\n\nActive advisory work claims (coordinate with these intentions; overlap does not forbid your task):\n${Buffer.from(JSON.stringify(claims.map(claim=>({sessionId:claim.sessionId || claim.session_id,principalId:claim.principalId || claim.principal_id,patterns:claim.patterns,note:claim.note})))).subarray(0,12000).toString('utf8')}`:prompt;
+        // Execution start is recorded once, after the runner accepts this Request.
+        const recordStart=runner=>runMutation(()=>store.appendEventOnce({event_type:'request_started',session_id:session.id,actor_principal_id:actor.principalId,originating_request_id:request.id,note:prompt.slice(0,2000),details_json:{requestId:request.id,...(runner?.state?{runnerState:runner.state}:{})}}));
         stage='runtime-status';
         const state=await live.runner(session.id);
-        if(state.runner?.requestId===request.id)return {requestId:request.id,session:started.session,runner:state.runner};
+        if(state.runner?.requestId===request.id){await recordStart(state.runner);return {requestId:request.id,session:started.session,runner:state.runner};}
         stage='credentials';
         const credential=await live.credentials({sessionId:session.id});
         stage='runtime-start';
         const run=await live.runner(session.id,'run','POST',{...credential,prompt:taskPrompt,note:prompt.slice(0,2000),requestId:request.id});
+        await recordStart(run.runner || run);
         return {requestId:request.id,session:started.session,runner:run.runner || run};
       } catch(error) { throw requestDiagnostic(error,stage,'designer-start'); }
     },
@@ -63,9 +69,18 @@ export function createDesigner({designerPrincipalId, authorization, sessions, st
       if(binding.sessionId){const view=await sessions.status({...caller,principalId:caller.id || caller.principalId},sessionId);if(view.session.sourceId!==source.id || view.canInvite!==true)throw fail(403,'Only the owner or a publisher can complete this Request in this session');}
       const actor=await actorFor(session.source_id,requestId,binding.agentPrincipalId);
       changeSet={...changeSet,note:binding.note || changeSet?.note};
-      let result=await sessions.submit(actor,sessionId,changeSet);
-      for(let retry=0;retry<3 && result.stale && !result.conflicts?.length && result.rebasedChanges;retry++)result=await sessions.submit(actor,sessionId,{...result.rebasedChanges,note:changeSet.note});
-      if(!result.submission)return {state:'conflicted',conflicts:result.conflicts || [],mainRevision:result.mainRevision};
+      // Runs inside the coordinator queue: append directly, never through runMutation.
+      const failed=(error,details={})=>store.appendEventOnce({event_type:'request_failed',session_id:sessionId,actor_principal_id:actor.principalId,originating_request_id:requestId,note:changeSet.note || '',details_json:{requestId,state:'conflicted',error,...details}});
+      let result;
+      try {
+        result=await sessions.submit(actor,sessionId,changeSet);
+        for(let retry=0;retry<3 && result.stale && !result.conflicts?.length && result.rebasedChanges;retry++)result=await sessions.submit(actor,sessionId,{...result.rebasedChanges,note:changeSet.note});
+      } catch(error) {
+        // The runner treats every other 409 as a final conflict; busy is retried.
+        if(error?.statusCode===409 && error.message!==busy)try{failed(error.message);}catch{}
+        throw error;
+      }
+      if(!result.submission){failed(conflicted,{conflicts:(result.conflicts || []).length});return {state:'conflicted',conflicts:result.conflicts || [],mainRevision:result.mainRevision};}
       return {submissionId:result.submission.id};
     },
     async pushed(event) {

@@ -14,6 +14,6 @@ export function createHostRequests({sourceId,storage,catalog,store,sessions,auth
   let requests;
   const designer=createDesigner({designerPrincipalId,authorization,sessions,store,live,getRequestBinding:id=>requests.binding(id),reconcilePush,ensurePreview,runMutation});
   requests=createDesignerRequests({sourceId,store,requestStore,authorization,sessions,designer,schedule,runMutation});
-  const callback=createLiveCallbacks({sourceId,store,sessions,live,designer,clock});
+  const callback=createLiveCallbacks({sourceId,store,sessions,live,designer,requestBinding:id=>requests.binding(id),clock});
   return {...requests,live,designer,callback};
 }

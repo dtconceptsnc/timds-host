@@ -146,7 +146,7 @@ other long network work. The proposed tables are:
 | `publications` | UUID, unique submission, queue sequence, stored actor/note, stage/status, attempt fence, immutable source/build/stamp receipts, result and pointer event. |
 | `requests` | Stable Request UUID, requester/source/prompt, logical execution UUID, session/submission, runner state, callback deduplication and bounded error. |
 | `versions` | Immutable first label-to-version/digest/commit mapping. Later same-label attempts cannot replace pinned bytes. |
-| `events` | Immutable event UUID and per-source sequence, resource, actor identity/name snapshot, intent note, details and occurrence time. |
+| `events` | Immutable event UUID and per-source `seq` (virtual column over `row_json.seq`, unique index, counter `event_seq` in `coordinator_meta`), resource, actor identity/name snapshot, intent note, details and occurrence time. |
 | `outbox` | Unique event/target, payload hash, retry count/time and delivery receipt. Includes D1 audit, locators and public projections. |
 | `authority_mutations` | Operation UUID, expected/new D1 version, pending/confirmed state and primary-confirmed receipt. |
 | `operations`, `cleanup` | Idempotent provider-operation reservations, capability IDs, alarm deadlines and retryable cleanup obligations. No plaintext token retention. |
@@ -159,6 +159,35 @@ cannot overwrite a later close, migration epoch or revocation fence. Consume
 SQL results before awaiting external work. Use `ctx.storage.transactionSync`
 for explicit atomic groups; it accepts only synchronous operations.
 ([SQLite storage API](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/))
+
+### Event feed
+
+`events` is the only activity log and the only feed source; there is no stream
+product. `audit()` assigns `seq = event_seq + 1` and stores the counter in the
+same SQLite transaction as the row and its `event` outbox projection, so `seq`
+order is commit order and survives restarts. Construction numbers legacy or
+raw-imported rows without `seq` by `created_at`, then `id`. Every accepted
+command appends one row:
+
+| Event type | Written by |
+| --- | --- |
+| `session_started` / `draft_created` | session reservation (`insert`, or recovered D1 receipt) |
+| `member_joined` | `addMember` (owner at start, invitation/join, designer join) |
+| `claimed` | explicit advisory `claim`; automatic change claims are not audited |
+| `updated`, `submitted`, `closed` | session checkpoints (unchanged) |
+| `request_received` | Request store reservation |
+| `request_started` | designer start, once the runner accepts the Request |
+| `request_submitted` | the designer agent's submission checkpoint, immediately before `submitted` |
+| `request_failed` | job failure or dead letter, completion conflict, or a runner `failed` state |
+| `publication_queued` | `reservePublication` (new or re-queued) |
+| `publication_stage` | `recordPublicationStage`, called by the Workflow under its lease before each stage; once per stage per queue cycle |
+| `publication_failed` | `checkpointPublication` transition to `failed` |
+| `published` | `checkpointPublication` when the pointer commits (during `flip`) |
+| `live_state` | `live-state` callback when the state differs from the session's previous `live_state` row |
+
+`GET /api/timds/design-systems/{source}/events?after=&limit=` uses the
+`activeWork` read authorization and reads committed rows outside the writer
+queue, ascending by `seq` (`limit` defaults to 100 and is capped at 500).
 
 The store also supplies source/version reads, session/member/claim lookups,
 submission/publication lists, `findFork`, `sessionForRequest`, `requestReceipt`,

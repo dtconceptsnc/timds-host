@@ -3,7 +3,7 @@
   "info": {
     "title": "TimDS Host API",
     "version": "1.0.0",
-    "description": "Portable hosted editing and multiplayer contract. The toolkit selects a host URL and speaks v1; it does not depend on Supabase, the portal, git or a specific runtime. The portal implements this contract today; a standalone host can implement the same routes. Optional X-TimDS-API-Version and JSON apiVersion default to 1. Success JSON carries apiVersion:1. Unknown response fields must be ignored. Credentials come from the existing identity/device flow; this document covers host work operations, not identity provisioning or operator catalogue administration. Internal Worker RPC, callbacks and consumer MCP JSON-RPC are separate service boundaries. Sessions, submissions, claims, members and events are stored behind one collaboration store. Publication is preflight, merge, build, prepare, release, close with serializable step receipts. New asynchronous behavior is triggered by pushes or session alarms."
+    "description": "Portable hosted editing and multiplayer contract. The toolkit selects a host URL and speaks v1; it does not depend on Supabase, the portal, git or a specific runtime. The portal implements this contract today; a standalone host can implement the same routes. Optional X-TimDS-API-Version and JSON apiVersion default to 1. Success JSON carries apiVersion:1. Unknown response fields must be ignored. Credentials come from the existing identity/device flow; this document covers host work operations, not identity provisioning or operator catalogue administration. Internal Worker RPC, callbacks and consumer MCP JSON-RPC are separate service boundaries. Sessions, submissions, claims, members and events are stored behind one collaboration store. Publication is preflight, merge, build, prepare, release, close with serializable step receipts. New asynchronous behavior is triggered by pushes or session alarms. Every accepted coordinator command appends one audit event with a per-source monotonic seq; GET .../events?after=<seq> replays them in commit order exactly once."
   },
   "servers": [
     {
@@ -751,6 +751,85 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ActiveWork"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}/events": {
+      "get": {
+        "operationId": "getSourceEvents",
+        "summary": "Replay the source's append-only event feed after a sequence cursor",
+        "description": "Ascending by seq, the per-source monotonic sequence committed with each event row. Reads committed rows without waiting on the source's writer queue; the caller needs the same read authorization as active-work. Resume with after set to the last seq received; latestSeq is the newest committed seq and hasMore reports a further page. Each event is delivered once per cursor walk, with no gaps across coordinator restarts. publication_stage details.stage is one of preflight, merge, build, prepare, release, flip, close (the Workflow stage names); the published event commits during flip, before the close stage row.",
+        "tags": [
+          "Collaboration"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Return events with seq greater than this cursor. Defaults to 0 (the beginning). A non-negative integer; anything else fails with 400.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum events per page. Defaults to 100; values above 500 are capped at 500. Zero, negative or non-integer values fail with 400.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 100
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Events are ordered by ascending seq.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventFeed"
                 }
               }
             }
@@ -3667,11 +3746,16 @@
       },
       "Event": {
         "type": "object",
-        "description": "Append-only audit. Additional fields are forward compatible.",
+        "description": "Append-only audit. Additional fields are forward compatible. Every accepted coordinator command writes one row: session_started, draft_created, member_joined, claimed, updated, submitted, closed, request_received, request_started, request_submitted, request_failed, publication_queued, publication_stage (details_json.stage), publication_failed, published, live_state (details_json.state), plus authority_changed, source_deletion_fenced, source_deleted and deleted_source_imported. Unknown event types must be ignored. Request events carry originating_request_id and details_json.requestId; submitted Requests also carry details_json.submissionId; failures carry a safe details_json.error.",
         "properties": {
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Per-source monotonic sequence assigned in the same transaction as the row; feed cursor."
           },
           "event_type": {
             "type": "string"
@@ -3780,6 +3864,54 @@
           "drafts",
           "events",
           "publicationEvents"
+        ]
+      },
+      "EventFeed": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Event"
+                },
+                {
+                  "required": [
+                    "id",
+                    "event_type",
+                    "seq",
+                    "created_at"
+                  ]
+                }
+              ]
+            }
+          },
+          "latestSeq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Newest committed seq for the source; 0 when it has no events."
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "True when more events follow the last returned seq."
+          }
+        },
+        "required": [
+          "apiVersion",
+          "sourceId",
+          "events",
+          "latestSeq",
+          "hasMore"
         ]
       },
       "DraftList": {

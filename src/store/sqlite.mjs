@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { decode, fail, json, principalId, storageError } from './errors.mjs';
 import { AccessInvitations,applyInvitationClaim,invitationOperation } from '../invitations/catalog.mjs';
+import { PUBLICATION_STAGES } from '../publication/steps.mjs';
 
 const schema = `
 CREATE TABLE IF NOT EXISTS coordinator_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -45,7 +46,8 @@ CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY,row_json TEXT NOT NULL C
 CREATE TABLE IF NOT EXISTS lifecycle_operations(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS session_repositories(session_id TEXT PRIMARY KEY REFERENCES sessions(id),namespace TEXT NOT NULL,repository TEXT NOT NULL,repository_id TEXT NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS preview_builds(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
-CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
+CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)),
+ seq INTEGER GENERATED ALWAYS AS(json_extract(row_json,'$.seq')) VIRTUAL);
 CREATE TABLE IF NOT EXISTS publication_events(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS outbox(sequence INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 `;
@@ -63,6 +65,10 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
   sql.exec(schema);
   const rows = (query, ...values) => sql.exec(query, ...values).toArray();
   const scalar = (query, ...values) => rows(query, ...values)[0] || null;
+  // Coordinators created before the event feed gain the virtual sequence column
+  // once; row_json stays the single authority for every audit field, seq included.
+  if (!/\bseq\b/.test(scalar("SELECT sql FROM sqlite_master WHERE type='table' AND name='events'")?.sql || '')) sql.exec("ALTER TABLE events ADD COLUMN seq INTEGER GENERATED ALWAYS AS(json_extract(row_json,'$.seq')) VIRTUAL");
+  sql.exec('CREATE UNIQUE INDEX IF NOT EXISTS events_seq ON events(seq)');
   const get = (table,id) => decode(scalar(`SELECT row_json FROM ${table} WHERE id=?`, id)?.row_json);
   const list = (table,condition = '1',values = [],order = "json_extract(row_json,'$.created_at') DESC,id DESC",limit = '') => rows(`SELECT row_json FROM ${table} WHERE ${condition} ORDER BY ${order} ${limit}`, ...values).map(row => decode(row.row_json));
   const put = (table,row,id = row.id) => { sql.exec(`INSERT INTO ${table}(id,row_json) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET row_json=excluded.row_json`, id,json(row)); return row; };
@@ -76,14 +82,36 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
   const session = id => { const row = get('sessions',id); if (!row) throw fail(404, 'Session not found'); return row; };
   const sessionPublications = id => list('publications').filter(row => get('submissions',row.submission_id)?.session_id === id);
   const principalDisplay = async id => { const row = await catalog.principal(id); return row && { id: row.id, name: row.name, type: row.type }; };
-  const names = async items => Promise.all(items.map(async row => { const principal = row.actor_principal_id && await principalDisplay(row.actor_principal_id); return { ...row, principal_name: principal?.name || row.actor_principal_id, actor_name: principal?.name || row.actor_principal_id }; }));
+  const names = async items => {
+    const principals = new Map([...new Set(items.map(row => row.actor_principal_id).filter(Boolean))].map(id => [id,principalDisplay(id)]));
+    return Promise.all(items.map(async row => { const principal = row.actor_principal_id && await principals.get(row.actor_principal_id); return { ...row, principal_name: principal?.name || row.actor_principal_id, actor_name: principal?.name || row.actor_principal_id }; }));
+  };
+  // Per-source event sequence. The counter lives in coordinator_meta and every
+  // assignment commits with its row, so feed order is commit order across restarts.
+  const eventSeq = () => Math.max(Number(meta('event_seq')) || 0, scalar('SELECT COALESCE(MAX(seq),0) AS n FROM events').n);
+  // Rows written before sequencing (or by raw history import) are numbered in
+  // occurrence order before any newer row. Call inside a storage transaction.
+  const sequenceEvents = () => {
+    if (!scalar('SELECT 1 AS n FROM events WHERE seq IS NULL LIMIT 1')) return;
+    let next = eventSeq();
+    for (const row of rows("SELECT id FROM events WHERE seq IS NULL ORDER BY json_extract(row_json,'$.created_at'),id")) sql.exec("UPDATE events SET row_json=json_set(row_json,'$.seq',CAST(? AS INTEGER)) WHERE id=?",++next,row.id);
+    setMeta('event_seq',next);
+  };
   const audit = input => {
+    sequenceEvents();
     const row = { id: ids(), source_id: sourceId, session_id: null, submission_id: null, actor_user_id: null, actor_token_id: null,
       actor_principal_id: null, originating_request_id: null, details_json: {}, note: '', merged_keys: [], conflicted_keys: [], created_at: timestamp(), ...input };
     own(row.source_id);
     if (get('events',row.id)) throw fail(409, 'Audit event already exists');
+    row.seq = eventSeq()+1; setMeta('event_seq',row.seq);
     put('events',row); enqueue('event',row); return row;
   };
+  const requestEvent = (type,requestId,sessionId,condition = '',...values) => decode(scalar(`SELECT row_json FROM events WHERE json_extract(row_json,'$.event_type')=? AND json_extract(row_json,'$.originating_request_id')=? AND json_extract(row_json,'$.session_id') IS ? ${condition} LIMIT 1`,type,requestId,sessionId ?? null,...values)?.row_json);
+  const sessionEvent = row => ({ event_type: row.kind === 'draft' ? 'draft_created' : 'session_started', session_id: row.id, actor_user_id: row.owner_user_id || null, actor_token_id: row.owner_token_id || null,
+    actor_principal_id: row.owner_principal_id || null, originating_request_id: row.originating_request_id || null,
+    details_json: { kind: row.kind || 'session', name: row.name || null, draftSessionId: row.draft_session_id || null, originRevision: row.origin_revision || null, expiresAt: row.expires_at || null } });
+  const publicationEvent = (row,submission) => ({ session_id: submission?.session_id || null, submission_id: row.submission_id, actor_user_id: row.actor_user_id || null,
+    actor_principal_id: row.actor_principal_id || null, originating_request_id: row.originating_request_id || null, note: submission?.note || '' });
   const saveSession = row => { put('sessions',row); enqueue('session',row); return row; };
   const patchSession = (row,patch) => {
     if (Object.keys(patch).some(key => !sessionPatchFields.includes(key))) throw fail(400, 'Unsupported session checkpoint field');
@@ -132,7 +160,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     if (!saved || saved.content_digest !== version.content_digest || saved.source_commit !== version.source_commit || json(saved.stamp) !== json(version.stamp)) throw fail(409, 'A published version label cannot identify different bytes or provenance');
   };
 
-  atomic(() => { const saved = meta('source_id'); if (saved && saved !== sourceId) throw fail(409, 'Coordinator source identity mismatch'); setMeta('source_id',sourceId); });
+  atomic(() => { const saved = meta('source_id'); if (saved && saved !== sourceId) throw fail(409, 'Coordinator source identity mismatch'); setMeta('source_id',sourceId); sequenceEvents(); });
   const store = {
     async source(reference) { const source = await catalog.source(reference); if (!source || source.id !== sourceId || source.archived_at) throw fail(404, 'Active Design System not found uniquely'); return { ...source,...meta('pointer') }; },
     async getSource(id) { if (id !== sourceId) return null; const source = await catalog.source(id),deletion=meta('deletion_fence'); return source && { ...source,...meta('pointer'),...(deletion?{lifecycle_status:deletion.completed?'deleted':'deleting'}:{}) }; },
@@ -156,7 +184,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       if (receipt.source_id !== sourceId || receipt.tombstone) return receipt.session;
       // A prior isolate may have stopped after D1 reserved the key but before
       // its local insert. Materialize exactly that receipt, never a fresh UUID.
-      return atomic(() => { if (get('sessions',receipt.session_id)) return get('sessions',receipt.session_id); put('sessions',receipt.session); locate('session',receipt.session_id); return receipt.session; });
+      return atomic(() => { if (get('sessions',receipt.session_id)) return get('sessions',receipt.session_id); put('sessions',receipt.session); locate('session',receipt.session_id); audit(sessionEvent(receipt.session)); return receipt.session; });
     },
     async insert(input) {
       own(input.source_id);
@@ -164,7 +192,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       if (!await store.eligible(source)) throw fail(409, 'Hosted Design System is unavailable or being deleted');
       let row = { owner_user_id:null,owner_token_id:null,originating_request_id:null,idempotency_key:null,fork_repository:'',token_id:'',base_revision:'',last_update_hash:'',status:'starting',kind:'session',name:null,draft_session_id:null,origin_revision:null,lease_token:null,lease_expires_at:null,live_url:'',sandbox_id:'',live_state:'stopped',created_at:timestamp(),updated_at:timestamp(),...input };
       if (row.idempotency_key) row = (await catalog.reserveStart(row)).session;
-      return atomic(() => { const existing = get('sessions',row.id); if (existing) return existing; put('sessions',row); locate('session',row.id); enqueue('session',row); return row; });
+      return atomic(() => { const existing = get('sessions',row.id); if (existing) return existing; put('sessions',row); locate('session',row.id); enqueue('session',row); audit(sessionEvent(row)); return row; });
     },
     sessions(id) { own(id); return list('sessions',"status IN ('starting','open','closing')",[],"json_extract(row_json,'$.created_at'),id"); },
     draft(id,name) { own(id); return list('sessions',"kind='draft' AND name=? AND status IN ('starting','open')",[name])[0] || null; },
@@ -173,28 +201,49 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       if (expectedStatus !== undefined && row.status !== expectedStatus) throw fail(409, 'Live session state changed');
       return patchSession(row,patch);
     }),
+    // Runtime-reported state. Identical consecutive states for one session are
+    // not repeated in the feed; a failed run also closes its Request once.
+    setLiveState: (id,state,{expectedStatus,request = null} = {}) => atomic(() => {
+      const row = session(id);
+      if (expectedStatus !== undefined && row.status !== expectedStatus) throw fail(409, 'Live session state changed');
+      const saved = patchSession(row,{live_state:state});
+      // A completed deletion keeps its final history; late runner reports are not appended.
+      if (meta('deletion_fence')?.completed) return saved;
+      const prior = scalar("SELECT json_extract(row_json,'$.details_json.state') AS state FROM events WHERE json_extract(row_json,'$.event_type')='live_state' AND json_extract(row_json,'$.session_id')=? ORDER BY seq DESC LIMIT 1",id)?.state;
+      const context = {session_id:id,actor_principal_id:request?.agentPrincipalId || null,originating_request_id:request?.requestId || row.originating_request_id || null};
+      if (prior !== state) audit({...context,event_type:'live_state',details_json:{state,...(request ? {requestId:request.requestId} : {})}});
+      if (request && state === 'failed' && !requestEvent('request_failed',request.requestId,id,"AND json_extract(row_json,'$.details_json.state')='failed'"))
+        audit({...context,event_type:'request_failed',note:request.note || '',details_json:{requestId:request.requestId,state:'failed',error:'The Request failed or exceeded its time limit'}});
+      return saved;
+    }),
     findFork: name => list('sessions',"json_extract(row_json,'$.fork_repository')=?",[name])[0] || null,
     sessionForRequest(id,requestId) { own(id); const result = list('sessions',"json_extract(row_json,'$.originating_request_id')=?",[requestId]); if (result.length > 1) throw fail(409, 'Request has more than one session'); return result[0] || null; },
     expired: now => list('sessions',"status IN ('starting','open','closing') AND expires_at IS NOT NULL AND expires_at<=?",[now],'expires_at,id','LIMIT 100'),
     async members(id) { return Promise.all(list('members','session_id=?',[id]).map(async row => ({...row,principal:await principalDisplay(row.principal_id)}))); },
     member: (id,principal) => list('members','session_id=? AND principal_id=?',[id,principal])[0] || null,
-    async addMember(input) {
+    async addMember(input,event = {}) {
       session(input.session_id);
       if ((await catalog.principal(input.principal_id))?.status !== 'active') throw fail(403, 'An active TimDS identity is required');
       const row = atomic(() => {
         if (store.member(input.session_id,input.principal_id)) return null;
         const member = {created_at:timestamp(),...input}; put('members',member,`${member.session_id}:${member.principal_id}`);
-        const parent = session(input.session_id); enqueue('member',{...member,status:parent.status,expires_at:parent.expires_at}); return member;
+        const parent = session(input.session_id); enqueue('member',{...member,status:parent.status,expires_at:parent.expires_at});
+        audit({actor_principal_id:member.invited_by || null,originating_request_id:parent.originating_request_id || null,...event,event_type:'member_joined',session_id:member.session_id,
+          details_json:{principalId:member.principal_id,role:member.role,invitedBy:member.invited_by || null}});
+        return member;
       });
       // An invitation is not acknowledged until discoverability is projected.
       await store.flushOutbox(); return row;
     },
     async claims(id) { return Promise.all(list('claims','session_id=? AND expires_at>?',[id,timestamp()]).map(async row => ({...row,principal:await principalDisplay(row.principal_id)}))); },
-    putClaim: input => atomic(() => {
+    putClaim: (input,event = null) => atomic(() => {
       session(input.session_id); const prior = list('claims','session_id=? AND principal_id=? AND kind=?',[input.session_id,input.principal_id,input.kind || 'advisory'])[0];
       const row = { id:prior?.id || ids(),created_at:prior?.created_at || timestamp(),kind:'advisory',note:'',...input };
       if (row.kind === 'advisory' && row.patterns.length > 100) throw fail(400, 'Advisory claims accept up to 100 patterns');
-      return put('claims',row);
+      put('claims',row);
+      // Only an explicit claim command is audited; automatic change claims are not.
+      if (event) audit({...event,event_type:'claimed',session_id:row.session_id,note:row.note,details_json:{claimId:row.id,kind:row.kind,patterns:row.patterns,expiresAt:row.expires_at}});
+      return row;
     }),
     removeChangeClaim: (id,principal) => atomic(() => { sql.exec("DELETE FROM claims WHERE session_id=? AND principal_id=? AND kind='changes'",id,principal); }),
     hasSessionAccess: (principal,id) => { own(id); return Boolean(scalar("SELECT 1 FROM members m JOIN sessions s ON s.id=m.session_id WHERE m.principal_id=? AND s.status='open' AND (s.expires_at IS NULL OR s.expires_at>?) LIMIT 1",principal,timestamp())); },
@@ -213,7 +262,8 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
         if (!existing || existing.session_id !== id || existing.status !== 'preparing') throw fail(409, 'Submission changed; reload before retrying');
         put('submissions',{...existing,head_commit:submission.head_commit,preview_url:submission.preview_url || '',diff_json:submission.diff_json || [],status:'submitted',updated_at:timestamp()});
       }
-      if (event) audit({...event,source_id:sourceId,session_id:id});
+      // A Request-bound submission commits request_submitted and submitted together.
+      if (event) for (const item of [event].flat()) audit({...item,source_id:sourceId,session_id:id});
       return row;
     }),
     getSubmission: id => get('submissions',id),
@@ -228,7 +278,18 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     markIntegrated: id => atomic(() => { const row = get('submissions',id); if (row) put('submissions',{...row,status:'closed',updated_at:timestamp()}); }),
     closeSubmissions: id => atomic(() => { for (const row of list('submissions',"session_id=? AND status IN ('preparing','submitted')",[id])) put('submissions',{...row,status:'closed',updated_at:timestamp()}); }),
     appendEvent: event => atomic(() => audit(event)),
+    // Runner transitions can be re-reported; one row per Request, session and type.
+    appendEventOnce: event => atomic(() => requestEvent(event.event_type,event.originating_request_id,event.session_id) || audit(event)),
     events(id) { own(id); return names(list('events','1',[],undefined,'LIMIT 100')); },
+    // Feed reads committed rows only. Numbering raw imported rows is a local,
+    // synchronous transaction; it never waits behind the mutation queue.
+    async eventsAfter(id,after,limit) {
+      own(id);
+      if (!Number.isSafeInteger(after) || after < 0 || !Number.isInteger(limit) || limit < 1 || limit > 500) throw fail(400, 'Invalid event feed cursor');
+      if (scalar('SELECT 1 AS n FROM events WHERE seq IS NULL LIMIT 1')) atomic(sequenceEvents);
+      const items = list('events','seq>?',[after],'seq',`LIMIT ${limit+1}`);
+      return {events:await names(items.slice(0,limit)),latestSeq:eventSeq(),hasMore:items.length>limit};
+    },
     publications(id) { own(id); return names(list('publication_events','1',[],undefined,'LIMIT 100')); },
     eventForHead: (id,revision) => list('events',"json_extract(row_json,'$.session_id')=? AND json_extract(row_json,'$.details_json.outOfBandHead')=?",[id,revision],undefined,'LIMIT 1').map(row => ({id:row.id})),
     requestReceipt: (id,requestId) => { const row = list('events',"json_extract(row_json,'$.session_id')=? AND json_extract(row_json,'$.originating_request_id')=? AND json_extract(row_json,'$.event_type')='submitted'",[id,requestId],undefined,'LIMIT 1')[0]; return row ? {submission_id:row.submission_id} : null; },
@@ -240,7 +301,11 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       own(id); const actorId = principalId(actor); let publication = store.publicationBySubmission(submissionId);
       if (publication && publication.actor_principal_id === actorId && (await catalog.principal(actorId))?.status === 'active' &&
           (['closing','published'].includes(publication.status) || publication.checkpoints_json.pointerEventId) && publication.status !== 'superseded') {
-        return atomic(() => put('publications',{...publication,status:publication.status === 'failed' ? 'queued' : publication.status,error_message:null,updated_at:timestamp()}));
+        return atomic(() => {
+          const saved = put('publications',{...publication,status:publication.status === 'failed' ? 'queued' : publication.status,error_message:null,updated_at:timestamp()});
+          if (publication.status === 'failed') audit({...publicationEvent(saved,get('submissions',saved.submission_id)),event_type:'publication_queued',details_json:{publicationId:saved.id,queuePosition:saved.queue_position,requeued:true}});
+          return saved;
+        });
       }
       await publishAuthority({actor_principal_id:actorId});
       return atomic(() => {
@@ -252,6 +317,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
             if (!parent || parent.status !== 'open' || parent.lease_token && Date.parse(parent.lease_expires_at)>clock()) throw fail(409, 'Session is busy or closed');
             put('submissions',{...submission,status:'publishing',updated_at:timestamp()});
             publication = put('publications',{...publication,status:'queued',error_message:null,updated_at:timestamp()});
+            audit({...publicationEvent(publication,submission),event_type:'publication_queued',details_json:{publicationId:publication.id,queuePosition:publication.queue_position,requeued:true}});
           }
           return publication;
         }
@@ -264,7 +330,9 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
         if ((actor.requestId || null) !== parent.originating_request_id) throw fail(403, 'Publication Request must match its server-owned session');
         const position = scalar('SELECT COALESCE(MAX(queue_position),0)+1 AS n FROM publications').n;
         const row = {id:ids(),source_id:sourceId,submission_id:submissionId,execution_job_id:null,actor_user_id:actor.userId || null,actor_principal_id:actorId,originating_request_id:parent.originating_request_id,actor_email:String(actor.email || '').slice(0,320),status:'queued',stage:'queued',checkpoints_json:{},result_json:{},error_message:null,queue_position:position,conflict_rate:null,auto_rebase_success:null,submit_to_publish_ms:null,created_at:timestamp(),updated_at:timestamp(),completed_at:null};
-        put('publications',row); put('submissions',{...submission,status:'publishing',updated_at:timestamp()}); locate('publication',row.id); return row;
+        put('publications',row); put('submissions',{...submission,status:'publishing',updated_at:timestamp()}); locate('publication',row.id);
+        audit({...publicationEvent(row,submission),event_type:'publication_queued',details_json:{publicationId:row.id,queuePosition:position}});
+        return row;
       });
     },
     attachPublicationJob: (id,jobId) => atomic(() => {
@@ -323,10 +391,21 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
           put('submissions',{...submission,status:'published',published_by:row.actor_principal_id,published_at:timestamp(),updated_at:timestamp()});
           audit({session_id:submission.session_id,submission_id:submission.id,event_type:'published',actor_user_id:row.actor_user_id,actor_principal_id:row.actor_principal_id,originating_request_id:row.originating_request_id,details_json:{publicationId:id,sourceCommit:checkpoints.sourceCommit,result:next.result_json},note:submission.note,merged_keys:checkpoints.mergedKeys || [],conflicted_keys:checkpoints.conflictedKeys || []});
         } else if (next.status === 'failed' && !Object.hasOwn(checkpoints,'sourceCommit')) put('submissions',{...submission,status:'submitted',updated_at:timestamp()});
+        if (next.status === 'failed' && row.status !== 'failed') audit({...publicationEvent(next,submission),event_type:'publication_failed',details_json:{publicationId:id,stage:next.stage,error:next.error_message || 'Publication failed'}});
         if (['published','failed'].includes(next.status)) { const job = get('jobs',lease.jobId); put('jobs',{...job,status:next.status === 'published' ? 'completed' : 'queued',lease_token:null,lease_expires_at:null,updated_at:timestamp()}); }
         return next;
       });
     },
+    // One feed row per workflow stage and queue cycle, written by the lease
+    // holder through the coordinator before the stage service runs.
+    recordPublicationStage: ({publicationId,jobId,leaseToken,stage}) => atomic(() => {
+      if (!PUBLICATION_STAGES.includes(stage)) throw fail(400, 'Unknown publication stage');
+      const publication = publicationLease(publicationId,{jobId,leaseToken});
+      const cycle = scalar("SELECT COALESCE(MAX(seq),0) AS n FROM events WHERE json_extract(row_json,'$.event_type')='publication_queued' AND json_extract(row_json,'$.details_json.publicationId')=?",publicationId).n;
+      const prior = scalar("SELECT row_json FROM events WHERE seq>? AND json_extract(row_json,'$.event_type')='publication_stage' AND json_extract(row_json,'$.details_json.publicationId')=? AND json_extract(row_json,'$.details_json.stage')=? LIMIT 1",cycle,publicationId,stage);
+      if (prior) return decode(prior.row_json);
+      return audit({...publicationEvent(publication,get('submissions',publication.submission_id)),event_type:'publication_stage',details_json:{publicationId,stage}});
+    }),
     async releasePublicationVersion({publicationId,versionId,jobId,leaseToken}) {
       const lease = {jobId,leaseToken}; let publication = publicationLease(publicationId,lease);
       if (publication.checkpoints_json.pointerEventId) {
@@ -479,6 +558,9 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       return catalog.acknowledgePrincipalFence({operationId,sourceId,principalId:id,version});
     },
     outboxSize: () => scalar('SELECT COUNT(*) AS n FROM outbox').n,
+    // Same-transaction audit for injected stores (Request jobs). Call only
+    // inside the caller's storage transaction, after its own row commits.
+    recordEvent: input => audit(input),
     pendingPublications: () => list('publications','1',[],'queue_position').filter(row => ['queued','running','closing'].includes(row.status) || row.status === 'failed' && blockingPublication(row)),
     enqueueResource: (kind,id,tombstone = false) => locate(kind,id,tombstone),
     saveLifecycle: row => atomic(() => put('lifecycle_operations',row)),
