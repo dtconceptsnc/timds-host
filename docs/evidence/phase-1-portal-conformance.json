@@ -1,0 +1,106 @@
+{
+  "suiteVersion": 1,
+  "toolkitVersion": "0.1.464",
+  "host": "https://timds.com",
+  "sourceId": "c3e83a28-052d-468a-8b76-958e1dbf75b4",
+  "runId": "a06ba833-0a4c-4e6b-a694-7fe1acc08bcf",
+  "startedAt": "2026-10-13T09:46:26.823Z",
+  "passed": true,
+  "operations": {
+    "getActiveWork:200": 1,
+    "startSession:200": 8,
+    "snapshotSession:200": 7,
+    "closeSession:200": 11,
+    "createDraft:200": 1,
+    "updateSession:200": 7,
+    "listDrafts:200": 1,
+    "snapshotDraft:200": 2,
+    "joinSession:200": 2,
+    "claimSessionWork:200": 2,
+    "submitSession:200": 6,
+    "updateSession:409": 1,
+    "getPreviewTokens:200": 1,
+    "headPreviewTokens:200": 1,
+    "getSessionStatus:200": 2,
+    "getSessionHistory:200": 4,
+    "closeDraft:200": 1,
+    "getPreviewTokens:404": 1,
+    "headPreviewTokens:404": 1,
+    "publishSubmission:200": 1,
+    "publishSubmission:202": 2,
+    "getPublication:200": 114,
+    "listSubmissions:200": 2,
+    "rollbackVersion:200": 3,
+    "startDesignerRequest:202": 2,
+    "getDesignerRequest:200": 63
+  },
+  "publications": [
+    {
+      "id": "a6e40f75-392a-42ca-b4e1-3a8585e28e7b",
+      "version": "2026.10.13-4",
+      "queuePosition": 3
+    },
+    {
+      "id": "c909d501-024e-4cd4-8e9a-28b5db4082d9",
+      "version": "2026.10.13-5",
+      "queuePosition": 4
+    }
+  ],
+  "publicationRetries": [],
+  "checks": [
+    "Verify explicit disposable source and publisher access",
+    "Draft lifecycle, invitations, member identity, advisory overlaps and shared CAS",
+    "Different-key merge, same-key conflict and revision-bound resolution",
+    "Public CSS, status and principal/intent history",
+    "FIFO publication of two submissions, immutable versions and rollback",
+    "Designer Request completes with a frozen submission"
+  ],
+  "cleanup": [
+    {
+      "sessionId": "7ed43f25-8d93-40ae-8d3e-3429cafc970d",
+      "closed": true
+    },
+    {
+      "sessionId": "e4c59f10-c404-4ed5-938a-86c5c9205299",
+      "closed": true
+    },
+    {
+      "sessionId": "cbbaf871-28f4-4806-83ed-3880c7c6e77f",
+      "closed": true
+    },
+    {
+      "sessionId": "8343e22e-7898-43d5-8f13-ab091b194843",
+      "closed": true
+    },
+    {
+      "sessionId": "00c82cf8-28f8-49b6-ba5f-70bcaae375bb",
+      "closed": true
+    },
+    {
+      "sessionId": "53f08387-f886-4669-92be-3d170e438121",
+      "closed": true
+    },
+    {
+      "sessionId": "07514730-1a6f-425b-8fc5-111785c1654f",
+      "closed": true
+    },
+    {
+      "sessionId": "99b8ac98-459c-4174-b6d8-e83d60ec07d9",
+      "closed": true
+    }
+  ],
+  "publicationCleanup": [
+    {
+      "publicationId": "a6e40f75-392a-42ca-b4e1-3a8585e28e7b",
+      "drained": true,
+      "status": "published"
+    },
+    {
+      "publicationId": "c909d501-024e-4cd4-8e9a-28b5db4082d9",
+      "drained": true,
+      "status": "published"
+    }
+  ],
+  "publicationAttempts": [],
+  "finishedAt": "2026-10-13T09:59:14.712Z"
+}

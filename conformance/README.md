@@ -137,9 +137,8 @@ loop still requires an explicitly configured remote disposable Artifacts
 namespace. Do not mock Cloudflare publication or designer completion
 to turn a live conformance failure green.
 
-The initial production portal run is a gate for extracting the host. At the
-time this harness was added, **the harness unit tests passed; production
-conformance had not yet been proven**. Record a successful live run's evidence
-and exact deployed revision before claiming that gate passed. The package
-does not claim that missing deployment credentials, runner configuration, or
-the independent #60 acceptance has been completed.
+The initial production portal run is a gate for extracting the host. That
+[baseline passed on October 13, 2026](../docs/evidence/phase-1-portal-conformance.md),
+with the exact deployed revision and redacted machine receipt recorded there.
+The new host still requires its own local and deployed runs. This receipt does
+not claim completion of the independent #60 acceptance or production migration.

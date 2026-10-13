@@ -1,6 +1,8 @@
 # Phase 1 disposable portal fixture
 
-**Status: fixture provisioned; production conformance has not run.**
+**Historical provisioning receipt.** The subsequent
+[production conformance run passed](phase-1-portal-conformance.md) on October
+13, 2026. The facts below describe readiness at provisioning time.
 
 Recorded on October 12, 2026 at 22:11 EDT
 (`2026-10-13T02:11:44.832Z`). The production portal checkout inspected during

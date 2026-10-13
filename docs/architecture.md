@@ -1,19 +1,19 @@
-# Planned host architecture
+# Host architecture and migration plan
 
-This is an implementation plan for [toperator #69](https://github.com/dtconceptsnc/toperator/issues/69),
-reviewed against portal commit `2b0148c` and toolkit OAuth
-[PR #100](https://github.com/dtconceptsnc/timds-toolkit/pull/100). It is not a
-description of a working host. The current Worker returns an unready health
-response and rejects authoring requests. No domain implementation or migration
-is authorized by this document alone.
+The isolated host now implements the coordinator/store, native repository and
+live containers, offline publication builds, seven-stage Workflow, OAuth/Access,
+public roots/MCP and Studio described here. The deployed resource and HTTP
+receipts are in [deployment evidence](evidence/phase-3-deployment.md). Authenticated
+host authoring and publication acceptance, phone usage and production migration
+remain in progress. The health endpoint deliberately reports integration status.
 
-The `cf@1.0.0-beta.14` toolchain spike passed; its precise scope and cleanup are
-in [Phase 0 evidence](evidence/phase-0.md). The production-portal conformance
-gate remains pending in [Phase 1 evidence](evidence/phase-1-fixture.md). The
-replacement session, store and publication implementation must wait for that
-gate. A fixture, a green foundation build, or an OAuth client test does not
-satisfy it. Subsequent host acceptance uses the same
-[conformance suite](../conformance/README.md), followed by public-byte checks.
+The design was reviewed against portal commit `2b0148c` and toolkit OAuth
+[PR #100](https://github.com/dtconceptsnc/timds-toolkit/pull/100). The
+[production portal baseline passed](evidence/phase-1-portal-conformance.md), and
+the subsequent Request recovery and fixture cleanup are settled in that receipt.
+The original proposed interfaces below remain design context; concrete modules
+under `src/` and `runtime/` are authoritative for implemented names. Migration
+and portal-client sections describe work still required before cutover.
 
 The detailed [store review](evidence/store-port-review.md) records the exact
 adapter methods and constraints; the [runtime extraction plan](evidence/runtime-extraction-plan.md)
@@ -68,8 +68,8 @@ from the DO outbox; do not scan every coordinator as a fallback.
 
 ## Reuse and module boundaries
 
-Paths in this table are from the portal baseline; proposed destination paths
-do not yet exist. Keep the existing snake_case persistence rows behind the
+Paths in this table retain the original portal baseline and proposed extraction
+map. Actual implemented destinations sometimes use different names. Keep the existing snake_case persistence rows behind the
 store adapter initially, and the existing camelCase wire views at the boundary.
 
 | Existing boundary | Planned destination and adaptation |
@@ -561,10 +561,11 @@ Acceptance after the production-portal gate must include:
 - Full byte-manifest comparison and twelve public reads across the four systems
   before each system's migration receipt is accepted.
 
-The blocking gate is the first production-portal conformance acceptance.
-Remaining implementation work after that gate includes the D1/DO authority and
-outbox protocol, independent organization/source provisioning, per-org Artifacts
-namespace configuration, Worker-safe publication helper execution and offline
-dependency snapshots, OAuth human sign-in/KV/Access route configuration, and
-mixed-owner designer callback routing. These are planned engineering tasks,
-not additional permission gates, and none is represented here as completed.
+The production portal baseline passed; actual deployed host acceptance and
+migration checks remain outstanding. The D1/DO authority and outbox protocol,
+independent provisioning, offline publication, identity and Studio are now
+implemented. Remaining cutover work includes verified legacy artifact backfill,
+read-only import/freeze/activate receipts, per-user portal OAuth connection,
+principal mappings and removal of superseded VPS paths after successful transfer.
+Acceptance is being driven through real CLI/browser usage; no further test code
+is being written for this task.
