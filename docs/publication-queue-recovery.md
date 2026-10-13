@@ -16,8 +16,8 @@ across a run (six hours of queue sleep); exhaustion ends that Workflow attempt
 while retaining the original publication and receipts for explicit recovery.
 
 This host uses Workers Paid for its native containers. Even if every readiness
-check races with a claim, the bounded loop stays below its default 10,000-step
-limit. Cloudflare excludes durable sleeps from both the step limit and active
+check races with a claim, the bounded loop uses at most 1,454 counted steps and
+stays below the explicitly configured 2,048-step limit. Cloudflare excludes durable sleeps from both the step limit and active
 instance concurrency. See [Workflow limits](https://developers.cloudflare.com/workflows/reference/limits/)
 and the [Workers API](https://developers.cloudflare.com/workflows/build/workers-api/).
 

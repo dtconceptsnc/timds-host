@@ -30,7 +30,7 @@ export default defineConfig({
       LiveSession:exports.durableObject({storage:'sqlite',container:live}),
       BuildSandbox:exports.durableObject({storage:'sqlite',container:build}),
       DependencySandbox:exports.durableObject({storage:'sqlite',container:dependencies}),
-      PublicationWorkflow:exports.workflow({name:workflow,limits:{steps:32},concurrency:{limit:10},defaultRetention:{successRetention:'7 days',errorRetention:'30 days'}}),
+      PublicationWorkflow:exports.workflow({name:workflow,limits:{steps:2048},concurrency:{limit:10},defaultRetention:{successRetention:'7 days',errorRetention:'30 days'}}),
     },
     env:{
       ...artifactsBindings,
