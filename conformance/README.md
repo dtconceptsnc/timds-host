@@ -138,7 +138,7 @@ namespace. Do not mock Cloudflare publication or designer completion
 to turn a live conformance failure green.
 
 The initial production portal run is a gate for extracting the host. That
-[baseline passed on October 13, 2026](../docs/evidence/phase-1-portal-conformance.md),
+baseline passed on October 13, 2026 (private operational record),
 with the exact deployed revision and redacted machine receipt recorded there.
 The new host still requires its own local and deployed runs. This receipt does
 not claim completion of the independent #60 acceptance or production migration.

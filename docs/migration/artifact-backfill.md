@@ -69,7 +69,7 @@ apart from the public/generated stamp and manifest.
 The baseline must report unchanged source rows around its inventory. It must
 include local metadata, version rows, append-only events, first-label bindings,
 and public response identities in the format of
-[`migration-baseline.json`](../evidence/migration-baseline.json). A dry-run may
+`migration-baseline.json` (private operational record). A dry-run may
 inspect an older baseline and reports `baselineFresh:false`; apply rejects a
 baseline older than one hour. Recapture immediately before review/apply. The
 command additionally rechecks current and historical public stamp identities and
@@ -78,7 +78,7 @@ migration window or fresh database inventory.
 
 ## Concrete legacy inventory command
 
-These paths and selections come from the captured production inventory. Copy
+Replace the example source selections with your private inventory keys. Copy
 the script and a **freshly recaptured** baseline into an operator scratch
 location first. The example writes only the local plan; it performs no R2 PUT.
 
@@ -88,7 +88,7 @@ cd /var/www/portal.dtconcepts.net
   /tmp/backfill-published-artifacts.mjs \
   --baseline /tmp/migration-baseline-fresh.json \
   --artifact-root /var/www/portal.dtconcepts.net/var/design-system-artifacts \
-  --sources pierce,wpl,speed \
+  --sources example-a,example-b,example-c \
   --source-bucket timds-public-assets \
   --target-bucket timds-public-assets \
   --source-env-prefix CLOUDFLARE \
@@ -136,7 +136,7 @@ sidecar is written in host conversion mode.
 
 ## Deletion and publication invariants
 
-Nacho's missing database rows, local directory absence, deletion marker, empty
+The deleted source's missing database rows, local directory absence, deletion marker, empty
 canonical artifact prefix, and existing public 404 response hashes are checked.
 It cannot be selected for copying. Its corresponding destination prefix must
 also remain empty. Checks run during inventory and before and after apply.
@@ -161,7 +161,7 @@ No production copy or cutover is implied by a successful dry-run. Preserve the
 plan/receipt and record actual verification timestamps and failures in evidence.
 
 The first read-only run found existing bundle representation conflicts; see
-[the original evidence](../evidence/artifact-backfill-dry-run.md). The subsequent
+the original evidence (private operational record). The subsequent
 reconciliation preserves both representations using the mapping below. It does
 not reuse approval from the original blocked plan; a fresh baseline and review
 of the new exact plan digest are required before any apply.
@@ -221,7 +221,7 @@ before any domain cutover. Native host `RELEASES` receipts already bind the
 separate source/version namespace; import the original first-event/current
 bindings and exact native `artifactRef` rather than consulting legacy key names.
 
-The [actual reconciliation dry-run](../evidence/artifact-backfill-reconciliation.md)
+The actual reconciliation dry-run (private operational record)
 verified all 11 affected pinned public bundles (plus the two affected current
 bundles), with zero unresolved collisions. It made no writes and still requires
 a fresh baseline and reviewed plan before apply.
