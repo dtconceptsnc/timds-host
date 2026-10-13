@@ -1,7 +1,7 @@
 # Planned host architecture
 
 This is an implementation plan for [toperator #69](https://github.com/dtconceptsnc/toperator/issues/69),
-reviewed against portal commit `89b1b72` and toolkit OAuth
+reviewed against portal commit `2b0148c` and toolkit OAuth
 [PR #100](https://github.com/dtconceptsnc/timds-toolkit/pull/100). It is not a
 description of a working host. The current Worker returns an unready health
 response and rejects authoring requests. No domain implementation or migration
@@ -14,6 +14,13 @@ replacement session, store and publication implementation must wait for that
 gate. A fixture, a green foundation build, or an OAuth client test does not
 satisfy it. Subsequent host acceptance uses the same
 [conformance suite](../conformance/README.md), followed by public-byte checks.
+
+The detailed [store review](evidence/store-port-review.md) records the exact
+adapter methods and constraints; the [runtime extraction plan](evidence/runtime-extraction-plan.md)
+records the latest Request recovery, binary transport and native refresh
+behavior that must survive the port. The OAuth client branch now includes
+upstream toolkit `0.1.470`; conformance and controlled publication remain pinned
+to the issue's `0.1.464` baseline.
 
 ## Ownership and request path
 
@@ -132,7 +139,7 @@ other long network work. The proposed tables are:
 | Table | Key state and constraints |
 | --- | --- |
 | `source_state` | Single source identity; lifecycle; authority epoch; current version/digest/commit; monotonic pointer generation and next queue sequence. |
-| `sessions` | UUID, source, owner, kind/name, base/head revisions, status, expiry, operation lease/generation, fork identity, originating Request. Unique owner/idempotency key; unique live draft name. |
+| `sessions` | UUID, source, owner, kind/name, base/head revisions, status, expiry, operation lease/generation, fork identity, originating Request. Unique owner/idempotency key locally, backed by a global D1 reservation; draft names remain unique while starting/open/closing. |
 | `members` | Unique `(session_id,principal_id)` and role. Membership does not replace active principal/source access. |
 | `claims` | Unique `(session_id,principal_id,kind)`, bounded path/key payload and expiry. Expired claims never block a write. |
 | `submissions` | UUID, session/source, request hash, immutable base/head, diff/note, review branch/preview status, integration/publication state. Unique session/request hash. |
@@ -172,6 +179,10 @@ Queue replay must use the same close path. No periodic timers are required.
 Planned D1 tables include `systems`, `principals`, `publishers`, `publications`,
 `publisher_events`, `submission_events` and `publication_events`, plus
 organizations/system access, `resource_index` and authority-operation receipts.
+An additional global `(principal_id,idempotency_key)` reservation binds session
+start to its source, session UUID and origin fingerprint before the local
+insert. Preserve it after cleanup; per-source SQLite uniqueness alone would
+allow a key to be reused for a different source and change the v1 contract.
 The issue's publisher table alone does not define who may author/read a source.
 Keep identity keys unique by verified issuer/subject, not mutable email.
 Catalog lifecycle and org membership changes that affect a source's write
@@ -511,9 +522,11 @@ incorrect external `script_name` validation. `cf dev` is the local loop;
 does not add Docker to the deployed host's operational architecture.
 
 Add and prove Workflow, OAuth KV and static asset declarations with the actual
-pinned `cf` API. A follow-up toolchain run proved `cf previews deploy` inside
+pinned `cf` API. The [configuration fixture](evidence/cf-config-surface.md) now
+passes type generation, build and deploy dry-run for those declarations; it
+does not establish live Workflow or OAuth acceptance. A follow-up toolchain run proved `cf previews deploy` inside
 real Workers Builds, with successful main and review-branch builds, serving
-URLs and resource cleanup; its detailed receipt is being added to the evidence
+URLs and resource cleanup; its [receipt](evidence/cf-preview-builds.md) is in the evidence
 directory. Those successes do not prove the unimplemented host publication
 path. Keep any missing `cf` equivalent explicit in the README; do not silently
 introduce Wrangler.
