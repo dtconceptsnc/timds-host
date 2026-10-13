@@ -1,5 +1,9 @@
 # Issue 69 stopping point — 2026-10-13
 
+> Historical stopping-point snapshot. Production ownership transfer and public
+> routing subsequently completed; see the [2026-10-13 cutover evidence](production-cutover-2026-10-13.md).
+> The original facts and resume plan below are retained as recorded.
+
 The user requested a resumable stopping point before production cutover. Issue
 [toperator#69](https://github.com/dtconceptsnc/toperator/issues/69) remains open.
 Verify behavior through actual CLI, API and browser use; do not write tests.

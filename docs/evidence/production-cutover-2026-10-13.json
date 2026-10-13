@@ -1,0 +1,320 @@
+{
+  "schemaVersion": 1,
+  "issue": "https://github.com/dtconceptsnc/toperator/issues/69",
+  "evidenceCheckpointAt": "2026-10-13T17:34:47.921Z",
+  "scope": "Production ownership transfer and public routing; retirement deployment and physical cleanup require their separate final receipts.",
+  "hostOrigin": "https://timds-host-69.timds.workers.dev",
+  "publicOrigin": "https://timds-host-69-public.timds.workers.dev",
+  "sourceTransfers": [
+    {
+      "source": "pierce",
+      "sourceId": "f7cfb345-391a-40ba-80f4-fc08359696bb",
+      "operationId": "8db0021c-6ab3-4f40-8b73-d1d475e8f48b",
+      "epoch": 1,
+      "portalPhase": "host",
+      "hostStage": "active",
+      "stageId": "8ea0e4e7-cdef-4189-b373-ceccd30c7339",
+      "activationId": "6a8a4051-9367-49ef-884f-d6ac67b60000",
+      "exportDigest": "05f7b5688a36988924aac0a314e278ec52f7ae343dd53285ec57c98b39a87843",
+      "historyChunks": 49,
+      "mediaObjects": 279,
+      "mediaBytes": 909094056,
+      "multipartUploads": 0,
+      "drainMode": "protected-no-wait",
+      "timedDrainSatisfied": false,
+      "exactPrefixLocksVerifiedBeforeAfter": true,
+      "currentVersion": "2026.10.13-1",
+      "releasedVersions": 13,
+      "staffCurrentReadback": true
+    },
+    {
+      "source": "wpl",
+      "sourceId": "5b69a328-c6a2-4a40-aa0c-0c7588ae4c0c",
+      "operationId": "492275f7-d116-4814-a03d-b52b5676f515",
+      "epoch": 1,
+      "portalPhase": "host",
+      "hostStage": "active",
+      "stageId": "4552ef4b-e7aa-4157-b2cf-f7812c8e629f",
+      "activationId": "76f63518-33fb-41ab-b836-1cfb1bd74fc2",
+      "exportDigest": "38de1a65ecb4047749b8d58ae16c6059b4bda3691bcae7e95a7cff9227c03fa3",
+      "historyChunks": 36,
+      "mediaObjects": 549,
+      "mediaBytes": 981447010,
+      "multipartUploads": 0,
+      "drainMode": "protected-no-wait",
+      "timedDrainSatisfied": false,
+      "exactPrefixLocksVerifiedBeforeAfter": true,
+      "currentVersion": "0.1.43",
+      "releasedVersions": 12,
+      "staffCurrentReadback": true
+    },
+    {
+      "source": "speed",
+      "sourceId": "d9465b2e-3c19-48de-a3ee-7d1c4770c8ad",
+      "operationId": "84e0f281-5137-4f37-8fce-59f2e60bb8dd",
+      "epoch": 1,
+      "portalPhase": "host",
+      "hostStage": "active",
+      "stageId": "b0214c8c-9752-4624-8554-217c69af8ca6",
+      "activationId": "75e1c94c-078b-4710-8e1b-2d85152daf00",
+      "exportDigest": "edf2d4931b754c30c4764fd2675eea3259f81c712c3509cd45f5ca65b1e3557a",
+      "historyChunks": 28,
+      "mediaObjects": 208,
+      "mediaBytes": 99768163,
+      "multipartUploads": 0,
+      "drainMode": "protected-no-wait",
+      "timedDrainSatisfied": false,
+      "exactPrefixLocksVerifiedBeforeAfter": true,
+      "currentVersion": "0.1.12",
+      "releasedVersions": 11,
+      "staffCurrentReadback": true
+    }
+  ],
+  "totals": {
+    "activeSources": 3,
+    "releasedVersions": 36,
+    "historyChunks": 113,
+    "rawVersionRows": 39,
+    "publicationEvents": 39,
+    "mediaObjects": 1036,
+    "mediaBytes": 1990309229,
+    "multipartUploads": 0
+  },
+  "nativeReleaseConversion": {
+    "applied": true,
+    "finishedAt": "2026-10-13T17:16:21.965Z",
+    "planSha256": "391720997bdf8936fcf2257f646401aa2fb7045f7b4271d187a2bbaf094ffe5b",
+    "releases": 36,
+    "verifiedObjects": 8591,
+    "bytes": 550356950,
+    "verifiedPublicReads": 47,
+    "retainedLegacyBundles": 11,
+    "distinctFromLegacyBackfill": true
+  },
+  "staffOAuthReads": {
+    "mode": "Normal staff OAuth through toolkit resolveAccessToken; no service token or operator impersonation headers",
+    "sources": [
+      {
+        "source": "pierce",
+        "sourceId": "f7cfb345-391a-40ba-80f4-fc08359696bb",
+        "checkedAt": "2026-10-13T17:31:11.692Z",
+        "httpStatus": 200,
+        "sourceIdentityMatches": true,
+        "currentVersionMatches": true,
+        "versionLabel": "2026.10.13-1",
+        "versions": 13,
+        "canRollback": true,
+        "authentication": "normal-staff-oauth"
+      },
+      {
+        "source": "wpl",
+        "sourceId": "5b69a328-c6a2-4a40-aa0c-0c7588ae4c0c",
+        "checkedAt": "2026-10-13T17:30:29.965Z",
+        "httpStatus": 200,
+        "sourceIdentityMatches": true,
+        "currentVersionMatches": true,
+        "versionLabel": "0.1.43",
+        "versions": 12,
+        "canRollback": true,
+        "authentication": "normal-staff-oauth"
+      },
+      {
+        "source": "speed",
+        "sourceId": "d9465b2e-3c19-48de-a3ee-7d1c4770c8ad",
+        "checkedAt": "2026-10-13T17:27:00.255Z",
+        "httpStatus": 200,
+        "sourceIdentityMatches": true,
+        "currentVersionMatches": true,
+        "versionLabel": "0.1.12",
+        "versions": 11,
+        "canRollback": true,
+        "authentication": "normal-staff-oauth"
+      }
+    ]
+  },
+  "deletedSource": {
+    "operationId": "2c0a8473-5483-44d2-990a-45ba8b81859c",
+    "sourceId": "af5ad825-f52a-41be-80ce-38619dfc659c",
+    "portalSourceId": "af5ad825-f52a-41be-80ce-38619dfc659c",
+    "origin": "https://timds-host-69.timds.workers.dev",
+    "exportDigest": "a297a12a37bb0b94ba3cd035c6b09edbc1525823d956e877359acff9df3043d7",
+    "stage": "deleted",
+    "hostState": "deleted",
+    "activationForbidden": true,
+    "originalDeletionOperationId": "7b0b7ef7-7ec2-4bc6-905b-c1033542cf2c",
+    "originalDeletedAt": "2026-10-12T23:49:11.649721+00:00",
+    "recordedAt": "2026-10-13T17:19:58.455Z"
+  },
+  "immediateCutover": {
+    "operatorChoice": "User requested immediate cutover without the timed upload drain.",
+    "mode": "protected-no-wait",
+    "timedDrainSatisfied": false,
+    "sourceFencesVerified": 3,
+    "stoppedWriterUnits": 14,
+    "permanentlyDisabledUnits": [
+      "portal-design-system-roots.timer"
+    ],
+    "fullMediaHashesAndEmptyMultipartInventories": true,
+    "exactPrefixDateProtectionsVerifiedBeforeAndAfterHashes": true,
+    "existingBucketRulesPreserved": true,
+    "protections": [
+      {
+        "sourceId": "5b69a328-c6a2-4a40-aa0c-0c7588ae4c0c",
+        "scope": "exact source media object prefix",
+        "prefixSha256": "579af0eda824db6a2b4e2311783840289cacf919866d24eb5ac799188643e78a",
+        "enabled": true,
+        "conditionType": "Date",
+        "until": "2026-10-13T18:22:55.000Z"
+      },
+      {
+        "sourceId": "d9465b2e-3c19-48de-a3ee-7d1c4770c8ad",
+        "scope": "exact source media object prefix",
+        "prefixSha256": "8108021dbb991adca0f6a6cf2b34bb15d837d7aabc6094ecfae12f604d607266",
+        "enabled": true,
+        "conditionType": "Date",
+        "until": "2026-10-13T18:22:55.000Z"
+      },
+      {
+        "sourceId": "f7cfb345-391a-40ba-80f4-fc08359696bb",
+        "scope": "exact source media object prefix",
+        "prefixSha256": "9b1121c742c3a6f58ef5356145ad5fb76c1cbf30d7a59853ae22609e5d010b3d",
+        "enabled": true,
+        "conditionType": "Date",
+        "until": "2026-10-13T18:22:55.000Z"
+      }
+    ],
+    "credentialRevocationClaimed": false,
+    "expiredUploadProofClaimed": false,
+    "retentionInstruction": "Retain these Date protections until their deadlines; no early removal is required for activation."
+  },
+  "publicRouting": {
+    "verifiedAt": "2026-10-13T17:32:48.962778+00:00",
+    "targetService": "timds-host-69-public",
+    "domains": [
+      {
+        "hostname": "plg-ds.timds.com",
+        "sourceId": "f7cfb345-391a-40ba-80f4-fc08359696bb",
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "plg-ds.speed.style",
+        "sourceId": "f7cfb345-391a-40ba-80f4-fc08359696bb",
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "wpl-ds.timds.com",
+        "sourceId": "5b69a328-c6a2-4a40-aa0c-0c7588ae4c0c",
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "wpl-ds.speed.style",
+        "sourceId": "5b69a328-c6a2-4a40-aa0c-0c7588ae4c0c",
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "ds.timds.com",
+        "sourceId": "d9465b2e-3c19-48de-a3ee-7d1c4770c8ad",
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "ds.speed.style",
+        "sourceId": "d9465b2e-3c19-48de-a3ee-7d1c4770c8ad",
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "timds-69d1d810-17f6-4c67-ae22-7e2d6a1b169e-ds.timds.com",
+        "sourceId": null,
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "timds-69d1d810-17f6-4c67-ae22-7e2d6a1b169e-ds.speed.style",
+        "sourceId": null,
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "timds-46f448ae-9123-47a6-b033-0849bec9fbb3-ds.speed.style",
+        "sourceId": null,
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "timds-46f448ae-9123-47a6-b033-0849bec9fbb3-ds.timds.com",
+        "sourceId": null,
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "timds-6e5e5b99-1bf7-4c62-b425-5bbaef408941-ds.speed.style",
+        "sourceId": null,
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "timds-6e5e5b99-1bf7-4c62-b425-5bbaef408941-ds.timds.com",
+        "sourceId": null,
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "timds-72287755-49cd-4920-8207-b2309aade217-ds.speed.style",
+        "sourceId": null,
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      },
+      {
+        "hostname": "timds-72287755-49cd-4920-8207-b2309aade217-ds.timds.com",
+        "sourceId": null,
+        "priorService": "timds-public-design-systems",
+        "verifiedService": "timds-host-69-public"
+      }
+    ],
+    "domainCount": 14,
+    "exactPriorOwnershipGuard": true,
+    "reassignmentOption": "override_existing_origin",
+    "legacyRootReconcilerDisabled": true
+  },
+  "publicParity": {
+    "verifiedAt": "2026-10-13T17:34:47.921Z",
+    "requestMethod": "Same Node fetch headers/options as baseline capture",
+    "baselineReads": 59,
+    "fixtureReads": 18,
+    "matched": 77,
+    "total": 77,
+    "matchesIncludeStatusBytesAndSha256": true,
+    "privateReceiptSha256": "bda1ba0fd1993b62fb4b726bdd90c1220da8ecb048c7090820e48ed27ba67f1f"
+  },
+  "alternateUserAgentObservation": {
+    "checkedAt": "2026-10-13T17:33:08.489567+00:00",
+    "matched": 71,
+    "total": 77,
+    "htmlResponsesWithCloudflareAnalyticsInsertion": 6,
+    "classification": "User-agent-dependent Cloudflare HTML analytics insertion, recorded separately from source content parity.",
+    "baselineComparison": "Same baseline Node fetch headers/options subsequently matched all 77 responses; no origin content mismatch is asserted from the alternate-user-agent run."
+  },
+  "remainingAtEvidenceCheckpoint": {
+    "retirementDeployment": "Pending final deployment receipt for portal revision b92bbbf62ae492e72794e708c490c5f900d6a3c2.",
+    "physicalLegacyRuntimeCleanup": "Pending final unit/runtime removal receipts.",
+    "genericWriterRestoration": "Pending coordinated retirement deployment; roots timer remains excluded.",
+    "sourceProviderConfiguration": {
+      "currentMainProviderUrl": "https://timds.com",
+      "sources": [
+        "pierce",
+        "wpl",
+        "speed"
+      ],
+      "status": "Follow-up source change still required.",
+      "immediateUse": "Use explicit --portal-url https://timds-host-69.timds.workers.dev for authentication and fresh native sessions and subsequent hosted commands.",
+      "existingSessions": "Do not relabel existing local session host identities; start a fresh session and preserve local edits.",
+      "durableFix": "After cutover parity, change current main timds.json provider.url through a normal reviewed native session and publish a new release. Preserve all imported historical source commits, release objects and consumer version pins."
+    }
+  },
+  "sanitization": "Contains operation/source identities, digests, aggregate counts and public hostnames. Omits credentials, signed proofs, raw history, object inventories and private actor details."
+}
