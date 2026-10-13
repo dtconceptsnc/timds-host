@@ -11,6 +11,7 @@
     "dev": "cf dev",
     "build": "cf build",
     "deploy": "cf deploy",
+    "test": "node --test test/*.test.mjs",
     "typecheck": "cf workers types && tsc --noEmit"
   },
   "devDependencies": {
