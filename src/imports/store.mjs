@@ -41,7 +41,7 @@ export function createImportStore({storage,sourceId,catalog,imports}) {
     return result;
   }
   function validateRow(item,table){
-    check(item&&typeof item==='object'&&!Array.isArray(item)&&new TextEncoder().encode(canonical(item)).length<=128*1024,'History rows are limited to 128 KiB');noSecrets(item);
+    check(item&&typeof item==='object'&&!Array.isArray(item)&&new TextEncoder().encode(canonical(item)).length<=1024*1024,'History rows are limited to 1 MiB');noSecrets(item);
     if(table==='members')check(UUID.test(item.session_id||'')&&UUID.test(item.principal_id||''),'Membership requires its original composite identity');
     else if(!archiveTables.has(table))check(UUID.test(item.id||''),'Live history rows require their original UUID');
     if(item.source_id!=null)check(item.source_id===sourceId,'History row belongs to another source');
@@ -56,7 +56,7 @@ export function createImportStore({storage,sourceId,catalog,imports}) {
     async append(row,{position,chunk,release}){
       check(Number.isSafeInteger(position)&&position>=0&&position<row.input.manifest.chunks.length,'Unknown import chunk position');
       const hash=digest(chunk);check(hash===row.input.manifest.chunks[position],'Chunk does not match its frozen export digest');
-      check(new TextEncoder().encode(canonical(chunk)).length<=512*1024,'Import chunks are limited to 512 KiB');
+      check(new TextEncoder().encode(canonical(chunk)).length<=2*1024*1024,'Import chunks are limited to 2 MiB');
       const prior=this.chunk(row,position);if(prior)return prior;
       const items=[];
       if(chunk.kind==='version'){

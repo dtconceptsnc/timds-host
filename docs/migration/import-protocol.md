@@ -151,7 +151,11 @@ Retries retain that immutable captured audit. Source-bound rows and the SQL
 snapshot are independently rechecked before authority changes.
 
 The manifest is limited to 1 MiB, 10,000 chunk digests, 200 principal mappings and
-100 grants. A chunk is at most 512 KiB; individual rows are at most 128 KiB.
+100 grants. A chunk is at most 2 MiB; individual rows are at most 1 MiB.
+These bounds preserve existing large submission/version snapshots while leaving
+room below the [SQLite Durable Object 2 MB row limit](https://developers.cloudflare.com/durable-objects/platform/limits/).
+The complete chunk is not stored as one SQL row: original/materialized rows and
+small digest receipts are stored separately.
 Imports beyond these bounds fail closed rather than truncate history. Byte trees
 are separately backfilled into locked RELEASES using the
 [artifact backfill procedure](artifact-backfill.md).
