@@ -1,4 +1,7 @@
-# Native media implementation: prepared, not deployed
+# Native media implementation preparation checkpoint
+
+Historical stopping point; live deployment and acceptance subsequently completed.
+See [native media acceptance](native-media-acceptance.md).
 
 Recorded 2026-10-13. Host commit `ab213d7` adds native source-owned media; portal
 commit `c03b0b3` adds own-human host OAuth forwarding. Both repositories passed

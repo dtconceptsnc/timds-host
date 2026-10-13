@@ -1,0 +1,330 @@
+{
+  "reads": {
+    "checkedAt": "2026-10-13T16:24:48.576Z",
+    "sourceId": "6ffb48ea-862e-42de-9303-5edcbe8829d5",
+    "toolkit": "0.1.472",
+    "apiListStatus": 200,
+    "reads": [
+      {
+        "id": "623df33f-0196-4e01-949a-734f6969ed9e",
+        "key": "native-media-multipart-69-20261013",
+        "url": "https://timds-host-69-public.ratebucket.workers.dev/media/6ffb48ea-862e-42de-9303-5edcbe8829d5/623df33f-0196-4e01-949a-734f6969ed9e/native-media-multipart-69-20261013.bin",
+        "localBytes": 34603008,
+        "localSha256": "7a3beb559dc5f28c5bb705a2084a9700815a640e900f6e7921cd79554bd12321",
+        "get": {
+          "status": 200,
+          "bytes": 34603008,
+          "sha256": "7a3beb559dc5f28c5bb705a2084a9700815a640e900f6e7921cd79554bd12321",
+          "exactBytes": true
+        },
+        "head": {
+          "status": 200,
+          "bytes": 34603008,
+          "contentType": "application/octet-stream",
+          "etag": "\"0dddf83c518a5509ae4e226755badb1a-3\""
+        },
+        "range": {
+          "status": 206,
+          "bytes": 32,
+          "contentRange": "bytes 17-48/34603008",
+          "exactBytes": true
+        },
+        "listed": true
+      },
+      {
+        "id": "9e738c08-9528-4dd1-a3d2-00ff700da981",
+        "key": "native-media-proof-69-20261013",
+        "url": "https://timds-host-69-public.ratebucket.workers.dev/media/6ffb48ea-862e-42de-9303-5edcbe8829d5/9e738c08-9528-4dd1-a3d2-00ff700da981/native-media-proof-69-20261013.txt",
+        "localBytes": 54,
+        "localSha256": "89ae7055b885a486057d4cd49fec5c85f10609d46f8a124a9b4692d7d514e105",
+        "get": {
+          "status": 200,
+          "bytes": 54,
+          "sha256": "89ae7055b885a486057d4cd49fec5c85f10609d46f8a124a9b4692d7d514e105",
+          "exactBytes": true
+        },
+        "head": {
+          "status": 200,
+          "bytes": 54,
+          "contentType": "application/octet-stream",
+          "etag": "\"eec316d6b44fb3062db9a18392831279\""
+        },
+        "range": {
+          "status": 206,
+          "bytes": 32,
+          "contentRange": "bytes 17-48/54",
+          "exactBytes": true
+        },
+        "listed": true
+      }
+    ],
+    "mcp": {
+      "isError": false,
+      "release": {
+        "id": "68b84f4a-ab1a-4bec-9adc-7409e96cce75",
+        "versionLabel": "2026.10.13-5",
+        "sourceCommit": "5f1df9ba9f1a1a7b49c849c42830015333e1655a",
+        "contentDigest": "31a8cdb1abade6f701065b00cf78e3c5a48f4b3d96b58c5984965fc63ab22a46",
+        "firstPublicationEventId": "acb3c61c-4fe8-4145-b693-3431d9da4d98"
+      },
+      "assets": [
+        {
+          "id": "623df33f-0196-4e01-949a-734f6969ed9e",
+          "key": "native-media-multipart-69-20261013",
+          "bytes": 34603008,
+          "sha256": "7a3beb559dc5f28c5bb705a2084a9700815a640e900f6e7921cd79554bd12321",
+          "publicUrl": "https://timds-host-69-public.ratebucket.workers.dev/media/6ffb48ea-862e-42de-9303-5edcbe8829d5/623df33f-0196-4e01-949a-734f6969ed9e/native-media-multipart-69-20261013.bin"
+        },
+        {
+          "id": "9e738c08-9528-4dd1-a3d2-00ff700da981",
+          "key": "native-media-proof-69-20261013",
+          "bytes": 54,
+          "sha256": "89ae7055b885a486057d4cd49fec5c85f10609d46f8a124a9b4692d7d514e105",
+          "publicUrl": "https://timds-host-69-public.ratebucket.workers.dev/media/6ffb48ea-862e-42de-9303-5edcbe8829d5/9e738c08-9528-4dd1-a3d2-00ff700da981/native-media-proof-69-20261013.txt"
+        }
+      ],
+      "containsEveryAsset": true
+    }
+  },
+  "cancellation": {
+    "startedAt": "2026-10-13T16:16:11.450Z",
+    "sourceId": "6ffb48ea-862e-42de-9303-5edcbe8829d5",
+    "assetId": "0fe95cbf-7389-4d97-9fe5-a3188726e674",
+    "uploadId": "9a089436-3cc7-4c23-8d88-f5c716c0897a",
+    "method": "multipart",
+    "bytes": 34603008,
+    "sha256": "0c6ba6292bec5d89fafe4e645af0e846e465a6f34e5ea61d412a13694d59fd92",
+    "reservationStatus": 201,
+    "partCapabilityStatus": 200,
+    "partUpload": {
+      "status": 200,
+      "bytes": 16777216,
+      "etag": "\"cbf55b96aee9464742b94a183ef805a5\""
+    },
+    "cancel": {
+      "status": 200,
+      "pending": false,
+      "assetStatus": "failed"
+    },
+    "repeatedCancel": {
+      "status": 200,
+      "pending": false,
+      "assetStatus": "failed"
+    },
+    "newPartAfterCancellation": {
+      "status": 409,
+      "error": "Media upload is cancelled"
+    },
+    "publicReadAfterCancellation": 404,
+    "finishedAt": "2026-10-13T16:16:19.168Z"
+  },
+  "archive": {
+    "startedAt": "2026-10-13T16:24:59.935Z",
+    "sourceId": "6ffb48ea-862e-42de-9303-5edcbe8829d5",
+    "currentBefore": {
+      "status": 200,
+      "sha256": "2e27a8f1cd8cc38cbdc2af0cfeb2eeae88643540d30b430769d8327a5a0b4649",
+      "version": "2026.10.13-5"
+    },
+    "pinnedBefore": {
+      "status": 200,
+      "sha256": "84a936cdb328da100c009b6d0b17d80299cfc20aa26d563f7090cfb8498fe0e4",
+      "version": "2026.10.13-4"
+    },
+    "assets": [
+      {
+        "id": "623df33f-0196-4e01-949a-734f6969ed9e",
+        "archive": {
+          "status": 200,
+          "archived": true,
+          "assetId": "623df33f-0196-4e01-949a-734f6969ed9e",
+          "assetStatus": "archived",
+          "sha256": "7a3beb559dc5f28c5bb705a2084a9700815a640e900f6e7921cd79554bd12321"
+        },
+        "publicReadAfterArchive": 404,
+        "replayedArchive": {
+          "status": 200,
+          "archived": true,
+          "assetId": "623df33f-0196-4e01-949a-734f6969ed9e",
+          "assetStatus": "archived",
+          "sha256": "7a3beb559dc5f28c5bb705a2084a9700815a640e900f6e7921cd79554bd12321"
+        }
+      },
+      {
+        "id": "9e738c08-9528-4dd1-a3d2-00ff700da981",
+        "archive": {
+          "status": 200,
+          "archived": true,
+          "assetId": "9e738c08-9528-4dd1-a3d2-00ff700da981",
+          "assetStatus": "archived",
+          "sha256": "89ae7055b885a486057d4cd49fec5c85f10609d46f8a124a9b4692d7d514e105"
+        },
+        "publicReadAfterArchive": 404,
+        "replayedArchive": {
+          "status": 200,
+          "archived": true,
+          "assetId": "9e738c08-9528-4dd1-a3d2-00ff700da981",
+          "assetStatus": "archived",
+          "sha256": "89ae7055b885a486057d4cd49fec5c85f10609d46f8a124a9b4692d7d514e105"
+        }
+      }
+    ],
+    "currentAfter": {
+      "status": 200,
+      "sha256": "2e27a8f1cd8cc38cbdc2af0cfeb2eeae88643540d30b430769d8327a5a0b4649",
+      "version": "2026.10.13-5"
+    },
+    "pinnedAfter": {
+      "status": 200,
+      "sha256": "84a936cdb328da100c009b6d0b17d80299cfc20aa26d563f7090cfb8498fe0e4",
+      "version": "2026.10.13-4"
+    },
+    "currentUnchanged": true,
+    "pinnedUnchanged": true,
+    "finishedAt": "2026-10-13T16:25:04.116Z"
+  },
+  "schemaVersion": 1,
+  "date": "2026-10-13",
+  "hostCommit": "a7a098a",
+  "workerVersionId": "0f950d87-a41f-4060-b781-6bc0d2d46192",
+  "toolkitVersion": "0.1.472",
+  "uploads": [
+    {
+      "at": "2026-10-13T16:14:26.771Z",
+      "method": "POST",
+      "origin": "https://timds-host-69.ratebucket.workers.dev",
+      "path": "/api/operator/design-system-assets/uploads",
+      "status": 201,
+      "asset": {
+        "id": "623df33f-0196-4e01-949a-734f6969ed9e",
+        "status": "uploading",
+        "bytes": 34603008,
+        "sha256": "7a3beb559dc5f28c5bb705a2084a9700815a640e900f6e7921cd79554bd12321",
+        "publicUrl": "https://timds-host-69-public.ratebucket.workers.dev/media/6ffb48ea-862e-42de-9303-5edcbe8829d5/623df33f-0196-4e01-949a-734f6969ed9e/native-media-multipart-69-20261013.bin"
+      },
+      "upload": {
+        "id": "df048864-a19f-4b2f-8c31-ce61d0bdead7",
+        "method": "multipart",
+        "partSize": 16777216
+      }
+    },
+    {
+      "at": "2026-10-13T16:14:27.079Z",
+      "method": "POST",
+      "origin": "https://timds-host-69.ratebucket.workers.dev",
+      "path": "/api/timds/design-systems/6ffb48ea-862e-42de-9303-5edcbe8829d5/media/uploads/df048864-a19f-4b2f-8c31-ce61d0bdead7/parts",
+      "status": 200,
+      "partNumber": 1
+    },
+    {
+      "at": "2026-10-13T16:14:35.650Z",
+      "method": "PUT",
+      "origin": "https://timds-host-69-public.ratebucket.workers.dev",
+      "path": "/media/uploads/6ffb48ea-862e-42de-9303-5edcbe8829d5/df048864-a19f-4b2f-8c31-ce61d0bdead7/1",
+      "status": 200,
+      "etag": "\"2f25bd66b65aa447d6658c9836f85020\""
+    },
+    {
+      "at": "2026-10-13T16:14:36.233Z",
+      "method": "POST",
+      "origin": "https://timds-host-69.ratebucket.workers.dev",
+      "path": "/api/timds/design-systems/6ffb48ea-862e-42de-9303-5edcbe8829d5/media/uploads/df048864-a19f-4b2f-8c31-ce61d0bdead7/parts",
+      "status": 200,
+      "partNumber": 2
+    },
+    {
+      "at": "2026-10-13T16:14:44.142Z",
+      "method": "PUT",
+      "origin": "https://timds-host-69-public.ratebucket.workers.dev",
+      "path": "/media/uploads/6ffb48ea-862e-42de-9303-5edcbe8829d5/df048864-a19f-4b2f-8c31-ce61d0bdead7/2",
+      "status": 200,
+      "etag": "\"2f25bd66b65aa447d6658c9836f85020\""
+    },
+    {
+      "at": "2026-10-13T16:14:44.531Z",
+      "method": "POST",
+      "origin": "https://timds-host-69.ratebucket.workers.dev",
+      "path": "/api/timds/design-systems/6ffb48ea-862e-42de-9303-5edcbe8829d5/media/uploads/df048864-a19f-4b2f-8c31-ce61d0bdead7/parts",
+      "status": 200,
+      "partNumber": 3
+    },
+    {
+      "at": "2026-10-13T16:14:45.706Z",
+      "method": "PUT",
+      "origin": "https://timds-host-69-public.ratebucket.workers.dev",
+      "path": "/media/uploads/6ffb48ea-862e-42de-9303-5edcbe8829d5/df048864-a19f-4b2f-8c31-ce61d0bdead7/3",
+      "status": 200,
+      "etag": "\"880a36b82b7e9cbac4ac26d4ffcc9e45\""
+    },
+    {
+      "at": "2026-10-13T16:14:48.846Z",
+      "method": "POST",
+      "origin": "https://timds-host-69.ratebucket.workers.dev",
+      "path": "/api/timds/design-systems/6ffb48ea-862e-42de-9303-5edcbe8829d5/media/uploads/df048864-a19f-4b2f-8c31-ce61d0bdead7/complete",
+      "status": 200,
+      "asset": {
+        "id": "623df33f-0196-4e01-949a-734f6969ed9e",
+        "status": "ready",
+        "bytes": 34603008,
+        "sha256": "7a3beb559dc5f28c5bb705a2084a9700815a640e900f6e7921cd79554bd12321",
+        "publicUrl": "https://timds-host-69-public.ratebucket.workers.dev/media/6ffb48ea-862e-42de-9303-5edcbe8829d5/623df33f-0196-4e01-949a-734f6969ed9e/native-media-multipart-69-20261013.bin"
+      },
+      "parts": [
+        {
+          "partNumber": 1,
+          "etag": "\"2f25bd66b65aa447d6658c9836f85020\""
+        },
+        {
+          "partNumber": 2,
+          "etag": "\"2f25bd66b65aa447d6658c9836f85020\""
+        },
+        {
+          "partNumber": 3,
+          "etag": "\"880a36b82b7e9cbac4ac26d4ffcc9e45\""
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T16:14:49.357Z",
+      "method": "POST",
+      "origin": "https://timds-host-69.ratebucket.workers.dev",
+      "path": "/api/operator/design-system-assets/uploads",
+      "status": 201,
+      "asset": {
+        "id": "9e738c08-9528-4dd1-a3d2-00ff700da981",
+        "status": "uploading",
+        "bytes": 54,
+        "sha256": "89ae7055b885a486057d4cd49fec5c85f10609d46f8a124a9b4692d7d514e105",
+        "publicUrl": "https://timds-host-69-public.ratebucket.workers.dev/media/6ffb48ea-862e-42de-9303-5edcbe8829d5/9e738c08-9528-4dd1-a3d2-00ff700da981/native-media-proof-69-20261013.txt"
+      },
+      "upload": {
+        "id": "a3bbcaa5-81cb-49bc-b72f-e5a3fa834d0f",
+        "method": "single",
+        "partSize": null
+      }
+    },
+    {
+      "at": "2026-10-13T16:14:50.029Z",
+      "method": "PUT",
+      "origin": "https://timds-host-69-public.ratebucket.workers.dev",
+      "path": "/media/uploads/6ffb48ea-862e-42de-9303-5edcbe8829d5/a3bbcaa5-81cb-49bc-b72f-e5a3fa834d0f/0",
+      "status": 200,
+      "etag": "\"eec316d6b44fb3062db9a18392831279\""
+    },
+    {
+      "at": "2026-10-13T16:14:50.579Z",
+      "method": "POST",
+      "origin": "https://timds-host-69.ratebucket.workers.dev",
+      "path": "/api/timds/design-systems/6ffb48ea-862e-42de-9303-5edcbe8829d5/media/uploads/a3bbcaa5-81cb-49bc-b72f-e5a3fa834d0f/complete",
+      "status": 200,
+      "asset": {
+        "id": "9e738c08-9528-4dd1-a3d2-00ff700da981",
+        "status": "ready",
+        "bytes": 54,
+        "sha256": "89ae7055b885a486057d4cd49fec5c85f10609d46f8a124a9b4692d7d514e105",
+        "publicUrl": "https://timds-host-69-public.ratebucket.workers.dev/media/6ffb48ea-862e-42de-9303-5edcbe8829d5/9e738c08-9528-4dd1-a3d2-00ff700da981/native-media-proof-69-20261013.txt"
+      },
+      "parts": []
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "checkedAt": "2026-10-13T16:18:25.713Z",
+  "host": "https://timds-host-69.ratebucket.workers.dev",
+  "endpoint": "/api/timds/mcp",
+  "authentication": "Existing own-human scoped OAuth credential resolved by released toolkit; no new authorization flow performed",
+  "tools": [
+    "describe_system",
+    "get_tokens",
+    "read_page",
+    "read_derived_layer",
+    "report_gap"
+  ],
+  "read": {
+    "isError": false,
+    "system": {
+      "id": "timds/cf-preview-source-proof",
+      "name": "TimDS Host Preview Conversion Proof",
+      "version": "2026.10.13-5",
+      "published": "2026.10.13-5",
+      "pinned": null,
+      "source": "published"
+    },
+    "total": 1,
+    "tokens": [
+      {
+        "name": "--motion-fast",
+        "value": "170ms",
+        "resolved": "170ms"
+      }
+    ]
+  },
+  "limitations": "This proves an existing own-human OAuth credential works with a real MCP client and anonymous access to the authenticated endpoint is rejected; no fresh CIMD client flow or report_gap write was performed.",
+  "anonymousAttempt": {
+    "status": 401,
+    "challenge": "Bearer realm=\"OAuth\", resource_metadata=\"https://timds-host-69.ratebucket.workers.dev/.well-known/oauth-protected-resource/api/timds\", scope=\"timds:read\""
+  }
+}
