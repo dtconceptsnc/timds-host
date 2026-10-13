@@ -16,6 +16,12 @@ const packFailureDetails=bytes=>{
 };
 const startupDiagnostic=error=>/^Live sandbox command failed \((?:git-(?:clone|fetch|reset|rev-parse)|npm-ci|mkdir|rm|unknown); exit (?:-?\d+|unknown)\)$/.test(error?.message||'')?error.message:['Live credential unavailable','Live supervisor did not become ready'].includes(error?.message)?error.message:'Live startup failed';
 /** SDK-independent orchestration, also exercised with a fake container in Node. */
+const revisionPattern=/^[a-f0-9]{40}$/;
+function conflictResolution(prior){
+  if(prior?.state!=='conflicted'||!Array.isArray(prior.conflicts)||!prior.conflicts.length||!revisionPattern.test(prior.mainRevision||''))return null;
+  const resolvedPaths=[...new Set(prior.conflicts.filter(c=>typeof c?.path==='string'&&c.path).map(c=>typeof c.key==='string'&&c.key?`${c.path}#${c.key}=mine`:c.path))].slice(0,4000);
+  return resolvedPaths.length?{resolvedPaths,mainRevision:prior.mainRevision}:null;
+}
 export class LiveSessionRuntime {
   constructor(ctx,env,{Files,SandboxFileError,portalCall=portal}) {
     this.ctx=ctx;this.env=env;this.portal=portalCall;this.Files=Files;this.FileError=SandboxFileError;this.serial=Promise.resolve();
@@ -118,7 +124,11 @@ export class LiveSessionRuntime {
     const revision=(typeof output==='string'?output:new TextDecoder().decode(output)).trim();
     if(!/^[a-f0-9]{40}$/.test(revision))throw new Error('Invalid live head');
     // Persist no repository credential. The task sees only its prompt and revision.
-    this.ctx.storage.kv.put('task',{requestId:input.requestId,note:input.note||run.prompt.slice(0,2000),state:'starting',startedAt:Date.now()});
+    // A follow-up after a conflict resolves it: the agent's values for the
+    // conflicted keys are submitted as the chosen side against the main the
+    // conflict was seen on, so the host's key-level merge accepts them.
+    const resolve=conflictResolution(prior);
+    this.ctx.storage.kv.put('task',{requestId:input.requestId,note:input.note||run.prompt.slice(0,2000),state:'starting',startedAt:Date.now(),...(prior?.state==='conflicted'?{followUp:true}:{}),...(resolve?{resolve}:{})});
     await this.command(['rm','-f','/workspace/task/result.json','/workspace/task/progress.json']);
     await this.ctx.container.exec(['/bin/sh','-c','setsid node /usr/local/lib/timds-agent.mjs "$@" >/workspace/task/stdout.log 2>/workspace/task/stderr.log','agent',revision,this.env.MODEL,run.prompt],{cwd:'/workspace/repo',env:trust,stdout:'ignore',stderr:'ignore'});
     this.ctx.storage.kv.put('task',{...this.run(),state:'running'});await this.report('running',input.requestId);await this.schedule(Date.now()+1000);return this.status();
@@ -185,16 +195,23 @@ export class LiveSessionRuntime {
         taskDiagnostics=safeTaskDiagnostics(result.diagnostics);
         if(result.state!=='succeeded')throw new Error('Task failed');
         this.ctx.storage.kv.put('task',{...run,state:'submitting',completionStartedAt:run.completionStartedAt||Date.now(),diagnostics:safeTaskDiagnostics(result.diagnostics)});
-        let response;
-        try{response=await this.portal(this.env,'complete',{sessionId:this.record().id,requestId:run.requestId,changeSet:{...result.changeSet,note:run.note}});}
-        catch{await this.schedule(Date.now()+1000);return;}
-        if(response.status===410||response.status===404){await this.close();return;}
-        if(response.ok){const saved=await response.json();if(saved.state==='conflicted'){this.ctx.storage.kv.put('task',{...run,state:'conflicted',conflicts:saved.conflicts||[],error:'This Request overlaps a newer edit. Start a follow-up Request to resolve it.'});await this.report('ready');await this.touch();return;}this.ctx.storage.kv.put('task',{...run,state:'submitted',submissionId:saved.submissionId});try{await this.sync();}catch{this.save({pendingPush:true});await this.touch();}await this.report('ready');return;}
-        if(response.status===409){
-          const rejected=await response.json().catch(()=>null);
-          if(rejected?.error==='This session is busy; retry when its current operation finishes'){await this.schedule(Date.now()+1000);return;}
-          this.ctx.storage.kv.put('task',{...run,state:'conflicted',...(Array.isArray(rejected?.conflicts)?{conflicts:rejected.conflicts}:{}),error:'This Request overlaps a newer edit. Start a follow-up Request to resolve it.'});await this.report('ready');await this.touch();return;
+        // One completion may take two submits: a follow-up after a conflict
+        // whose stored resolution is missing or stale resubmits once with the
+        // keys and mainRevision the host just reported, choosing the agent's values.
+        let resolve=run.resolve||null,response,saved=null;
+        for(let attempt=0;;attempt++){
+          try{response=await this.portal(this.env,'complete',{sessionId:this.record().id,requestId:run.requestId,changeSet:{...result.changeSet,note:run.note,...(resolve?{resolvedPaths:resolve.resolvedPaths,mainRevision:resolve.mainRevision}:{})}});}
+          catch{await this.schedule(Date.now()+1000);return;}
+          if(response.status===410||response.status===404){await this.close();return;}
+          saved=response.ok||response.status===409?await response.json().catch(()=>null):null;
+          const conflicted=response.ok?saved?.state==='conflicted':response.status===409&&saved?.error!=='This session is busy; retry when its current operation finishes';
+          if(!conflicted)break;
+          const again=run.followUp&&attempt===0?conflictResolution({state:'conflicted',conflicts:saved?.conflicts,mainRevision:saved?.mainRevision}):null;
+          if(!again){this.ctx.storage.kv.put('task',{...run,state:'conflicted',conflicts:Array.isArray(saved?.conflicts)?saved.conflicts:[],...(revisionPattern.test(saved?.mainRevision||'')?{mainRevision:saved.mainRevision}:{}),error:'This Request overlaps a newer edit. Start a follow-up Request to resolve it.'});await this.report('ready');await this.touch();return;}
+          resolve=again;
         }
+        if(response.ok){this.ctx.storage.kv.put('task',{...run,state:'submitted',submissionId:saved.submissionId});try{await this.sync();}catch{this.save({pendingPush:true});await this.touch();}await this.report('ready');return;}
+        if(response.status===409){await this.schedule(Date.now()+1000);return;}
         if(response.status<500&&response.status!==429)throw new Error('Submission rejected');
       }
       await this.schedule(Date.now()+1000);
