@@ -117,6 +117,11 @@ cannot be confirmed settled, cleanup preserves its session and any parent draft
 for inspection, reports the unresolved attempt/publication IDs, and fails the
 test. A `failed` publication may still retry, so that status does not authorize
 closing its fork. Unrelated sessions created by this run are still closed.
+Publication completion polling also permits the host's ordinary retries to
+recover a `failed` or errored `closing` receipt, while still requiring final
+`published` status before the deadline and every FIFO/version/pointer assertion.
+Observed failure states, stages and timestamps remain in redacted evidence;
+the harness does not trigger retries or retain free-text host errors.
 Redacted JSON evidence in ignored `artifacts/<run UUID>.json`
 contains operation/status counts, publication IDs/versions, phase names, and
 cleanup outcomes. It never records credentials, HTTP bodies or source files.

@@ -7,6 +7,7 @@ import { createConformanceClient } from './client.mjs';
 import { readConfiguration } from './config.mjs';
 import { assertConsecutiveVersions, readPublicStamp, readPreview } from './assertions.mjs';
 import { createRunResources, cleanupRunResources, terminalPublicationStatuses } from './resources.mjs';
+import { waitForPublication } from './publication.mjs';
 
 const encoded = (path, value) => ({ path, encoding: 'base64', mode: '100644', content: Buffer.from(typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`).toString('base64') });
 const jsonFile = (snapshot, path) => {
@@ -21,7 +22,7 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   // Fail, rather than skip or silently select a real system, when unconfigured.
   const config = readConfiguration();
   const runId = randomUUID(), short = runId.slice(0, 8), resources = createRunResources(config);
-  const evidence = { suiteVersion: 1, toolkitVersion: '0.1.464', host: config.url, sourceId: config.sourceId, runId, startedAt: new Date().toISOString(), passed: false, operations: {}, publications: [], checks: [], cleanup: [] };
+  const evidence = { suiteVersion: 1, toolkitVersion: '0.1.464', host: config.url, sourceId: config.sourceId, runId, startedAt: new Date().toISOString(), passed: false, operations: {}, publications: [], publicationRetries: [], checks: [], cleanup: [] };
   const onResponse = ({ operationId, status }) => { const key = `${operationId}:${status}`; evidence.operations[key] = (evidence.operations[key] || 0) + 1; };
   const client = createConformanceClient({ url: config.url, token: config.token, onResponse, onCreatedSession: resources.onCreatedSession, onPublicationAttempt: resources.onPublicationAttempt, onAcceptedPublication: resources.onAcceptedPublication });
   const member = createConformanceClient({ url: config.url, token: config.memberToken, onResponse });
@@ -37,7 +38,7 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
     }
     throw new Error(`${name} did not finish within ${config.timeoutMs}ms`);
   };
-  const publicationDone = id => waitFor(`publication ${id}`, () => client.publication(id), value => value.publication.status === 'published', value => ['failed', 'cancelled', 'dead_letter', 'superseded'].includes(value.publication.status) || value.publication.status === 'closing' && Boolean(value.publication.error));
+  const publicationDone = id => waitForPublication(id, () => client.publication(id), { timeoutMs: config.timeoutMs, onRetry: event => evidence.publicationRetries.push(event) });
   t.after(async () => {
     // Only settled publications are safe to close; failed ones may still retry.
     const { cleanup, publicationCleanup, publicationAttempts, failures } = await cleanupRunResources(resources, {
