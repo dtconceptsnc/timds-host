@@ -13,6 +13,34 @@ clears the code from the URL before exchange, checks state and expiry, and sends
 the bearer token only to fixed same-origin API routes with redirects rejected.
 Disconnect clears this tab's Studio state. Rendered data uses DOM text.
 
+## The dashboard
+
+The sidebar is the list of Design Systems the caller can see, one link per
+system (name and `systemId`), with the selected one marked active and
+`aria-current="page"`. The top bar carries the selected system, the view tabs
+(Overview, Sessions, Review, Activity), the feed indicator and Refresh.
+
+The Overview explains the three ways to make a change, each as a card:
+
+1. **Open Studio.** The primary button creates a working session on the
+   current system (`POST /api/timds/sessions` with a per-card idempotency key,
+   regenerated after each success) and opens the Studio for it. **Start from a
+   draft…** opens the same dialog as the Sessions page.
+2. **Connect over MCP** (badged `preview`). The host's authenticated read MCP
+   endpoint, `<origin>/api/timds/mcp`, for reading the published system and
+   filing gaps as Requests, plus the toolkit commands that let an agent edit
+   (`timds auth login --oauth`, then `timds mcp`). The card says that editing
+   over MCP is not production-ready.
+3. **Edit locally with npm.** Install `@dtconcepts/timds` globally, log in
+   with OAuth against this origin, `timds start <systemId>` to pull a session
+   to disk, `timds dev`, and `timds submit` to send it back for review.
+
+Each snippet has a **Copy** button (the Clipboard API; no inline script). The
+toolkit version in the snippets is the `TOOLKIT` constant at the top of
+`app.js`; keep it in step with the root `package.json`. Below the cards the
+Overview lists drafts and sessions, recent Requests and the last releases. The
+Request composer lives on the Sessions page.
+
 ## The steering model
 
 Studio is a steering console, not an editor. **Agents are the only writers.**
@@ -21,8 +49,8 @@ invite. Studio never pulls source files and refuses the snapshot, `update`,
 `submit` and `claims` session routes before a request leaves the tab. Working
 areas (claims) are shown read-only; agents declare them as they edit.
 
-- **Requests.** The composer targets a new session (default), an open session
-  or a shared draft from `active-work` (only those the caller owns or publishes,
+- **Requests.** The composer (on the Sessions page) targets a new session
+  (default), an open session or a shared draft from `active-work` (only those the caller owns or publishes,
   as the host requires). Each Request keeps its UUID, original prompt and target
   across an ambiguous response or retry; a later returned session cannot change
   that target. A Request row shows the runner strip (queued, starting, running,
@@ -79,6 +107,45 @@ areas (claims) are shown read-only; agents declare them as they edit.
   mine-or-theirs chooser.
 - **People.** Owners and publishers invite people and agents from the source's
   principal directory into sessions and drafts, and can close them.
+
+## Loading and busy states
+
+Every wait has a visible indicator, and all of them are CSS driven (no inline
+styles, so the CSP is unchanged):
+
+- **Buttons.** Every button action runs through `perform`, which disables the
+  control and sets `aria-busy="true"` until the action settles. A busy button
+  keeps its label and shows a small spinner after it. This covers Connect,
+  Refresh, Send Request, Open Studio (in the new-session dialog), Create draft,
+  Publish, Build check only, Restore release, Close and every retry. The
+  Connect button stays busy while the browser leaves for `/authorize`.
+- **Pages.** The static shell shows "Checking your sign-in…" until `app.js`
+  decides between the welcome page and the workspace. A workspace without
+  `active-work` yet shows "Loading your workspace…", and the Studio route
+  without the session's status shows "Opening the session…", each as a
+  centred block with a spinner and `role="status"`.
+- **The top progress bar.** A thin bar at the top of the viewport runs while a
+  user-visible load is in flight: the sign-in exchange, the first `me` and
+  catalog reads, a route's `active-work` and `submissions` reads, and a
+  session's `status` read. It appears after 250 ms so short loads do not
+  flash. Background polls and feed-driven refreshes do not show it.
+- **Dialogs.** The new-session dialog shows "Starting a working session…"
+  while the host creates the session; the publication dialog shows the
+  preflight check line with a spinner.
+- **Frames.** A live view or Preview frame carries a "Loading the live view…"
+  (or "Loading the Preview…") bar above it until the frame's `load` event, and
+  "Reloading with the latest change…" while a feed event reloads it in place.
+  The 20-second fallback card replaces the bar. While a session is `starting`
+  or `waking` and has no live URL yet, the stage shows "Starting the session…"
+  or "Waking the session…" instead of the empty fallback; refreshes keep that
+  placeholder in step with the session's state.
+- **Requests.** A Request this tab has sent but the host has not acknowledged
+  yet shows a `sending` badge on its card, and "Sending" as the live step in
+  the Studio stream. The feed indicator pulses while connecting or
+  reconnecting.
+
+With `prefers-reduced-motion`, spinners fade instead of rotating and the
+progress bar is a static line.
 
 ## Live feed and presence
 
