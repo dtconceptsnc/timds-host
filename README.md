@@ -4,12 +4,15 @@ An Apache-2.0 Cloudflare host for TimDS sessions, collaboration, previews,
 publication and Studio. The Apache-2.0 toolkit is maintained separately as
 `@dtconcepts/timds`.
 
-**Implemented and deployed to an isolated host; acceptance is in progress.**
-The production portal conformance baseline passed before extraction. The new
-Worker, public companion, native containers, storage, OAuth discovery and Studio
-assets have deployed successfully. Authenticated host conformance, existing-system
-migration and production cutover remain separate gates. See the
-[deployment receipt](docs/evidence/phase-3-deployment.md).
+**Production ownership transfer and legacy Cloudflare/portal VPS runtime retirement are complete.**
+Pierce, WPL and Speed now run on the native host; Nacho remains deleted. All 14
+public domains route to the new companion Worker, and the original 77 public
+comparisons still match after retirement. See the
+[production cutover and final retirement evidence](docs/evidence/production-cutover-2026-10-13.md#final-retirement-outcome--174107789z).
+
+Scoped follow-ups remain for source `provider.url` configuration, specific
+MCP/CIMD client acceptance, and the old shared VM/DNS inventory limits described
+below. No additional UI coverage is claimed by the cutover receipts.
 
 ## Run your own host
 
@@ -48,8 +51,8 @@ host through `provider: { kind: 'hosted', url }`. The vendored
 [OpenAPI contract](docs/api/timds-host.openapi.json),
 [architecture](docs/architecture.md) and [conformance package](conformance/README.md)
 describe these boundaries. The build and conformance baseline pin toolkit
-`0.1.464`. Human OAuth login is available in published toolkit `0.1.471`
-([merged OAuth support](https://github.com/dtconceptsnc/timds-toolkit/pull/100)).
+`0.1.464`. Human OAuth login and resumable commands are available in the validated published
+toolkit `0.1.472` ([released support](https://github.com/dtconceptsnc/timds-toolkit/pull/104)).
 Use `timds auth login --oauth` with the host origin; the native merge/build
 container retains its validated `0.1.464` pin.
 
@@ -60,6 +63,23 @@ internals and keeps the current descriptor available outside the bounded list.
 
 ## Verification and limitations
 
+- [Production cutover and retirement](docs/evidence/production-cutover-2026-10-13.md)
+  record all three ownership transfers, deleted-source retention, media hashes,
+  public byte parity and removal of the legacy Cloudflare/portal VPS runtime.
+- [Original N10 recovery](docs/evidence/n10-recovery.md) records all ten original
+  publications completing consecutively with their identities preserved.
+- [Manual publication and rollback](docs/evidence/manual-recovery-publication.md)
+  record the original submission completing, rollback and restoration; the
+  [media receipt](docs/evidence/native-media-acceptance.md) covers native uploads.
+- [MCP acceptance boundaries](docs/evidence/mcp-acceptance-boundary-2026-10-13.md)
+  distinguish authenticated reads and CLI use from unexercised fresh CIMD,
+  local editing MCP authoring and remote `report_gap` write/replay flows.
+- The old shared VM's local runner inventory remains unverified after an SSH
+  timeout. The existing credential could not read the old runner DNS record
+  (HTTP 403); no unidentified record was deleted. The tunnel and Access app are
+  confirmed absent. Current source manifests still need the documented native
+  `provider.url` change/new release; explicit host overrides support fresh CLI
+  sessions in the meantime.
 - [Production portal conformance](docs/evidence/phase-1-portal-conformance.md)
   passed the lifecycle before replacement services were implemented.
 - [Native toolchain proof](docs/evidence/phase-0.md) exercised container Git,
@@ -73,12 +93,13 @@ internals and keeps the current descriptor available outside the bounded list.
 No Wrangler command was required for these deployments. The pinned beta has
 specific [tooling limitations](docs/operations.md#pinned-cf-limitations), including
 Preview migration/readback and a direct API exception for Preview deletion.
-The extraction and remaining acceptance work are tracked in
+The completed production cutover and scoped follow-ups are tracked in
 [toperator #69](https://github.com/dtconceptsnc/toperator/issues/69).
 
 ## License
 
 Original host code is licensed under the Apache License 2.0. See
 [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party dependencies retain their
-respective licenses. The toolkit source is Apache-2.0; the already published
-`@dtconcepts/timds@0.1.471` package still declares MIT until a new toolkit release.
+respective licenses. The toolkit source and the published
+[`@dtconcepts/timds@0.1.472`](https://www.npmjs.com/package/@dtconcepts/timds/v/0.1.472)
+package are Apache-2.0; that package's version/license were verified from npm.

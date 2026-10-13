@@ -76,3 +76,38 @@ move existing consumer pins to perform this configuration correction.
 Full operator receipts remain in the private transfer directory. No credentials,
 signed portal proofs, raw history or private actor details are included here.
 No new automated tests or additional UI tests were run for this cutover.
+
+## Final retirement outcome — 17:41:07.789Z
+
+The later retirement receipts complete the deployment and physical cleanup
+operations left pending above. Production portal revision
+`b92bbbf62ae492e72794e708c490c5f900d6a3c2` is healthy, and both the API and
+execution worker are pinned to that exact release. SQL migration
+`20261013200000` is applied. The API and the five previously approved generic
+timers are restored.
+
+The roots timer/service and session-cleanup service were archived, removed, and
+read back as `not-found`/inactive. The old `timds-designer` Worker, its three
+container applications, source queue and consumer, old public Worker, runner
+Access application and disconnected tunnel were deleted and independently read
+back absent. Production/archived repositories, immutable releases, imported media,
+audit/transfer/tombstone history, static preview Workers, new host resources and
+shared Work Harness infrastructure remain retained.
+
+After retirement, the original Node fetch request profile again matched all
+**77/77 responses** (59 baseline + 18 fixture reads) at **17:41:07.789Z**, including
+status, byte count and SHA-256. These are the completed operational readbacks;
+no additional UI testing or new automated tests were performed.
+
+Two infrastructure inventory limits remain: SSH to the old shared VM timed out,
+so its local TimDS runner files/services are unverified; the existing credential
+returned HTTP 403 when reading the `draft-runner.timds.com` DNS record, so no
+unidentified DNS record was deleted. The disconnected tunnel and its Access app
+are confirmed absent. These limitations do not undo the completed native
+ownership transfer or the verified Cloudflare/portal VPS runtime retirement.
+
+The source `provider.url` correction described above is still a normal native
+source/new-release follow-up. Fresh CIMD authorization, local editing MCP
+authoring and remote `report_gap` write/replay acceptance remain scoped in the
+[MCP acceptance boundary](mcp-acceptance-boundary-2026-10-13.md); existing CLI and
+read evidence must not be relabelled as those unexercised checks.
