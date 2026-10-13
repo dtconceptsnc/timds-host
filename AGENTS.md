@@ -124,7 +124,7 @@ conformance package or deployed acceptance.
   additive and go into `docs/api/timds-host.openapi.json` with the document
   that explains them.
 - **Pins.** `cf@1.0.0-beta.14`, its Vite plugin, toolkit `0.1.464` in
-  `runtime/` and `conformance/`, and `0.1.472` at the root are deliberate.
+  `runtime/` and `conformance/`, and `0.1.473` at the root are deliberate.
   Do not bump them as a side effect of another change.
 - **Migrations.** Add a new numbered file under `migrations/`; never edit an
   applied one. Document the enabling flag and when to apply it.
