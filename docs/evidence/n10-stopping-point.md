@@ -1,5 +1,9 @@
 # N10 publication stopping point — 2026-10-13
 
+Historical snapshot. The original ten publications have since completed; see
+the [recovery result and final receipts](n10-recovery.md). The state below is
+preserved as the original pause record.
+
 The local batch watcher was stopped before pausing cloud work. The exact ten
 publication IDs came from the preserved batch state for batch
 `7fcba971-c7d9-4ed3-9d10-5b64f5ebd27a`, source

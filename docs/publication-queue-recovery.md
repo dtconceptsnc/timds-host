@@ -62,5 +62,7 @@ published row, cleared error, closed session, public stamp and immutable version
 after recovery.
 
 Local validation of the queue change: JavaScript syntax, `npm run typecheck`,
-and a complete `npm run build` passed. No tests were added or run. Deployment
-and actual recovery of the existing queue remain separately coordinated.
+and a complete `npm run build` passed. No tests were added or run. The original
+ten-publication queue subsequently completed through the coordinated sequence
+above; see the [actual recovery receipt](evidence/n10-recovery.md), including
+the limitation on direct lease visibility and the observed Workflow versions.
