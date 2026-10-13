@@ -95,7 +95,7 @@ if __name__=='__main__':
   missing=[k for k in RUNTIME_KEYS if not values.get(k)]
   if missing:raise RuntimeError('Missing runtime secrets in .env: '+', '.join(missing))
   if os.environ.get('TIMDS_USE_MANAGED_ARTIFACTS_AUTH')=='1':values['CLOUDFLARE_API_TOKEN']=credentials()[0]
-  pipe=(WORK/'secrets.json');os.mkfifo(pipe,0o600)
+  pipe=(WORK/'secrets.json');pipe.unlink(missing_ok=True);os.mkfifo(pipe,0o600)  # an interrupted run can leave the fifo behind
   def supply():
    with pipe.open('w') as f:json.dump(values,f)
   writer=threading.Thread(target=supply,daemon=True);writer.start()
