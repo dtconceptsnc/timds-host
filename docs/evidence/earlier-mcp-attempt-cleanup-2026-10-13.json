@@ -1,0 +1,9 @@
+{
+  "sourceId": "911d25de-0cc4-4406-a38f-80d2f44f462d",
+  "sessionId": "eb6e1fae-b802-4cc4-bb90-5d607ddf8333",
+  "startedAt": "2026-10-13T18:30:23.156Z",
+  "acceptanceClaimed": false,
+  "cleanupStatus": "closing",
+  "cleanupError": "Invalid agent fork identity (409)",
+  "sourceOrPublicationMutated": false
+}

@@ -80,3 +80,10 @@ checks passed. The live fresh-CIMD read above verified the deployed correction.
 
 This records a Codex-driven SDK client, not an interactive Claude Code session.
 No production design content or consumer pin was changed by these MCP checks.
+
+An earlier attempt against a different disposable source failed before an
+editable snapshot was returned. Its own session was requested closed, but
+cleanup rejected an uninitialized fork identity; it remains `closing`. This
+[separate cleanup receipt](earlier-mcp-attempt-cleanup-2026-10-13.json) is not
+claimed as successful acceptance and does not describe the successfully
+published session above. The pre-existing session on that fixture was untouched.
