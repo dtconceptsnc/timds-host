@@ -117,7 +117,9 @@ Apply inventories again, requires the same plan digest, refuses all collisions,
 and uses conditional `If-None-Match: *` writes with the expected SHA-256 checksum.
 It downloads and hashes each resulting object before recording success. Existing
 objects are verified again on resume; the receipt is evidence, not an authority
-to skip verification. Content files and sidecars precede the stamp, and the serving-map receipt (or
+to skip verification. Up to eight independent files copy concurrently, with
+serialized journal writes and all in-flight copies settled before an error is
+returned. Content files and sidecars precede the stamp, and the serving-map receipt (or
 host conversion's native manifest receipt) is last. Retained legacy bundle bytes
 and the public bundle responses are verified again before and after copying. A failed run can leave partial **immutable** content
 objects; repeating the approved command resumes safely. There is no rollback

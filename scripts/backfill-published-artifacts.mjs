@@ -291,7 +291,10 @@ async function apply(plan, opts, source, target) {
   const receipt = await exists(receiptPath) ? JSON.parse(await fs.readFile(receiptPath, 'utf8')) : {schemaVersion: 1, planSha256: plan.planSha256, startedAt: new Date().toISOString(), objects: []};
   assert(receipt.planSha256 === plan.planSha256, 'receipt_plan_mismatch');
   // The journal is progress evidence only. Every resumed object is GET/hash verified.
-  for (const operation of plan.identity.operations) {
+  // Copy independent files concurrently; serialize journal snapshots and keep
+  // every release marker behind all earlier file verification.
+  let journal = Promise.resolve();
+  async function copy(operation) {
     const prior = await target.get(operation.key, false, true);
     let wrote = false;
     if (!prior) {
@@ -310,10 +313,26 @@ async function apply(plan, opts, source, target) {
     const verified = prior || await target.get(operation.key, false, true);
     assert(verified?.size === operation.size && verified.sha256 === operation.sha256 && (opts.mode !== 'host-releases' || verified.metadataSha256 === operation.sha256), 'immutable_copy_verification_failed', {key: operation.key});
     const row = {key: operation.key, sha256: operation.sha256, size: operation.size, status: wrote ? 'copied-and-verified' : 'already-verified', verifiedAt: new Date().toISOString()};
-    const index = receipt.objects.findIndex(o => o.key === row.key); if (index < 0) receipt.objects.push(row); else receipt.objects[index] = row;
-    await save(receiptPath, receipt);
-    if (operation.phase !== 'file' || receipt.objects.length % 100 === 0) log({stage: 'apply', verifiedObjects: receipt.objects.length, key: operation.key, status: row.status});
+    journal = journal.then(async () => {
+      const index = receipt.objects.findIndex(o => o.key === row.key); if (index < 0) receipt.objects.push(row); else receipt.objects[index] = row;
+      await save(receiptPath, receipt);
+      if (operation.phase !== 'file' || receipt.objects.length % 100 === 0) log({stage: 'apply', verifiedObjects: receipt.objects.length, key: operation.key, status: row.status});
+    });
+    await journal;
   }
+  let files = [];
+  async function flush() {
+    while (files.length) {
+      const outcomes = await Promise.allSettled(files.splice(0, 8).map(copy));
+      const failed = outcomes.find(result => result.status === 'rejected');
+      if (failed) throw failed.reason;
+    }
+  }
+  for (const operation of plan.identity.operations) {
+    if (operation.phase === 'file') files.push(operation);
+    else { await flush(); await copy(operation); }
+  }
+  await flush();
   return {receipt, receiptPath};
 }
 async function main() {
