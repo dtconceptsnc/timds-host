@@ -105,11 +105,25 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     const page = await store.eventsAfter(source.id, after, Math.min(limit, TIMDS_EVENT_FEED_LIMIT));
     return { apiVersion: TIMDS_HOST_API_VERSION, sourceId: source.id, events: page.events, latestSeq: page.latestSeq, hasMore: page.hasMore };
   }
+  // Self-join backs the Studio invite link, which carries only the session id:
+  // any identity the Design System already authorizes may join an open session.
+  // Inviting another principal still needs the owner or a publisher.
+  async function joinable(id, actor) {
+    if (!uuid.test(id)) throw fail(404, 'Session not found');
+    const session = await store.get(id); if (!session) throw fail(404, 'Session not found');
+    const source = await store.getSource(session.source_id); ready(source, actor);
+    if (!actor.principalId || actor.system) throw fail(403, 'A TimDS identity is required');
+    await authorization.authorizeSource(source, actor);
+    if (store.eligible && !await store.eligible(source)) throw fail(409, 'Design System organization, project, or repository is inactive');
+    if (['closing','closed','expired'].includes(session.status) || (session.expires_at && Date.parse(session.expires_at) <= now())) throw fail(410, 'Session is closed or expired; start a new session');
+    return { session, source };
+  }
   async function join(actor, id, input = {}) {
-    const { session, source } = await owned(id, actor);
     const principalId = input.principalId || actor.principalId;
     if (!uuid.test(principalId || '')) throw fail(400, 'principalId is required');
-    if (principalId !== actor.principalId && session.owner_principal_id !== actor.principalId && !await canPublish(source, actor)) throw fail(403, 'Only the session owner or a publisher may invite members');
+    const inviting = principalId !== actor.principalId;
+    const { session, source } = inviting ? await owned(id, actor) : await joinable(id, actor);
+    if (inviting && session.owner_principal_id !== actor.principalId && !await canPublish(source, actor)) throw fail(403, 'Only the session owner or a publisher may invite members');
     if (authorization.authenticatePrincipal) await authorization.authenticatePrincipal(principalId);
     await store.addMember({ session_id: id, principal_id: principalId, role: session.owner_principal_id === principalId ? 'owner' : 'member', invited_by: actor.principalId }, event(actor, 'member_joined'));
     return status(actor, id);

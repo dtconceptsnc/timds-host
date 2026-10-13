@@ -52,3 +52,4 @@ html[data-busy]::before{content:"";position:fixed;top:0;left:0;height:3px;width:
 .live-indicator[data-state=connecting]:before,.live-indicator[data-state=reconnecting]:before{animation:studio-blink 1s infinite}
 @keyframes studio-blink{50%{opacity:.3}}@keyframes studio-spin{to{transform:rotate(360deg)}}@keyframes studio-bar{0%{left:-40%;opacity:1}100%{left:100%;opacity:1}}
 @media(prefers-reduced-motion:reduce){.spin,button[aria-busy=true]::after{animation:studio-blink 1.4s ease-in-out infinite;border-right-color:currentColor}html[data-busy]::before{animation:none;opacity:1;left:0;width:100%}.live-indicator[data-state=connecting]:before,.live-indicator[data-state=reconnecting]:before{animation:none}}
+.copy-row{display:flex;align-items:center;gap:8px}.copy-row input{flex:1;min-width:0;font-family:ui-monospace,Menlo,monospace;font-size:13px}

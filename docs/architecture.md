@@ -8,7 +8,7 @@ host authoring and publication acceptance, phone usage and production migration
 remain in progress. The health endpoint deliberately reports integration status.
 
 The design was reviewed against portal commit `2b0148c` and toolkit OAuth
-[PR #100](https://github.com/dtconceptsnc/timds-toolkit/pull/100). The
+[PR #100](https://github.com/sticktrk/timds-toolkit/pull/100). The
 production portal baseline passed (private operational record), and
 the subsequent Request recovery and fixture cleanup are settled in that receipt.
 The original proposed interfaces below remain design context; concrete modules
@@ -417,6 +417,8 @@ re-arm the alarm so the next Request starts within about a second. Before
 its session last submitted, else `tokens.json`, `tokens/**`, `src/**`, with the
 prompt's first 200 characters as its note). `GET .../principals` lists active
 principals with a grant on the source, plus the designer agent, for invitations.
+`GET /api/timds/me` returns the caller's own principal (`id`, `type`, `name`,
+`admin`), which is the id an owner or publisher passes to `join` to invite them.
 
 ### Warm drafts and wake
 
@@ -667,9 +669,13 @@ host API and OAuth session and need actual phone/browser verification.
 Studio is a steering console, not an editor: agents are the only writers.
 Humans direct through Requests and decide with publish, rollback, close and
 invite; claims are shown read-only, and conflicts go back to an agent as a
-follow-up Request generated from the conflict receipt. Studio refuses the
-snapshot, `update`, `submit` and `claims` session routes client-side. The
-session/draft live URL and each submission's Preview URL are embedded in
+follow-up Request generated from the conflict receipt. An invite is a link
+(or the same link as a `timds join` command): Studio offers
+`#source=…&view=studio&session=…&join=1`, and an opener the Design System
+already authorizes joins through `POST /api/timds/sessions/:id/join` with no
+`principalId`; membership grants session access, not publication. Studio refuses the snapshot, `update`,
+`submit` and `claims` session routes client-side. The session/draft live URL
+and each submission's Preview URL are embedded in
 sandboxed iframes (`allow-scripts allow-same-origin allow-forms`, no referrer).
 Studio's CSP `frame-src` comes only from `TIMDS_STUDIO_FRAME_ORIGINS` (validated
 `https://` origins or one-level wildcards; empty means `'none'`), and Studio

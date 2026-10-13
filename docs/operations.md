@@ -231,7 +231,7 @@ the API. `/authorize` and `/service-auth` should redirect anonymous browsers to
 Access, while discovery stays public and anonymous API calls return 401.
 
 OAuth support shipped in `@dtconcepts/timds@0.1.471`
-([merged change](https://github.com/dtconceptsnc/timds-toolkit/pull/100)).
+([merged change](https://github.com/sticktrk/timds-toolkit/pull/100)).
 Use that published CLI for login; the native merge/build container remains
 pinned to its validated `0.1.464` release.
 

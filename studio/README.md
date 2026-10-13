@@ -32,12 +32,16 @@ The Overview explains the three ways to make a change, each as a card:
    (`timds auth login --oauth`, then `timds mcp`). The card says that editing
    over MCP is not production-ready.
 3. **Edit locally with npm.** Install `@dtconcepts/timds` globally, log in
-   with OAuth against this origin, `timds start <systemId>` to pull a session
-   to disk, `timds dev`, and `timds submit` to send it back for review.
+   with OAuth against this origin, `timds start <systemId>` to pull a new
+   session to disk, `npm ci`, `timds dev`, and `timds submit` to send it back
+   for review. The card says that this starts a new session and points at the
+   join command under **Invite…** for one that is already open.
 
 Each snippet has a **Copy** button (the Clipboard API; no inline script). The
 toolkit version in the snippets is the `TOOLKIT` constant at the top of
-`app.js`; keep it in step with the root `package.json`. Below the cards the
+`app.js`; keep it in step with the root `package.json`. `timds start` carries
+`--portal-url <origin>`, because a toolkit that has no workspace yet does not
+otherwise know which host to call. Below the cards the
 Overview lists drafts and sessions, recent Requests and the last releases. The
 Request composer lives on the Sessions page.
 
@@ -84,11 +88,11 @@ areas (claims) are shown read-only; agents declare them as they edit.
   **Ask the agent to resolve**.
 - **The rail (right column) stays basic.** The current published version,
   this session's submissions with the stage strip, **Publish…** (publishers
-  only) and **Preview ↗**, the session's people (members only, no invite
-  form), the session's state (status, live view, designer, queue, expiry) and
-  close. Invitations, working areas, other sessions and the release history
-  stay on the dashboard pages. The top bar carries the
-  dashboard breadcrumb, the current release label, the presence avatars and
+  only) and **Preview ↗**, the session's people (the member list, plus
+  **Invite…** for the owner and publishers while the session is open), the
+  session's state (status, live view, designer, queue, expiry) and close.
+  Working areas, other sessions and the release history stay on the dashboard
+  pages. The top bar carries the dashboard breadcrumb, the current release label, the presence avatars and
   the feed indicator. Review still embeds each submission's Preview with the
   same frame component.
 - **Publication.** Preflight, optional build-only check, explicit publish and a
@@ -105,8 +109,24 @@ areas (claims) are shown read-only; agents declare them as they edit.
   (base #375638). Keep the intent of the latest Request and prefer the value
   that satisfies it; update related tokens for consistency.` There is no
   mine-or-theirs chooser.
-- **People.** Owners and publishers invite people and agents from the source's
-  principal directory into sessions and drafts, and can close them.
+- **People.** **Invite…** in the rail opens the Join Session widget: two
+  copyable rows, each with a **Copy** button that falls back to selecting the
+  text when the clipboard is unavailable. **Studio link** is
+  `/studio/#source=…&view=studio&session=…&join=1`; anyone the Design System
+  already authorizes who opens it is joined through
+  `POST /api/timds/sessions/:id/join` with no `principalId`, sees a notice,
+  and lands in that session's Studio. The `join` flag is removed from the hash
+  before the join so a reload does not repeat it, and the hash survives the
+  sign-in round trip; a failed join shows the host's error and the page then
+  opens as usual. **Terminal** is the same invitation in the toolkit's words,
+  `npx --yes --package @dtconcepts/timds timds join "<studio link>"`: the
+  command signs in through the link's host origin if needed, calls the same
+  join route as itself, and pulls the session into a new `./session-<id
+  prefix>` folder. `timds join` takes a session id in every release; it takes
+  the link only in toolkit releases after `0.1.472`, so this row works once
+  `TOOLKIT` names such a release. Membership grants session access, not
+  publication. There is no principal picker; owners and publishers can still
+  close sessions.
 
 ## Loading and busy states
 
