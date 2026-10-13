@@ -39,9 +39,11 @@ Verify behavior through actual CLI, API and browser use; do not write tests.
 - Ten real designer Requests submitted independent token changes, all reviewed
   with no author-side conflicts. The first two published consecutive versions
   `2026.10.13-3` and `2026.10.13-4`; the full ten-publication acceptance is not
-  complete. Preserve all existing publication IDs. See
-  [queue recovery](../publication-queue-recovery.md) and the workflow pause
-  receipt recorded alongside it for final provider status.
+  complete. All eight unfinished original Workflow instances are paused,
+  verified at `15:03:20Z`; the first two remain complete. The third finished
+  release staging before pause and has not run flip. Preserve all existing IDs
+  and receipts. See [queue recovery](../publication-queue-recovery.md) and the
+  [provider pause receipt](n10-workflow-pause.json).
 - Phone Studio navigation, designer Request/review/preview, and a saved manual
   file edit were exercised. Manual submit is still unresolved: session
   `5f8b12cf-df51-4c41-b793-9104ff74963c`, submission
@@ -84,6 +86,7 @@ Verify behavior through actual CLI, API and browser use; do not write tests.
 
 Private full migration receipts/configuration are retained under the operator's
 `~/.config/timds/transfer69/` directory. The local batch checkpoint is
-`/tmp/timds69-host-acceptance/designer-batch.json`; preserve its IDs on resume.
+`/tmp/timds69-host-acceptance/designer-batch.json`, also backed up as
+`~/.config/timds/transfer69/designer-batch.json`; preserve its IDs on resume.
 The local batch watcher was stopped at the user's request. No new production
 deployment or migration was started for this stopping point.
