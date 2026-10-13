@@ -54,7 +54,7 @@ records; run it before opening a pull request.
 | `docs/` | Architecture, operations, API notes, recovery procedures. Index in `docs/README.md`. |
 | `docs/api/timds-host.openapi.json` | The vendored API v1 contract. Additive changes only. |
 | `scripts/` | Operational tools and the repository checks. Most touch real resources. |
-| `test/` | `node --test` suites using real SQLite adapters; see "Which checks mean what". |
+| `test/` | Plain-Node smoke suite (`npm test`); see "Which checks mean what". |
 | `spikes/` | Historical proofs of tooling behaviour. Reference only; do not extend. |
 | `cloudflare.config.ts` | Worker, Durable Object, container, queue and Workflow configuration driven by `TIMDS_*` environment. |
 
@@ -69,12 +69,10 @@ these commands need Cloudflare credentials or network access to a host.
 | `npm ci` | Install pinned dependencies. | network once |
 | `npm run typecheck` | Generates Worker types, then `tsc --noEmit`. | nothing else |
 | `npm run build` | `cf build`: bundles the Worker and builds the three container images locally. | Docker |
-| `npm test` | The focused suites CI runs (file trees, build cache). Fast and green. | nothing else |
-| `npm run test:all` | Every `test/**/*.test.mjs` suite. Some are known to fail; see below. | nothing else |
+| `npm test` | The smoke suite CI runs: module loading, migrations and catalog bootstrap, Access tokens, public serving, public MCP. Fast and green. | nothing else |
 | `npm run check:docs` | Markdown links and anchors resolve; every `docs/` file is in `docs/README.md`. | nothing else |
 | `npm run check:boundary` | Public-boundary scan of lines added since the merge base. `-- --all` audits everything. | nothing else |
 | `npm run check` | typecheck, test, check:docs and check:boundary in sequence. | nothing else |
-| `node --test test/<area>/*.test.mjs` | One area's suites. | nothing else |
 | `cd conformance && npm ci --ignore-scripts && npm test` | Conformance harness unit tests. | network once |
 | `npm run dev` | `cf dev`. Artifacts still needs a remote disposable namespace. | credentials |
 
@@ -94,20 +92,17 @@ local run as acceptance, and do not claim a live result you did not observe.
 Choose the local check by the change:
 
 - **Documentation or examples only:** `npm run check:docs` and `npm run check:boundary`.
-- **Worker or runtime code:** `npm run typecheck`, `npm run build`, the suites
-  for the areas touched, and the document that specifies the behaviour.
+- **Worker or runtime code:** `npm run typecheck`, `npm run build`, `npm test`,
+  and the document that specifies the behaviour.
 - **`cloudflare.config.ts`, Dockerfiles, migrations:** `npm run build` plus the
   operations runbook section that describes them.
 - **Conformance package:** its own `npm test`; the host tests stay untouched.
 
-Known state of `npm run test:all` as of 2026-10-13 on Node 26: 105 pass, 23
-fail. The failures are in `test/publication/steps.test.mjs`,
-`test/runtime/artifacts.test.mjs`, `test/runtime/repository-adapter.test.mjs`,
-`test/live/sessions.test.mjs`, `test/mcp.test.mjs`, `test/store.test.mjs` and
-`test/store-workerd.test.mjs`, and they predate any current branch. Treat a
-failure in those files as signal only if your change touches that area; do not
-spend a task "fixing" them unless that is the task. The other eleven suites and
-the focused `npm test` set pass.
+The smoke suite is deliberately small. It checks that the code loads and that
+a handful of in-process paths work; it is not a behavioural unit-test suite,
+and this repository does not want one. Do not add unit tests for individual
+functions; keep `npm test` green and fast, and prove behaviour through the
+conformance package or deployed acceptance.
 
 ## Conventions
 

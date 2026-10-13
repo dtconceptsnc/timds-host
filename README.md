@@ -61,19 +61,23 @@ internals and keeps the current descriptor available outside the bounded list.
 
 ## Verification and limitations
 
-Run `npm run typecheck` and `npm run build` for local validation. The
-[CI guide](docs/ci.md) distinguishes build checks from authenticated live-host
-acceptance. The [conformance package](conformance/README.md) describes the API
-checks and disposable resources required to run them.
+Run `npm run typecheck`, `npm run build` and `npm test` for local validation.
+The [CI guide](docs/ci.md) distinguishes build checks from authenticated
+live-host acceptance. The [conformance package](conformance/README.md) describes
+the API checks and disposable resources required to run them.
+
+`npm test` runs a small smoke suite under `test/` with plain Node: every
+portable `src` module loads, the D1 migrations apply to a fresh SQLite database
+and the catalog bootstraps an administrator, a signed Access token verifies,
+the public origin serves a published fixture, and the public MCP endpoint
+answers the published SDK client. It needs no Workers runtime, Docker, network
+or credentials. Behavioural acceptance of the real host is the conformance
+suite, not this smoke suite.
 
 Snapshot persistence and isolated build/metadata copies stream at most four
 files concurrently, draining pending transfers before cleanup and committing
 manifests only after all transfers succeed. Git operations and publication gates
-remain serialized. Focused checks run with:
-
-```sh
-node --test test/runtime/file-trees.test.mjs test/build/cache.test.mjs
-```
+remain serialized.
 
 Keep installation inventories, customer identities, domains, source and release
 IDs, operational receipts, and resumable production work records in private

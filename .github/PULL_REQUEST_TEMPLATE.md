@@ -8,7 +8,7 @@
 
 - `npm run typecheck`:
 - `npm run build`:
-- `npm test` / `node --test <suites>`:
+- `npm test`:
 - `npm run check:docs`:
 - `npm run check:boundary`:
 - `cd conformance && npm test`:

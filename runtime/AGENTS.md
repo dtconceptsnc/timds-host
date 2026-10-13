@@ -13,8 +13,7 @@ Supplements the root [`AGENTS.md`](../AGENTS.md).
   the host. Keep them distinct and do not bump either as a side effect.
 - Credentials given to a container are short-lived capabilities minted by the
   Worker. Never persist them, log them, or return them in an error.
-- Tests for this directory live in `../test/runtime/`; `file-trees.test.mjs`,
-  `live-dev.test.mjs`, `repository-engine.test.mjs` and `agent.test.mjs` are
-  green, while `artifacts.test.mjs` and `repository-adapter.test.mjs` have
-  known pre-existing failures (see the root guide).
+- There are no local tests for this directory. The root `npm test` smoke suite
+  only checks that the Worker-side modules load; container behaviour is proven
+  by `npm run build` and deployed acceptance (see the root guide).
 - A Dockerfile change needs `npm run build` with Docker running.
