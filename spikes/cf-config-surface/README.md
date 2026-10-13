@@ -14,4 +14,4 @@ Both commands passed on 2026-10-13. The latter builds and validates without
 provisioning or uploading. Keep `--dry-run`: these placeholder names exist only
 to check configuration.
 
-[Findings and exact R2/provisioning snippets](../../docs/evidence/cf-config-surface.md).
+Findings and exact R2/provisioning snippets (private operational record).

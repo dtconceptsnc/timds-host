@@ -83,7 +83,7 @@ there is no old-storage fallback.
   CSP, no-referrer policy, five-minute current cache and one-year pinned cache.
   GET, HEAD and exact If-None-Match behavior follow the portal handler. The
   companion handles OPTIONS and strips incoming browser credentials.
-- Unlisted hosts return the historical `Design System not found.` 404. Nacho's
+- Unlisted hosts return the historical `Design System not found.` 404. The deleted source's
   hosts remain unlisted, with no imported source or artifact namespace.
 
 ## Routing preparation
@@ -107,7 +107,7 @@ The actual renderer was run read-only against the three existing production
 artifact trees and compared with 37 anonymous public GETs. All statuses, bodies
 and MIME types matched, including the primary 12 URLs, mirrors, historical roots,
 missing reference-text synthesis, and representative CSS/JSON. See
-[the sanitized receipt](../evidence/legacy-public-http-rehearsal.json).
+the sanitized receipt (private operational record).
 
 That rehearsal used authoritative local files, because no host-release copy or
 import was authorized. It does **not** exercise R2 manifest verification, the

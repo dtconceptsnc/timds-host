@@ -2,7 +2,7 @@
 
 This isolated Phase 0 spike proves a container-backed SQLite Durable Object,
 credential-isolated Git clone/commit/push against Artifacts, D1, R2 and a Queue.
-It contains no TimDS host implementation. See [the dated receipts](../../docs/evidence/phase-0.md).
+It contains no TimDS host implementation. See the dated receipts (private operational record).
 
 Pin `cf@1.0.0-beta.14` and use `cloudflare.config.ts`. No Wrangler binary or
 package is required. Node 22.18+ and a running Docker engine are required. Use a

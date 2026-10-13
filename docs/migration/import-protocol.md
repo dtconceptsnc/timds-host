@@ -83,7 +83,7 @@ explicit tombstone procedure below; do not send them through active import.
 
 ## Already-deleted sources
 
-The separate tombstone route preserves deleted Nacho identities and their public
+The separate tombstone route preserves deleted source identities and their public
 404s. It does not provision, adopt or delete any Artifacts repository, Preview,
 Sandbox or R2 object. It imports no versions, publication events, assets, grants,
 principal mappings or original content. An archived but undeleted source is not

@@ -3,20 +3,20 @@
 The isolated host now implements the coordinator/store, native repository and
 live containers, offline publication builds, seven-stage Workflow, OAuth/Access,
 public roots/MCP and Studio described here. The deployed resource and HTTP
-receipts are in [deployment evidence](evidence/phase-3-deployment.md). Authenticated
+receipts are in deployment evidence (private operational record). Authenticated
 host authoring and publication acceptance, phone usage and production migration
 remain in progress. The health endpoint deliberately reports integration status.
 
 The design was reviewed against portal commit `2b0148c` and toolkit OAuth
 [PR #100](https://github.com/dtconceptsnc/timds-toolkit/pull/100). The
-[production portal baseline passed](evidence/phase-1-portal-conformance.md), and
+production portal baseline passed (private operational record), and
 the subsequent Request recovery and fixture cleanup are settled in that receipt.
 The original proposed interfaces below remain design context; concrete modules
 under `src/` and `runtime/` are authoritative for implemented names. Migration
 and portal-client sections describe work still required before cutover.
 
-The detailed [store review](evidence/store-port-review.md) records the exact
-adapter methods and constraints; the [runtime extraction plan](evidence/runtime-extraction-plan.md)
+The detailed store review (private operational record) records the exact
+adapter methods and constraints; the runtime extraction plan (private operational record)
 records the latest Request recovery, binary transport and native refresh
 behavior that must survive the port. The OAuth client branch now includes
 upstream toolkit `0.1.470`; conformance and controlled publication remain pinned
@@ -85,7 +85,7 @@ store adapter initially, and the existing camelCase wire views at the boundary.
 | `server/design-system-submission-publish-worker.mjs` | `src/build/*` plus an image-baked adapter. Its filesystem, subprocess and Docker code cannot execute in a Worker. |
 | `server/design-system-publication-artifacts.mjs` | `src/artifacts/staging.ts`: R2 write-once staging with the same opaque-reference checks. |
 | `server/design-system-public-roots.mjs`, `design-system-read-mcp.mjs` | `src/public/*`, `src/mcp/*`: preserve byte selection and views; replace local-filesystem/Supabase access with R2 and catalog adapters. |
-| `server/design-system-public-urls.mjs` | Inject a configured URL builder; preserve imported timds.com/speed.style aliases and slug mappings. |
+| `server/design-system-public-urls.mjs` | Inject a configured URL builder; preserve imported configured domain aliases and slug mappings. |
 
 The session factory already accepts
 `createDesignSystemSessions({store,repository,authorization,cleanupAgentSession,onSessionReserved,onSessionStarted,now})`.
@@ -529,7 +529,7 @@ Toolkit merge is a supported pure package export. Publication helpers also
 import Node-oriented core and starter code today. Use an image-baked trusted
 toolkit RPC for release preparation/check/stamp operations unless a supported
 Worker-safe export is added. Never import helper code from the source being
-published. Details are in the [publication port review](evidence/publication-port-review.md).
+published. Details are in the publication port review (private operational record).
 
 ## OAuth, Access and route policy
 
@@ -706,12 +706,11 @@ incorrect external `script_name` validation. `cf dev` is the local loop;
 does not add Docker to the deployed host's operational architecture.
 
 Add and prove Workflow, OAuth KV and static asset declarations with the actual
-pinned `cf` API. The [configuration fixture](evidence/cf-config-surface.md) now
+pinned `cf` API. The configuration fixture (private operational record) now
 passes type generation, build and deploy dry-run for those declarations; it
 does not establish live Workflow or OAuth acceptance. A follow-up toolchain run proved `cf previews deploy` inside
 real Workers Builds, with successful main and review-branch builds, serving
-URLs and resource cleanup; its [receipt](evidence/cf-preview-builds.md) is in the evidence
-directory. Those successes do not prove the unimplemented host publication
+URLs and resource cleanup; its receipt is retained privately. Those successes do not prove the unimplemented host publication
 path. Keep any missing `cf` equivalent explicit in the README; do not silently
 introduce Wrangler.
 Artifacts development needs a disposable remote namespace, so distinguish

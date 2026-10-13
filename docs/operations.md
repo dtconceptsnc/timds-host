@@ -1,7 +1,7 @@
 # Operate a TimDS host
 
 These commands target the repository's pinned `cf@1.0.0-beta.14`. They reproduce
-the [isolated deployment](evidence/phase-3-deployment.md), whose authenticated
+the isolated deployment (private operational record), whose authenticated
 acceptance is still in progress. Use a fresh installation name and disposable
 source for initial acceptance. Existing-system import/cutover is separate;
 provisioning below does not adopt existing repositories.
@@ -123,36 +123,21 @@ bucket with other rules. Released bytes and provenance are copied to
 Snapshots stay in SNAPSHOTS. A release label cannot be reused for different
 bytes or a different source commit.
 
-## The timds-host-69 installation
+## Deployment helper
 
-The deployed installation behind `https://studio.timds.com` is Worker
-`timds-host-69` in account `e25df25724ba27024ad08e3096b5bd37`. Its deployment
-helper is [`scripts/deploy-timds-host-69.py`](../scripts/deploy-timds-host-69.py);
-run it from any checkout or worktree of this repository:
+[`scripts/deploy-host.py`](../scripts/deploy-host.py) wraps the resource,
+catalog, lock, deploy and companion steps for one installation. It reads the
+installation record and the runtime secrets from the checkout's `.env`
+(gitignored, owner-only; start from
+[`scripts/deploy-host.example.env`](../scripts/deploy-host.example.env)) and
+keeps created resource ids in `.env.deploy-state.json`. Nothing
+installation-specific is tracked; see [verification](verification.md). The
+Cloudflare CLI OAuth tokens come from the local wrangler and cloudflare CLI
+config files, and `cf deploy` receives the runtime secrets through a fifo.
 
 ```sh
-python3 scripts/deploy-timds-host-69.py deploy
+python3 scripts/deploy-host.py deploy
 ```
-
-The nonsecret environment described above is built inside the helper's
-`environment()` (host, Studio and public origins, Access team and audience,
-designer principal, Artifacts and legacy media bindings, subdomain aliases,
-`TIMDS_STUDIO_FRAME_ORIGINS`). Created resource ids are the installation
-record in [`scripts/deploy-timds-host-69.state.json`](../scripts/deploy-timds-host-69.state.json).
-Logs and the secrets fifo go to `TIMDS69_DEPLOY_DIR` (default
-`/tmp/timds-host-69-deploy`). No secret is stored in the repository; the
-helper reads each one at run time from these places:
-
-| Credential | Where it lives |
-| --- | --- |
-| Cloudflare deployment OAuth token (Workers, Containers, D1, R2, KV, Queues, Workflows) | `~/Library/Preferences/.wrangler/config/default.toml` |
-| Cloudflare Builds OAuth token | `~/Library/Preferences/cloudflare/config/default.json` |
-| `CLOUDFLARE_API_TOKEN`, `TIMDS_BUILDS_API_TOKEN`, `OPENAI_API_KEY`, `TIMDS_BOOTSTRAP_SECRET`, `TIMDS_PORTAL_TRANSFER_SECRET` (runtime secrets) | This checkout's `.env`: gitignored, owner-only (`0600`), never committed or printed. `python3 scripts/deploy-timds-host-69.py import-secrets` filled it once from the retired portal VPS (`/var/www/portal.dtconcepts.net/.env.server`) and the earlier private bootstrap and transfer files; `deploy` refuses to run without it |
-
-The retired portal designer Worker `timds-designer` kept its own settings:
-`MODEL` and `PORTAL_ORIGIN` in the toperator repository at
-`cloudflare/timds-designer/wrangler.jsonc`, and the `OPENAI_API_KEY` and
-`TIMDS_SANDBOX_RUNNER_TOKEN` secrets stored on that Worker in Cloudflare.
 
 ## Runtime secrets and deployment
 
@@ -174,7 +159,7 @@ CLI OAuth token is not a replacement for this registered runtime API token.
 Workers Scripts Write also authorizes event subscription creation/deletion, so
 a separate Queues Write grant is not required for those calls. No zone/DNS
 permissions are needed for workers.dev previews. See the exact
-[runtime authority inventory](evidence/runtime-cloudflare-auth.md).
+runtime authority inventory (private operational record).
 Do not paste credential-bearing Artifacts repository-create responses: creation
 issues a capability. The host captures and revokes that initial capability.
 
@@ -461,7 +446,7 @@ Keep source/release identity and event correlation intact; do not clear
 coordinator or catalog state to force a retry.
 
 For existing systems, recapture the
-[migration baseline](evidence/migration-baseline.md) immediately before migration,
+migration baseline (private operational record) immediately before migration,
 preserve historical first-event version bindings and public domains, and verify
 all required public bytes before cutover. The baseline is read-only evidence,
 not an import or cutover receipt.
@@ -498,8 +483,8 @@ Worker-list call. Node container programs retain Node's supported redirect mode.
   There is no `cf workers secrets put`. Bucket locks are a separate R2 API/CLI
   operation, not a property of the R2 binding configuration.
 
-See [native toolchain evidence](evidence/phase-0.md),
-[Builds evidence](evidence/cf-preview-builds.md), and the
+See native toolchain evidence (private operational record),
+Builds evidence (private operational record), and the
 [Cloudflare configuration documentation](https://developers.cloudflare.com/cf/projects/cloudflare-config/).
 
 

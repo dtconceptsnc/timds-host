@@ -38,5 +38,5 @@ original manual session's metadata-only status and its source submission list.
 Both active URLs used the new `timds.workers.dev` domain. The original submission
 ID, review branch, original base and immutable review head stayed unchanged;
 the later saved fork revision also remained intact. See the
-[sanitized receipt](evidence/active-url-projection.json). This receipt verifies
+sanitized receipt (private operational record). This receipt verifies
 API identity and URL projection; browser rendering is separate acceptance.

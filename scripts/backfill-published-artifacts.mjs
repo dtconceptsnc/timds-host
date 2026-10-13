@@ -224,9 +224,9 @@ async function inventory({baseline, baselineDigest, opts, source, target}) {
     if (opts.mode === 'legacy') for (const item of reconciliations) {
       const fileOperation = releaseOps.find(operation => operation.path === item.localPath);
       assert(fileOperation, 'reconciliation_file_missing');
-      // If the conflicting legacy key is also the raw full path (Speed), the
-      // serving map redirects that file to the sidecar. Nested raw paths remain
-      // independently preserved (Pierce/WPL); the root bundle uses the sidecar.
+      // If a conflicting legacy key is also the raw full path, the serving map
+      // redirects that file to the sidecar. Nested raw paths stay independently
+      // preserved; the root bundle uses the sidecar.
       if (fileOperation.key === item.retainedLegacyObject.key) fileOperation.key = item.sidecarKey;
       if (!releaseOps.some(operation => operation.key === item.sidecarKey)) releaseOps.push({...fileOperation, key: item.sidecarKey, phase: 'sidecar'});
     }
@@ -337,7 +337,7 @@ async function apply(plan, opts, source, target) {
 }
 async function main() {
   const {values: opts} = parseArgs({options: Object.fromEntries(['baseline','artifact-root','sources','source-bucket','target-bucket','source-env-prefix','target-env-prefix','sdk-root','plan','receipt','approve-plan-sha256','mode'].map(key => [key, {type: 'string'}]).concat([['apply',{type:'boolean',default:false}],['help',{type:'boolean',default:false}]])), strict: true});
-  if (opts.help) { process.stdout.write('Usage: node scripts/backfill-published-artifacts.mjs --baseline /absolute/fresh.json --artifact-root /absolute/artifacts --sources pierce,wpl,speed --source-bucket timds-public-assets --target-bucket timds-public-assets --source-env-prefix PORTAL_TIMDS_ASSET_R2 --target-env-prefix PORTAL_TIMDS_ASSET_R2 --sdk-root /absolute/portal --plan /absolute/plan.json [--mode legacy|host-releases] [--apply --approve-plan-sha256 <reviewed digest> --receipt /absolute/receipt.json]\nDefault dry-run. No credentials in arguments. See docs/migration/artifact-backfill.md.\n'); return; }
+  if (opts.help) { process.stdout.write('Usage: node scripts/backfill-published-artifacts.mjs --baseline /absolute/fresh.json --artifact-root /absolute/artifacts --sources example-a,example-b,example-c --source-bucket timds-public-assets --target-bucket timds-public-assets --source-env-prefix PORTAL_TIMDS_ASSET_R2 --target-env-prefix PORTAL_TIMDS_ASSET_R2 --sdk-root /absolute/portal --plan /absolute/plan.json [--mode legacy|host-releases] [--apply --approve-plan-sha256 <reviewed digest> --receipt /absolute/receipt.json]\nDefault dry-run. No credentials in arguments. See docs/migration/artifact-backfill.md.\n'); return; }
   for (const key of ['baseline','artifact-root','sources','source-bucket','target-bucket','source-env-prefix','target-env-prefix','sdk-root','plan']) assert(opts[key], 'missing_argument', {argument: key});
   for (const key of ['baseline','artifact-root','sdk-root','plan','receipt']) if (opts[key]) assert(path.isAbsolute(opts[key]), 'absolute_path_required', {argument: key});
   opts['artifact-root'] = await fs.realpath(opts['artifact-root']);
