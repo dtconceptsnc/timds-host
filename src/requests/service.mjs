@@ -14,8 +14,11 @@ const activeRun = run => ['starting','running','submitting'].includes(run?.state
 export const runnerView = status => {
   const run=status?.runner,live=status?.state;
   const state=['closed','closing'].includes(live)?'closed':!run?'idle':activeRun(run) || ['failed','conflicted'].includes(run.state)?run.state:live==='sleeping'?'sleeping':run.state==='submitted'?'submitted':'unknown';
-  return {state,requestId:run?.requestId || null,submissionId:run?.submissionId || null,error:run?.error || null};
+  return {state,requestId:run?.requestId || null,submissionId:run?.submissionId || null,error:run?.error || null,...(state==='conflicted' && Array.isArray(run?.conflicts) && run.conflicts.length?{conflicts:run.conflicts.slice(0,50).map(conflictReceipt)}:{})};
 };
+// A bounded, read-only conflict receipt for Studio: path, key, base/mine/theirs.
+const receiptValue = value => value===undefined || value===null ? null : typeof value==='string' ? value.slice(0,500) : typeof value!=='object' ? value : JSON.stringify(value).length<=500 ? value : {truncated:true};
+const conflictReceipt = item => ({path:String(item?.path || '').slice(0,500),...(typeof item?.key==='string'?{key:item.key.slice(0,500)}:{}),base:receiptValue(item?.base),mine:receiptValue(item?.mine),theirs:receiptValue(item?.theirs)});
 const unknownRunner = () => ({state:'unknown',requestId:null,submissionId:null,error:null});
 const timed = (task,ms) => {let timer;return Promise.race([task,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Runner status timed out')),ms);})]).finally(()=>clearTimeout(timer));};
 
