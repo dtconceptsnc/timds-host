@@ -2,13 +2,15 @@
 
 Usage, from any checkout or worktree of this repository:
 
-    python3 scripts/deploy-timds-host-69.py resources|catalog|lock|deploy|public
+    python3 scripts/deploy-timds-host-69.py import-secrets|resources|catalog|lock|deploy|public
 
 No secret is stored here or anywhere in the repository. At run time the script
 reads the Cloudflare CLI OAuth tokens from the local wrangler and cloudflare
-CLI config files, pulls the runtime secrets from the portal VPS over SSH,
-reads the bootstrap and transfer secrets from private 0600 files, and hands
-them to `cf deploy --secrets-file` through a fifo that is removed afterwards.
+CLI config files and the runtime secrets from this checkout's private,
+gitignored, owner-only `.env`, and hands them to `cf deploy --secrets-file`
+through a fifo that is removed afterwards. `import-secrets` fills that `.env`
+once from the retired portal VPS over SSH (plus the local bootstrap and
+transfer secret files) so nothing depends on that machine afterwards.
 The nonsecret installation record (account, Worker name, origins, Access
 audience, designer principal, Artifacts bindings) lives in environment();
 resource ids are in scripts/deploy-timds-host-69.state.json. Logs and the
@@ -21,6 +23,20 @@ ROOT=Path(__file__).resolve().parents[1];WORK=Path(os.environ.get('TIMDS69_DEPLO
 def state():
  WORK.mkdir(parents=True,exist_ok=True);return json.loads(STATE.read_text()) if STATE.exists() else {}
 def save(s):STATE.write_text(json.dumps(s,indent=2)+'\n')
+ENV=ROOT/'.env';RUNTIME_KEYS=['CLOUDFLARE_API_TOKEN','TIMDS_BUILDS_API_TOKEN','OPENAI_API_KEY','TIMDS_BOOTSTRAP_SECRET','TIMDS_PORTAL_TRANSFER_SECRET']
+def read_env():
+ if not ENV.is_file() or ENV.is_symlink() or ENV.stat().st_mode&0o077:raise RuntimeError('Private .env unavailable: create it with import-secrets (owner-only file mode required)')
+ values={}
+ for line in ENV.read_text().splitlines():
+  line=line.strip()
+  if not line or line.startswith('#') or '=' not in line:continue
+  key,value=line.split('=',1);value=value.strip()
+  if len(value)>=2 and value[0]==value[-1] and value[0] in '"\'':value=value[1:-1]
+  values[key.strip()]=value
+ return values
+def write_env(values):
+ fd=os.open(ENV,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600);os.fchmod(fd,0o600)
+ with os.fdopen(fd,'w') as f:f.write('# timds-host-69 runtime secrets. Local only: gitignored, owner-only. Never commit or print.\n'+''.join(f'{k}={v}\n' for k,v in values.items()))
 def credentials():
  broad=tomllib.loads((Path.home()/'Library/Preferences/.wrangler/config/default.toml').read_text())['oauth_token'];builds=json.loads((Path.home()/'Library/Preferences/cloudflare/config/default.json').read_text())['oauth_token'];return broad,builds
 def environment():
@@ -49,22 +65,26 @@ if __name__=='__main__':
  elif action=='lock':
   rules=[{'id':'immutable-releases','enabled':True,'prefix':'sources/','condition':{'type':'Indefinite'}}]
   cf(['r2','buckets','locks','update',s['releases'],'--rules',json.dumps(rules),'--force']);read=cf(['r2','buckets','locks','get',s['releases']]);print(json.dumps({'releaseBucket':s['releases'],'lock':read}))
- elif action=='deploy':
-  import shlex,secrets,threading
+ elif action=='import-secrets':
+  import shlex,secrets
   script="process.loadEnvFile('/var/www/portal.dtconcepts.net/.env.server'); process.stdout.write(JSON.stringify(Object.fromEntries(['CLOUDFLARE_ACCOUNT_ID','CLOUDFLARE_API_TOKEN','OPENAI_API_KEY','TIMDS_BUILDS_API_TOKEN'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]))));"
   remote=subprocess.run(['ssh','-o','BatchMode=yes','-o','ConnectTimeout=12','root@ssh.dtconcepts.net','/root/.nvm/versions/node/v25.4.0/bin/node -e '+shlex.quote(script)],capture_output=True,text=True,timeout=25)
   if remote.returncode:raise RuntimeError('Existing server credentials unavailable')
   values=json.loads(remote.stdout)
   if values.pop('CLOUDFLARE_ACCOUNT_ID',None)!=ACCOUNT or any(not values.get(k) for k in ['CLOUDFLARE_API_TOKEN','TIMDS_BUILDS_API_TOKEN','OPENAI_API_KEY']):raise RuntimeError('Existing runtime credentials unavailable or belong to another account')
-  bootstrap=Path('/tmp/timds69-bootstrap-secret')
-  if not bootstrap.exists():
-   fd=os.open(bootstrap,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-   with os.fdopen(fd,'w') as f:f.write(secrets.token_urlsafe(48))
+  bootstrap=Path('/tmp/timds69-bootstrap-secret');transfer=Path.home()/'.config/timds/host69-transfer-secret'
+  current=read_env() if ENV.is_file() else {}
+  values['TIMDS_BOOTSTRAP_SECRET']=current.get('TIMDS_BOOTSTRAP_SECRET') or (bootstrap.read_text().strip() if bootstrap.is_file() else secrets.token_urlsafe(48))
+  values['TIMDS_PORTAL_TRANSFER_SECRET']=current.get('TIMDS_PORTAL_TRANSFER_SECRET') or (transfer.read_text().strip() if transfer.is_file() else '')
+  if not values['TIMDS_PORTAL_TRANSFER_SECRET']:raise RuntimeError('Private transfer secret unavailable')
+  write_env({**current,'CLOUDFLARE_ACCOUNT_ID':ACCOUNT,**values});print(json.dumps({'env':str(ENV),'keys':sorted(values)}))
+ elif action=='deploy':
+  import threading
+  values={k:v for k,v in read_env().items() if k in RUNTIME_KEYS}
+  missing=[k for k in RUNTIME_KEYS if not values.get(k)]
+  if missing:raise RuntimeError('Missing runtime secrets in .env: '+', '.join(missing)+' (run import-secrets)')
+  if read_env().get('CLOUDFLARE_ACCOUNT_ID',ACCOUNT)!=ACCOUNT:raise RuntimeError('.env belongs to another account')
   if os.environ.get('TIMDS69_USE_MANAGED_ARTIFACTS_AUTH')=='1':values['CLOUDFLARE_API_TOKEN']=credentials()[0]
-  values['TIMDS_BOOTSTRAP_SECRET']=bootstrap.read_text()
-  transfer=Path.home()/'.config/timds/host69-transfer-secret'
-  if not transfer.is_file() or transfer.is_symlink() or transfer.stat().st_mode&0o077:raise RuntimeError('Private transfer secret unavailable')
-  values['TIMDS_PORTAL_TRANSFER_SECRET']=transfer.read_text()
   pipe=(WORK/'secrets.json');os.mkfifo(pipe,0o600)
   def supply():
    with pipe.open('w') as f:json.dump(values,f)
@@ -76,7 +96,7 @@ if __name__=='__main__':
      for secret in [*values.values(),*credentials()]:
       if secret:line=line.replace(secret,'[REDACTED]')
      log.write(line);log.flush()
-   code=proc.wait();print(json.dumps({'deployExit':code,'log':str(WORK/'deploy.log'),'bootstrapSecretPath':str(bootstrap)}))
+   code=proc.wait();print(json.dumps({'deployExit':code,'log':str(WORK/'deploy.log')}))
    if code:raise SystemExit(code)
   finally:pipe.unlink(missing_ok=True)
  elif action=='public':

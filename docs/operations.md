@@ -147,9 +147,7 @@ helper reads each one at run time from these places:
 | --- | --- |
 | Cloudflare deployment OAuth token (Workers, Containers, D1, R2, KV, Queues, Workflows) | `~/Library/Preferences/.wrangler/config/default.toml` |
 | Cloudflare Builds OAuth token | `~/Library/Preferences/cloudflare/config/default.json` |
-| `CLOUDFLARE_API_TOKEN`, `TIMDS_BUILDS_API_TOKEN`, `OPENAI_API_KEY` (runtime secrets) | Portal VPS, `root@ssh.dtconcepts.net:/var/www/portal.dtconcepts.net/.env.server`, read over SSH |
-| `TIMDS_BOOTSTRAP_SECRET` | Private `0600` file `/tmp/timds69-bootstrap-secret`, generated on the first deploy; move it under `~/.config/timds/` to survive reboots |
-| `TIMDS_PORTAL_TRANSFER_SECRET` | Private `0600` file `~/.config/timds/host69-transfer-secret` |
+| `CLOUDFLARE_API_TOKEN`, `TIMDS_BUILDS_API_TOKEN`, `OPENAI_API_KEY`, `TIMDS_BOOTSTRAP_SECRET`, `TIMDS_PORTAL_TRANSFER_SECRET` (runtime secrets) | This checkout's `.env`: gitignored, owner-only (`0600`), never committed or printed. `python3 scripts/deploy-timds-host-69.py import-secrets` filled it once from the retired portal VPS (`/var/www/portal.dtconcepts.net/.env.server`) and the earlier private bootstrap and transfer files; `deploy` refuses to run without it |
 
 The retired portal designer Worker `timds-designer` kept its own settings:
 `MODEL` and `PORTAL_ORIGIN` in the toperator repository at
