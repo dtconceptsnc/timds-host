@@ -35,7 +35,7 @@ and Preview URLs and inspect Studio. Keep prior receipts as historical evidence.
 
 Actual acceptance on 2026-10-13 at 17:06:51Z returned HTTP 200 from both the
 original manual session's metadata-only status and its source submission list.
-Both active URLs used the new `timds.workers.dev` domain. The original submission
+Both active URLs used the new `<subdomain>.workers.dev` domain. The original submission
 ID, review branch, original base and immutable review head stayed unchanged;
 the later saved fork revision also remained intact. See the
 sanitized receipt (private operational record). This receipt verifies

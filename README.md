@@ -4,6 +4,14 @@ An Apache-2.0 Cloudflare host for TimDS sessions, collaboration, previews,
 publication and Studio. The Apache-2.0 toolkit is maintained separately as
 `@dtconcepts/timds`.
 
+## Working in this repository
+
+[`AGENTS.md`](AGENTS.md) is the guide for contributors and coding agents: the
+repository map, the verified commands, which checks apply to which change, the
+public-boundary rules and the conventions the code follows.
+[`docs/README.md`](docs/README.md) indexes every document by the question it
+answers. `npm run check` runs the local checks in one go.
+
 ## Run your own host
 
 Follow the [operations runbook](docs/operations.md) for resource creation,

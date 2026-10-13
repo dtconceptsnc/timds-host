@@ -53,7 +53,7 @@ Prepare accepts:
   epoch, snapshotDigest, exportDigest, portalProof,
   manifest: {
     schemaVersion: 1,
-    portalOrigin: 'https://portal.dtconcepts.net',
+    portalOrigin: 'https://portal.example.com',
     originalSource, // exact portal row, including its historical pointer
     source,         // same UUID/provenance, additive organization_id/opaque repository ID
     repository: { id, namespace, name },

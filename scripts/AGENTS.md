@@ -1,0 +1,28 @@
+# scripts/ for agents
+
+Supplements the root [`AGENTS.md`](../AGENTS.md).
+
+Safe to run at any time, read-only, no credentials:
+
+- `check-docs.mjs`: Markdown links, anchors and the `docs/README.md` index.
+- `check-public-boundary.mjs`: scans added lines (or `--all`) for
+  installation and customer records. Both are wired to `npm run check:*`.
+
+Operational tools; each acts on real resources and needs a person's explicit
+request for a specific target in the current conversation:
+
+- `deploy-host.py`: deploys the API and public Workers from the checkout's
+  gitignored `.env`. Never print or copy that file.
+- `admin.mjs`: host administration against a deployed origin (`--help`).
+- `access-plan.mjs`: produces reviewable Access configuration; writes nothing.
+- `run-designer-batch.mjs`: creates real Requests and can publish; incurs
+  model charges. Disposable systems only (`../docs/operations-designer-batch.md`).
+- `backfill-published-artifacts.mjs`: defaults to a read-only inventory;
+  `--help` describes the write modes (`../docs/migration/artifact-backfill.md`).
+- `prepare-preview-source.mjs`: defaults to a plan; `--apply` installs pins
+  and builds (`../src/preview/README.md`).
+
+`deploy-host.example.env` lists every installation and secret key; copy it to
+`.env` outside version control. New `TIMDS_*` text bindings in
+`cloudflare.config.ts` must also be added to the example file and to the
+environment the deploy helper builds, or they deploy empty.
