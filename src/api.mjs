@@ -7,6 +7,7 @@ import { hostOrigin } from './http.mjs';
 import { verifyBootstrapSecret } from './auth/access.mjs';
 import { importApi } from './imports/api.mjs';
 import { requestDiagnostic } from './requests/diagnostics.mjs';
+import { createActiveWorkersUrlProjection } from './live/url-projection.mjs';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function segment(value) { try { return decodeURIComponent(value); } catch { throw fail(400,'Invalid route encoding'); } }
@@ -24,12 +25,18 @@ export function createApi({ getCoordinator, provision, mcp }) {
     const located = async (kind,id) => { if (!uuid.test(id)) throw fail(404,'Resource not found'); const row=await catalog.resource(kind,id); if (!row) throw fail(404,'Resource not found'); return row.source_id; };
     let statusOverride;
     const call = async (sourceId,operation,args=[]) => {
+      const coordinator=getCoordinator(context,sourceId);
       let envelope;
-      try { envelope = await getCoordinator(context,sourceId).api({operation,actor,args}); }
+      try { envelope = await coordinator.api({operation,actor,args}); }
       catch(error) { throw requestDiagnostic(error,'coordinator-rpc','host-boundary'); }
       if (!envelope.ok) throw Object.assign(fail(envelope.error.statusCode,envelope.error.message),envelope.error.details || {});
       statusOverride=envelope.httpStatus;
-      return envelope.value;
+      // A long-running coordinator can finish on its prior deployment. Apply
+      // current account aliases at the HTTP boundary as well; projection is
+      // idempotent and never requires restarting that durable work.
+      const project=createActiveWorkersUrlProjection({sourceId,aliases:env.TIMDS_WORKERS_SUBDOMAIN_ALIASES||'{}'});
+      const preflightSubmission=operation==='publish'&&envelope.value?.preflight?await coordinator.resource('submission',args[0]):undefined;
+      return project(envelope.value,{preflightSubmission});
     };
     const respond = (result,status=200) => streamJsonFileTrees(result,env.SNAPSHOTS,{status,headers:apiHeaders});
     if (path === '/api/timds/me' && method === 'GET') {

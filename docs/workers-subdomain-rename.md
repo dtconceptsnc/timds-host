@@ -12,11 +12,13 @@ account labels, for example `{"former-label":"current-label"}`. The default `{}`
 disables projection. Labels must be valid DNS labels; chains/cycles are rejected.
 Deploy configuration must expose this variable as a text binding.
 
-The authenticated coordinator API projects only active session `liveUrl` and
+The authenticated HTTP and coordinator API boundaries project only active session `liveUrl` and
 active submission `previewUrl` fields, including their list and preflight DTOs.
 It requires HTTPS, no credentials or nondefault port, and the exact Worker name
 derived from the source/session identities or the stored review branch. Paths,
 queries and fragments remain intact. Unrelated hosts are unchanged.
+The HTTP projection also handles replies from a coordinator still finishing work
+on the previous deployment; no Durable Object restart is needed.
 
 This is a response projection: source manifests, durable rows, immutable review
 branches, publication receipts, audit events, source files and snapshot bytes are
