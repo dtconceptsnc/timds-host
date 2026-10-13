@@ -76,6 +76,19 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     },
     previewTokens: (...args) => serialized(() => sessions.previewTokens(...args)),
     currentSource: () => store.getSource(sourceId),
+    provisionReceipt: async (actor,operationId) => {
+      const verified=await activeActor(actor);
+      if(!verified.operator)throw fail(403,'An active administrator is required');
+      const reservation=await catalog.provisionReceipt(operationId);
+      if(!reservation||reservation.sourceId!==sourceId||reservation.actorId!==verified.principalId)throw fail(404,'Provision operation not found');
+      const operation=store.getLifecycleOperation(operationId),source=await store.getSource(sourceId);
+      if(!operation||operation.source_id!==sourceId||operation.actor_principal_id!==reservation.actorId||!source)throw fail(409,'Provision operation has not been initialized');
+      const input=reservation.provisionInput;
+      if(!input||!sameProvisionInput(input,operation.checkpoints_json?.provisionInput))throw fail(409,'Provision input receipt is unavailable');
+      const repository=operation.repository_receipt||operation.checkpoints_json?.repositoryReceipt;
+      if(operation.status==='completed'&&(!repository||repository.id!==source.artifacts_repository_id||repository.namespace!==source.artifacts_namespace||repository.repository!==source.artifacts_repository))throw fail(409,'Completed provision identity does not match the source');
+      return {apiVersion:1,provision:{operationId,sourceId,actorPrincipalId:reservation.actorId,status:operation.status,fileTreeDigest:input.fileTreeDigest,grantPublisher:input.grantPublisher},source:{id:source.id,systemId:source.system_id,organizationId:source.organization_id,name:source.name||source.system_id,namespace:source.artifacts_namespace,repository:source.artifacts_repository,repositoryId:source.artifacts_repository_id||null,lifecycleStatus:source.lifecycle_status,archivedAt:source.archived_at||null,sourceCommit:source.source_commit||null,manifest:source.manifest_json}};
+    },
     sourceView: async actor => {
       const verified=await activeActor(actor),source=await store.getSource(sourceId);
       const facts=verified.operator?await catalog.readAuthority(sourceId,verified.principalId):await auth.authorizeSource(source,{...verified,accessMode:'read'});

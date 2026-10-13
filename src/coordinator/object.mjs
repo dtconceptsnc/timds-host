@@ -88,6 +88,7 @@ export class SystemCoordinator extends DurableObject {
     try {
       let value, httpStatus;
       if(operation==='sourceView')value=await this.engine.sourceView(actor);
+      else if(operation==='provisionReceipt')value=await this.engine.provisionReceipt(actor,args[0]);
       else if(['listInvitations','reserveInvitation','revokeInvitation'].includes(operation))value=await this.engine.runMutation(()=>this.invitations.admin({operation:{listInvitations:'list',reserveInvitation:'reserve',revokeInvitation:'revoke'}[operation],actor,input:args[0]}));
       else if(['prepareDeletion','readDeletion','confirmDeletion','deletionHistory'].includes(operation))value=await this.engine.runMutation(()=>this.deletion.invoke({operation:{prepareDeletion:'prepare',readDeletion:'read',confirmDeletion:'confirm',deletionHistory:'history'}[operation],actor,input:args[0]}));
       else if(operation==='createRequest'||operation==='readRequest')value=await this.engine.requestsInvoke({operation:operation==='createRequest'?'create':'read',actor,args});

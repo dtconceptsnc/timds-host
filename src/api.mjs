@@ -91,6 +91,13 @@ export function createApi({ getCoordinator, provision, mcp }) {
         return jsonResponse({organization:await catalog.ensureOrganization({id:input.id,name:input.name})});
       }
       if(path==='/api/timds/admin/systems'&&method==='POST'&&provision)return respond(await provision({input,actor,env,context,catalog}));
+      match=path.match(/^\/api\/timds\/admin\/systems\/([^/]+)\/provision\/([^/]+)$/);
+      if(match){
+        if(method!=='GET')throw fail(405,'Use GET for a provision receipt');
+        const sourceId=segment(match[1]),operationId=segment(match[2]);
+        if(!uuid.test(sourceId)||!uuid.test(operationId))throw fail(404,'Provision operation not found');
+        return respond(await call(sourceId,'provisionReceipt',[operationId]));
+      }
       match=path.match(/^\/api\/timds\/admin\/systems\/([^/]+)\/invitations(?:\/([^/]+))?(?:\/(revoke))?$/);
       if(match){
         const row=await source(segment(match[1])),id=match[2]?segment(match[2]):null;

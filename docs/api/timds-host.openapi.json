@@ -1172,7 +1172,7 @@
                   },
                   "prompt": {
                     "type": "string",
-                    "description": "1–32 KiB UTF-8 instruction.",
+                    "description": "1\u201332 KiB UTF-8 instruction.",
                     "minLength": 1
                   },
                   "requestId": {
@@ -2674,7 +2674,7 @@
       },
       "post": {
         "operationId": "reserveAccessInvitation",
-        "summary": "Reserve explicit source permissions for the invited human’s own Access sign-in",
+        "summary": "Reserve explicit source permissions for the invited human\u2019s own Access sign-in",
         "description": "Active administrator only; ready or importing source. No grant at reservation time. Configured Access issuer and explicit email required. Write requires read. Default disabled; see docs/access-invitations.md. Never merges historical identities or sends email.",
         "parameters": [
           {
@@ -2821,6 +2821,157 @@
           },
           "503": {
             "description": "Access invitations are disabled until their migration is configured"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/provision/{operationId}": {
+      "get": {
+        "operationId": "readNativeProvisionReceipt",
+        "summary": "Read an independently verified native provisioning receipt",
+        "description": "Requires an active host administrator who initiated this exact native provision operation. Reads the D1 reservation and coordinator lifecycle; never creates or adopts a source. Portal catalogue registration requires a completed receipt and matching source, organization, repository and exact file-tree digest. No leases, credentials or source file bodies are returned.",
+        "tags": [
+          "Administration"
+        ],
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Native reservation identity, coordinator completion and current source metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "provision",
+                    "source"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "provision": {
+                      "type": "object",
+                      "required": [
+                        "operationId",
+                        "sourceId",
+                        "actorPrincipalId",
+                        "status",
+                        "fileTreeDigest",
+                        "grantPublisher"
+                      ],
+                      "properties": {
+                        "operationId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "sourceId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "actorPrincipalId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "fileTreeDigest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "grantPublisher": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "source": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "systemId",
+                        "organizationId",
+                        "namespace",
+                        "repository",
+                        "repositoryId",
+                        "lifecycleStatus"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "organizationId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "systemId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "type": "string"
+                        },
+                        "repository": {
+                          "type": "string"
+                        },
+                        "lifecycleStatus": {
+                          "type": "string"
+                        },
+                        "repositoryId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "archivedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "sourceCommit": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "manifest": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
           }
         }
       }
