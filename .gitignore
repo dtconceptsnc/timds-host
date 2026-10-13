@@ -19,5 +19,8 @@ worker-configuration.d.ts
 .DS_Store
 __pycache__/
 
+# Agent working copies created by Claude Code; project settings in .claude/ stay tracked.
+.claude/worktrees/
+
 # Installation/customer operational receipts belong in private operator storage.
 /docs/evidence/

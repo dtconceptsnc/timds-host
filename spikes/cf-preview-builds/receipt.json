@@ -58,21 +58,21 @@
   ],
   "http": [
     {
-      "url": "https://timds-host-preview-spike-69-4c8f.ratebucket.workers.dev",
+      "url": "https://timds-host-preview-spike-69-4c8f.example.workers.dev",
       "status": 200,
       "contentType": "text/html",
       "mainMarker": true,
       "previewMarker": false
     },
     {
-      "url": "https://08b7a0c3-timds-host-preview-spike-69-4c8f.ratebucket.workers.dev",
+      "url": "https://08b7a0c3-timds-host-preview-spike-69-4c8f.example.workers.dev",
       "status": 200,
       "contentType": "text/html",
       "mainMarker": false,
       "previewMarker": true
     },
     {
-      "url": "https://review-cf-proof-timds-host-preview-spike-69-4c8f.ratebucket.workers.dev",
+      "url": "https://review-cf-proof-timds-host-preview-spike-69-4c8f.example.workers.dev",
       "status": 200,
       "contentType": "text/html",
       "mainMarker": false,

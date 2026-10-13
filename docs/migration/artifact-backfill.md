@@ -83,17 +83,17 @@ the script and a **freshly recaptured** baseline into an operator scratch
 location first. The example writes only the local plan; it performs no R2 PUT.
 
 ```sh
-cd /var/www/portal.dtconcepts.net
-/root/.nvm/versions/node/v25.4.0/bin/node --env-file=.env.server \
+cd /srv/portal
+node --env-file=.env.server \
   /tmp/backfill-published-artifacts.mjs \
   --baseline /tmp/migration-baseline-fresh.json \
-  --artifact-root /var/www/portal.dtconcepts.net/var/design-system-artifacts \
+  --artifact-root /srv/portal/var/design-system-artifacts \
   --sources example-a,example-b,example-c \
   --source-bucket timds-public-assets \
   --target-bucket timds-public-assets \
   --source-env-prefix CLOUDFLARE \
   --target-env-prefix CLOUDFLARE \
-  --sdk-root /var/www/portal.dtconcepts.net \
+  --sdk-root /srv/portal \
   --plan /tmp/timds69-legacy-backfill-plan.json
 ```
 

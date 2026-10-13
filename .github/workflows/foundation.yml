@@ -23,6 +23,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Full history so the boundary check can find the merge base with master.
+          fetch-depth: 0
       - name: Set up minimum supported Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -32,7 +34,11 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
-      - run: node --test test/runtime/file-trees.test.mjs test/build/cache.test.mjs
+      - run: npm test
+      - name: Documentation references and index
+        run: npm run check:docs
+      - name: Public boundary of added lines
+        run: npm run check:boundary
 
   conformance-unit:
     name: Conformance harness unit tests
