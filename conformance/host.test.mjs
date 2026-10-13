@@ -6,6 +6,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { createConformanceClient } from './client.mjs';
 import { readConfiguration } from './config.mjs';
 import { assertConsecutiveVersions, readPublicStamp, readPreview } from './assertions.mjs';
+import { createRunResources, cleanupRunResources, terminalPublicationStatuses } from './resources.mjs';
 
 const encoded = (path, value) => ({ path, encoding: 'base64', mode: '100644', content: Buffer.from(typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`).toString('base64') });
 const jsonFile = (snapshot, path) => {
@@ -19,15 +20,12 @@ const clean = result => { assert.notEqual(result.stale, true, 'write must not be
 test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, async t => {
   // Fail, rather than skip or silently select a real system, when unconfigured.
   const config = readConfiguration();
-  const runId = randomUUID(), short = runId.slice(0, 8), sessions = new Set(), publications = [];
+  const runId = randomUUID(), short = runId.slice(0, 8), resources = createRunResources(config);
   const evidence = { suiteVersion: 1, toolkitVersion: '0.1.464', host: config.url, sourceId: config.sourceId, runId, startedAt: new Date().toISOString(), passed: false, operations: {}, publications: [], checks: [], cleanup: [] };
   const onResponse = ({ operationId, status }) => { const key = `${operationId}:${status}`; evidence.operations[key] = (evidence.operations[key] || 0) + 1; };
-  const onCreatedSession = session => {
-    if (/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(session.id || '') && session.sourceId === config.sourceId && session.systemId === config.systemId) sessions.add(session.id);
-  };
-  const client = createConformanceClient({ url: config.url, token: config.token, onResponse, onCreatedSession });
+  const client = createConformanceClient({ url: config.url, token: config.token, onResponse, onCreatedSession: resources.onCreatedSession, onPublicationAttempt: resources.onPublicationAttempt, onAcceptedPublication: resources.onAcceptedPublication });
   const member = createConformanceClient({ url: config.url, token: config.memberToken, onResponse });
-  const tracked = result => { sessions.add(result.session.id); assert.equal(result.session.sourceId, config.sourceId, 'session must belong to the explicitly selected fixture'); assert.equal(result.session.systemId, config.systemId); return result; };
+  const tracked = resources.trackedSession;
   const phase = name => { t.diagnostic(name); evidence.checks.push(name); };
   const waitFor = async (name, read, accepted, failed) => {
     const deadline = Date.now() + config.timeoutMs;
@@ -41,18 +39,19 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   };
   const publicationDone = id => waitFor(`publication ${id}`, () => client.publication(id), value => value.publication.status === 'published', value => ['failed', 'cancelled', 'dead_letter', 'superseded'].includes(value.publication.status) || value.publication.status === 'closing' && Boolean(value.publication.error));
   t.after(async () => {
-    // Drain accepted publishes before closing their resources, including on assertion failure.
-    for (const id of publications) await publicationDone(id).catch(() => {});
-    const failures = [];
-    for (const id of [...sessions].reverse()) {
-      try { await client.close(id); evidence.cleanup.push({ sessionId: id, closed: true }); }
-      catch { evidence.cleanup.push({ sessionId: id, closed: false }); failures.push(id); }
-    }
+    // Only settled publications are safe to close; failed ones may still retry.
+    const { cleanup, publicationCleanup, publicationAttempts, failures } = await cleanupRunResources(resources, {
+      drainPublication: id => waitFor(`publication cleanup ${id}`, () => client.publication(id), value => terminalPublicationStatuses.has(value.publication.status), () => false),
+      closeSession: id => client.close(id),
+    });
+    evidence.cleanup = cleanup;
+    evidence.publicationCleanup = publicationCleanup;
+    evidence.publicationAttempts = publicationAttempts;
     evidence.finishedAt = new Date().toISOString();
     if (failures.length) evidence.passed = false;
     await mkdir(new URL('./artifacts/', import.meta.url), { recursive: true });
     await writeFile(new URL(`./artifacts/${runId}.json`, import.meta.url), `${JSON.stringify(evidence, null, 2)}\n`);
-    assert.deepEqual(failures, [], 'all sessions created by this run must close; inspect the redacted evidence for IDs');
+    assert.deepEqual(failures, [], 'cleanup incomplete; unconfirmed publications preserve their sessions; inspect the redacted evidence for IDs');
   });
 
   phase('Verify explicit disposable source and publisher access');
@@ -138,6 +137,7 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
     const note = `Conformance ${short}: FIFO publication ${index + 1}`;
     const body = change(snapshot, [encoded(`docs/conformance-${short}-${index}.md`, `${note}\n`)], note);
     const result = clean(await client.submit(snapshot.session.id, body));
+    resources.trackSubmission(result.submission, snapshot.session.id);
     assert.equal((await client.submit(snapshot.session.id, body)).submission.id, result.submission.id, 'retry must reuse the frozen submission');
     submitted.push(result.submission);
   }
@@ -147,9 +147,10 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   assert.equal((await client.status(first.session.id)).session.status, 'open', 'dry run cannot close the source session');
   for (const submission of submitted) {
     const result = await client.publish(submission.id, {});
-    assert.ok(result.publication.id); publications.push(result.publication.id);
+    assert.ok(resources.onAcceptedPublication(result.publication, submission.id), 'accepted publication must belong to this run');
   }
-  const [one, two] = await Promise.all(publications.map(publicationDone));
+  assert.equal(resources.publications.size, submitted.length, 'each submission has its own publication');
+  const [one, two] = await Promise.all([...resources.publications.keys()].map(publicationDone));
   const p1 = one.publication, p2 = two.publication;
   assert.ok(Number.isInteger(p1.queuePosition) && Number.isInteger(p2.queuePosition), 'publications expose FIFO positions');
   assert.ok(p1.queuePosition < p2.queuePosition, 'acceptance order is queue order');

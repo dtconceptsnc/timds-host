@@ -101,10 +101,16 @@ ordinary approved lifecycle after examining the results.
    has no publication and leaves the public pointer untouched. Session close is
    idempotent and history survives cleanup.
 
-Every created session is tracked and closed in a test teardown, including on
-failure. Accepted publications are drained before cleanup. Only resources
-created by this run are closed. A failed cleanup fails the test and reports its
-session IDs. Redacted JSON evidence in ignored `artifacts/<run UUID>.json`
+Every created session is tracked for test teardown, including on failure.
+Publication attempts are recorded before transport, so a lost or malformed
+response cannot erase evidence of a possibly accepted write. Accepted publication
+IDs are retained only when they match this fixture and a submission from this
+run, and duplicate receipts are drained once before cleanup. If a publication
+cannot be confirmed settled, cleanup preserves its session and any parent draft
+for inspection, reports the unresolved attempt/publication IDs, and fails the
+test. A `failed` publication may still retry, so that status does not authorize
+closing its fork. Unrelated sessions created by this run are still closed.
+Redacted JSON evidence in ignored `artifacts/<run UUID>.json`
 contains operation/status counts, publication IDs/versions, phase names, and
 cleanup outcomes. It never records credentials, HTTP bodies or source files.
 Phase names in the evidence indicate phases entered; only `passed: true`
