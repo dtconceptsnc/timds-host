@@ -1,0 +1,40 @@
+{
+  "checkedAt": "2026-10-13T17:06:51.068Z",
+  "host": "https://timds-host-69.timds.workers.dev",
+  "sourceId": "6ffb48ea-862e-42de-9303-5edcbe8829d5",
+  "reads": [
+    {
+      "path": "/api/timds/sessions/5f8b12cf-df51-4c41-b793-9104ff74963c/status",
+      "status": 200,
+      "session": {
+        "id": "5f8b12cf-df51-4c41-b793-9104ff74963c",
+        "status": "open",
+        "baseRevision": "560c366a949084e2647ac8bdf2c55659d502c18e",
+        "lastUpdateHash": "",
+        "liveUrl": "https://live-5f8b12cfdf514c41b7939104ff74963c.timds.workers.dev/"
+      },
+      "submission": {
+        "id": "0c81d4e0-afd8-4032-b07b-03ba7e227143",
+        "sessionId": "5f8b12cf-df51-4c41-b793-9104ff74963c",
+        "status": "submitted",
+        "baseRevision": "375e1ee00e5af53c925b0585f48f5d396ccd9e8a",
+        "headCommit": "8aa175f2e3dba0c14051faf858ee71dffcb38cbd",
+        "reviewBranch": "review-0c81d4e0afd84032",
+        "previewUrl": "https://review-0c81d4e0afd84032-timds-6ffb48ea862e42de93035edcbe8829d5.timds.workers.dev/"
+      }
+    },
+    {
+      "path": "/api/timds/design-systems/6ffb48ea-862e-42de-9303-5edcbe8829d5/submissions",
+      "status": 200,
+      "submission": {
+        "id": "0c81d4e0-afd8-4032-b07b-03ba7e227143",
+        "sessionId": "5f8b12cf-df51-4c41-b793-9104ff74963c",
+        "status": "submitted",
+        "baseRevision": "375e1ee00e5af53c925b0585f48f5d396ccd9e8a",
+        "headCommit": "8aa175f2e3dba0c14051faf858ee71dffcb38cbd",
+        "reviewBranch": "review-0c81d4e0afd84032",
+        "previewUrl": "https://review-0c81d4e0afd84032-timds-6ffb48ea862e42de93035edcbe8829d5.timds.workers.dev/"
+      }
+    }
+  ]
+}
