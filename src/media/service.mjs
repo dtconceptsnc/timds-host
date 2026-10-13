@@ -134,12 +134,15 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
    const range=request.headers.get('Range');if(range&&!/^bytes=(?:\d+-\d*|-\d+)$/.test(range))throw fail(416,'Use one byte range');
    const object=request.method==='HEAD'?await binding.head(row.object_key):await binding.get(row.object_key,range?{range:new Headers({Range:range})}:{});
    if(!object||object.size!==row.bytes){await object?.body?.cancel();throw fail(503,'Media object is unavailable');}
-   const headers=new Headers({'Content-Type':row.content_type,'Content-Length':String(object.range?.length??object.size),ETag:object.httpEtag,'X-Content-Type-Options':'nosniff','Cache-Control':downloadToken?'private, no-store':'public, max-age=31536000, immutable','Referrer-Policy':'no-referrer','Accept-Ranges':'bytes'});
+   // R2 can return range metadata describing the whole object even when the
+   // caller did not request a range. HEAD also uses the full object metadata.
+   const servedRange=request.method==='GET'&&range?object.range:null;
+   const headers=new Headers({'Content-Type':row.content_type,'Content-Length':String(servedRange?.length??object.size),ETag:object.httpEtag,'X-Content-Type-Options':'nosniff','Cache-Control':downloadToken?'private, no-store':'public, max-age=31536000, immutable','Referrer-Policy':'no-referrer','Accept-Ranges':'bytes'});
    if(downloadToken)headers.set('Content-Disposition',`attachment; filename*=UTF-8''${encodeURIComponent(row.filename||'asset')}`);
    else if(/^(text\/html|application\/(xhtml\+xml|javascript))/.test(row.content_type))headers.set('Content-Disposition','attachment');
    if(request.headers.get('If-None-Match')===object.httpEtag){await object.body?.cancel();headers.delete('Content-Length');return new Response(null,{status:304,headers});}
-   if(object.range)headers.set('Content-Range',`bytes ${object.range.offset}-${object.range.offset+object.range.length-1}/${object.size}`);
-   return new Response(request.method==='HEAD'?null:object.body,{status:object.range?206:200,headers});
+   if(servedRange)headers.set('Content-Range',`bytes ${servedRange.offset}-${servedRange.offset+servedRange.length-1}/${object.size}`);
+   return new Response(request.method==='HEAD'?null:object.body,{status:servedRange?206:200,headers});
   },
   nextAlarm(){if(records.pendingArchives().some(row=>!row.purge_requires_lifecycle))return Date.now()+60_000;const rows=records.activeUploads();return rows.length?Math.max(Date.now()+1000,Math.min(...rows.map(row=>row.status==='cancelling'?(row.cleanup_after||Date.now()):row.expires_at))):null;},
   async expire({fenced=false,beforeDelete=async()=>{}}={}){
