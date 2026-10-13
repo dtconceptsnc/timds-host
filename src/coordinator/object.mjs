@@ -39,10 +39,13 @@ export class SystemCoordinator extends DurableObject {
         getLive:id=>ctx.exports.LiveSession.getByName(id),hosts:createLivePreviewHosts({env}),subscriptions:createAgentForkSubscriptions({env}),designerPrincipalId:env.TIMDS_DESIGNER_PRINCIPAL_ID,
         schedule:()=>ctx.storage.setAlarm(Date.now()+1000),ensurePreview:source=>this.preview.ensure(source),
         reconcilePush:async(source,session,revision,actor)=>{
-          // A push notification is a reconciliation hint. The next snapshot
-          // reads authoritative main; it never accepts arbitrary changed bytes.
           await this.authorization.authorizeSource(source,actor);
-          return {observed:true,revision,sessionId:session.id};
+          // Queue payloads are hints. Only a matching authoritative fork head
+          // becomes an audit event; replay of the same head is harmless.
+          const snapshot=await this.repository.snapshot(source,session);
+          if(snapshot.baseRevision!==revision)return {ignored:true};
+          if(!(await this.store.eventForHead(session.id,revision)).length)await this.store.appendEvent({source_id:source.id,session_id:session.id,event_type:'updated',actor_principal_id:session.owner_principal_id,originating_request_id:session.originating_request_id,details_json:{outOfBandHead:revision}});
+          return {detected:true,sessionId:session.id};
         }}),
       onSessionReserved:(session,source)=>requestService.live.schedule(session,source),
       onSessionStarted:(session,source)=>requestService.live.ensure(session,source),
