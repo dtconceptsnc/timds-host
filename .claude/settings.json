@@ -21,7 +21,12 @@
     ],
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)",
+      "Read(./.env.deploy-state.json)",
+      "Read(./.env.local)",
+      "Read(./.env.*.local)",
+      "Read(./.env.development)",
+      "Read(./.env.staging)",
+      "Read(./.env.production)",
       "Read(./.dev.vars)",
       "Read(./.dev.vars.*)",
       "Read(./docs/evidence/**)",

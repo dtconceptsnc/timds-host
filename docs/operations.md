@@ -129,7 +129,7 @@ bytes or a different source commit.
 catalog, lock, deploy and companion steps for one installation. It reads the
 installation record and the runtime secrets from the checkout's `.env`
 (gitignored, owner-only; start from
-[`scripts/deploy-host.example.env`](../scripts/deploy-host.example.env)) and
+[`.env.example`](../.env.example)) and
 keeps created resource ids in `.env.deploy-state.json`. Nothing
 installation-specific is tracked; see [verification](verification.md). Every
 Cloudflare API call runs under the cf CLI's own sign-in (`cf auth login`; no

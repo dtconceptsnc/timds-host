@@ -22,7 +22,7 @@ request for a specific target in the current conversation:
 - `prepare-preview-source.mjs`: defaults to a plan; `--apply` installs pins
   and builds (`../src/preview/README.md`).
 
-`deploy-host.example.env` lists every installation and secret key; copy it to
-`.env` outside version control. New `TIMDS_*` text bindings in
+The root `.env.example` lists every installation and secret key; copy it to
+`.env`, which stays outside version control. New `TIMDS_*` text bindings in
 `cloudflare.config.ts` must also be added to the example file and to the
 environment the deploy helper builds, or they deploy empty.
