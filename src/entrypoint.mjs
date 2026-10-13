@@ -3,7 +3,7 @@ import { createHostOAuth } from './auth/oauth.mjs';
 import { createApi } from './api.mjs';
 import { createProvisioner } from './provision.mjs';
 import { Catalog } from './store/catalog.mjs';
-import { apiHeaders, errorResponse } from './http.mjs';
+import { apiHeaders, errorResponse, hostOrigin } from './http.mjs';
 import { parsePreviewBuildEvent, createPreviewBuildHandler } from './preview/events.mjs';
 import { createPreviews } from './preview/index.mjs';
 import { agentPushEvent } from '../runtime/policy.mjs';
@@ -48,6 +48,22 @@ export class PublicRoots extends WorkerEntrypoint {
     return new URL(request.url).pathname==='/mcp'?services.mcp(request,this.env,this.ctx):services.roots.fetch(request);
   }
 }
+// Browsers cannot send a bearer header on a WebSocket upgrade, so the feed
+// upgrade is routed before OAuth. Its credential is the single-use ticket that
+// POST .../feed/tickets issued under OAuth; the source coordinator consumes it.
+const feedRoute=/^\/api\/timds\/design-systems\/([^/]+)\/feed$/;
+async function feedUpgrade(request,env,ctx,reference) {
+  const url=new URL(request.url),origin=hostOrigin(env);
+  if(url.origin!==origin)throw fail(421,'Use the configured host origin');
+  if(request.method!=='GET')throw fail(405,'Use GET with Upgrade: websocket');
+  if((request.headers.get('Upgrade')||'').toLowerCase()!=='websocket')throw fail(426,'Upgrade: websocket is required');
+  if(request.headers.has('Origin')&&request.headers.get('Origin')!==origin)throw fail(403,'Cross-origin feed connections are not allowed');
+  if(!/^[A-Za-z0-9_-]{43}$/.test(url.searchParams.get('ticket')||''))throw fail(400,'A feed ticket is required');
+  let id;try{id=decodeURIComponent(reference);}catch{throw fail(400,'Invalid route encoding');}
+  const row=await new Catalog(env.CATALOG).source(id);
+  if(!row)throw fail(404,'Design System not found');
+  return getCoordinator(ctx,row.id).fetch(request);
+}
 async function publicFetch(request,env,ctx) {
   const url=new URL(request.url);
   const studio=await studioFetch(request,env);if(studio)return studio;
@@ -68,6 +84,7 @@ export default {
   async fetch(request,env,ctx) {
     try {
       if(new URL(request.url).pathname==='/health')return publicFetch(request,env,ctx);
+      const feed=new URL(request.url).pathname.match(feedRoute);if(feed)return await feedUpgrade(request,env,ctx,feed[1]);
       if(new URL(request.url).origin===env.TIMDS_PUBLIC_ORIGIN){
         const media=await createPublicMedia({env,getCoordinator:id=>getCoordinator(ctx,id)})(request);if(media)return media;
         const services=publishedServices(env,ctx);

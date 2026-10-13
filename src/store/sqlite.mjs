@@ -97,6 +97,16 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     for (const row of rows("SELECT id FROM events WHERE seq IS NULL ORDER BY json_extract(row_json,'$.created_at'),id")) sql.exec("UPDATE events SET row_json=json_set(row_json,'$.seq',CAST(? AS INTEGER)) WHERE id=?",++next,row.id);
     setMeta('event_seq',next);
   };
+  // Feed hook. audit() runs inside a synchronous storage transaction (this
+  // store's atomic() or an injected store's transactionSync), so a microtask
+  // runs only after that transaction has committed or rolled back. Rows that
+  // rolled back are absent and are never delivered; the listener never runs
+  // inside a transaction and never touches the writer queue.
+  let eventListener = null, committedEvents = [];
+  const deliverEvents = () => {
+    for (const row of committedEvents.splice(0)) if (eventListener && scalar('SELECT 1 AS n FROM events WHERE id=? AND seq=?',row.id,row.seq)) { try { eventListener(row); } catch {} }
+  };
+  const notifyEvent = row => { if (!eventListener) return; if (!committedEvents.length) queueMicrotask(deliverEvents); committedEvents.push(row); };
   const audit = input => {
     sequenceEvents();
     const row = { id: ids(), source_id: sourceId, session_id: null, submission_id: null, actor_user_id: null, actor_token_id: null,
@@ -104,7 +114,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     own(row.source_id);
     if (get('events',row.id)) throw fail(409, 'Audit event already exists');
     row.seq = eventSeq()+1; setMeta('event_seq',row.seq);
-    put('events',row); enqueue('event',row); return row;
+    put('events',row); enqueue('event',row); notifyEvent(row); return row;
   };
   const requestEvent = (type,requestId,sessionId,condition = '',...values) => decode(scalar(`SELECT row_json FROM events WHERE json_extract(row_json,'$.event_type')=? AND json_extract(row_json,'$.originating_request_id')=? AND json_extract(row_json,'$.session_id') IS ? ${condition} LIMIT 1`,type,requestId,sessionId ?? null,...values)?.row_json);
   const sessionEvent = row => ({ event_type: row.kind === 'draft' ? 'draft_created' : 'session_started', session_id: row.id, actor_user_id: row.owner_user_id || null, actor_token_id: row.owner_token_id || null,
@@ -558,6 +568,8 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       return catalog.acknowledgePrincipalFence({operationId,sourceId,principalId:id,version});
     },
     outboxSize: () => scalar('SELECT COUNT(*) AS n FROM outbox').n,
+    // Live feed listener: one committed audit row per call, after commit.
+    onEvent: listener => { eventListener = typeof listener === 'function' ? listener : null; },
     // Same-transaction audit for injected stores (Request jobs). Call only
     // inside the caller's storage transaction, after its own row commits.
     recordEvent: input => audit(input),

@@ -26,5 +26,7 @@ export async function studioFetch(request, env) {
   const response = await env.ASSETS.fetch(new Request(url, { method: request.method }));
   const securedHeaders = new Headers(response.headers);
   for (const [name, value] of Object.entries(headers)) securedHeaders.set(name, value);
+  // The live feed is a same-origin WebSocket; name its scheme explicitly.
+  securedHeaders.set('Content-Security-Policy', headers['Content-Security-Policy'].replace("connect-src 'self'", `connect-src 'self' ${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}`));
   return new Response(response.body, { status: response.status, headers: securedHeaders });
 }

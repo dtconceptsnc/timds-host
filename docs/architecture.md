@@ -189,6 +189,55 @@ command appends one row:
 `activeWork` read authorization and reads committed rows outside the writer
 queue, ascending by `seq` (`limit` defaults to 100 and is capped at 500).
 
+#### Live feed
+
+The same rows reach browsers live over the coordinator's hibernatable
+WebSockets (`src/coordinator/feed.mjs`); there is still no stream product.
+
+- **Ticket.** `POST /api/timds/design-systems/{source}/feed/tickets` runs under
+  OAuth and the `active-work` read authorization (the `sourceEvents` metadata
+  path, outside the writer queue). The coordinator stores only the SHA-256 of a
+  256-bit base64url ticket in its SQLite
+  `feed_tickets(ticket_hash PK, principal_id, source_id, name, type, expires_at, created_at)`,
+  pruning expired rows in the same transaction as each insert, and returns
+  `{apiVersion, ticket, expiresAt, url}`. Tickets live 60 seconds and survive a
+  Worker restart.
+- **Upgrade.** `GET /api/timds/design-systems/{source}/feed?ticket=&after=` is
+  routed in `entrypoint.mjs` before OAuth, because browsers cannot send a
+  bearer header on an upgrade. It requires the host origin, `Upgrade:
+  websocket` (426 otherwise), a same-origin `Origin` header when present and a
+  well-formed ticket, resolves the source with `Catalog.source`, and forwards to
+  `SystemCoordinator.fetch`. The coordinator consumes the ticket with one
+  `DELETE … RETURNING` (single use; expired, unknown or other-source tickets
+  fail with 401), refuses archived, deleting or deleted sources with 410, and
+  calls `ctx.acceptWebSocket(server, [principalId])`. The attachment is
+  `{principalId, sourceId, after, name, type, viewing}`.
+- **Replay and broadcast.** The store's `onEvent` hook receives each audit row
+  in a microtask after its synchronous transaction, whether that transaction
+  was the store's `atomic()` or an injected store's `transactionSync` (Request
+  jobs), and only if the row is still present (a rolled-back row is never
+  sent). Delivery resolves actor names once per batch (cached per object),
+  then sends `{type:'event', seq, event}` (the `events` route view) to each
+  socket whose attachment `after` is below `seq`, advancing `after` on every
+  send. Batches drain one at a time, so sends stay in `seq` order. A new
+  socket replays `seq > after` in pages of 500 (at most 5,000 rows per
+  connection, then close 4100 so the client resumes). Rows broadcast during
+  replay are buffered for that socket and applied past the replay cursor, so
+  replay and live delivery never send a row twice and never leave a gap.
+  Delivery never touches the repository or writer queue.
+- **Presence.** Clients send `{type:'viewing', sessionId|draftId}` or
+  `{type:'viewing', viewing:null}`; the attachment changes and every socket
+  gets `{type:'presence', viewers}` built from `getWebSockets()` attachments.
+  The same message goes out on connect, close and `{type:'presence'}`. Nothing
+  about presence is persisted.
+- **Heartbeat and closure.** `setWebSocketAutoResponse('ping','pong')` answers
+  the client's 25-second heartbeat without waking the object; the coordinator
+  has no timers or loops for the feed, so it hibernates between events. Sockets
+  close with 4410 when a deletion fence appears or on archive, and each client
+  message rechecks the source. 4401 closes a principal's sockets when its source
+  authority changes or it is deactivated; the client reconnects with a fresh
+  ticket, which rechecks authorization.
+
 The store also supplies source/version reads, session/member/claim lookups,
 submission/publication lists, `findFork`, `sessionForRequest`, `requestReceipt`,
 `eventForHead`, lifecycle inventory and expiry selection. Legacy execution-job

@@ -843,6 +843,143 @@
         }
       }
     },
+    "/api/timds/design-systems/{source}/feed/tickets": {
+      "post": {
+        "operationId": "createFeedTicket",
+        "summary": "Issue a single-use ticket for the source's live event feed",
+        "description": "Requires the same read authorization as active-work (and the OAuth write scope that every POST requires). The ticket is an opaque 256-bit base64url token bound to the calling principal and this source, valid for 60 seconds and consumed by the first WebSocket upgrade that presents it. Browsers cannot send a bearer header on a WebSocket upgrade, so the upgrade route accepts this ticket instead. Issue a fresh ticket for every connection and reconnection.",
+        "tags": [
+          "Collaboration"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiVersion": {
+                    "type": "integer",
+                    "const": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ticket issued.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedTicket"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}/feed": {
+      "get": {
+        "operationId": "openSourceFeed",
+        "summary": "Open the source's live event and presence feed (WebSocket)",
+        "description": "Not a JSON operation. Send GET with Upgrade: websocket; the request carries no bearer header and is authorized only by the single-use ticket from createFeedTicket, which must belong to this source. A same-host Origin header is required when present. On success the host answers 101 Switching Protocols, replays committed events with seq greater than after in ascending seq order, then streams new events as they commit; a connection never sends a seq at or below one it already sent. Server text messages are JSON: {type:'event', seq, event} where event is the same view the events route returns (Event with seq, principal_name and actor_name); {type:'ready', after, latestSeq} once replay completes; {type:'presence', viewers:[{principalId, name, type, viewing:{sessionId}|{draftId}|null}]} on every connect, disconnect and viewing change; {type:'error', message} for an invalid client message. Client text messages: the raw string ping (answered pong without waking the coordinator; send every 25 seconds), {type:'ping'} (no-op), {type:'presence'} (returns the current viewer list), {type:'viewing', sessionId} | {type:'viewing', draftId} | {type:'viewing', viewing:null}. Close codes: 4410 the source is archived, deleting or deleted (do not reconnect); 4401 access changed (reconnect with a new ticket); 4100 the bounded replay (5,000 events per connection) has more rows (reconnect at once with after set to the last seq received); 1011 replay or delivery failed (reconnect with backoff). Presence is ephemeral and never persisted.",
+        "tags": [
+          "Collaboration"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ticket",
+            "in": "query",
+            "required": true,
+            "description": "Single-use feed ticket from createFeedTicket.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Replay events with seq greater than this cursor; use the last seq received when reconnecting. Defaults to 0.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "Upgrade",
+            "in": "header",
+            "required": true,
+            "description": "Must be websocket; anything else fails with 426.",
+            "schema": {
+              "type": "string",
+              "const": "websocket"
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols. The connection carries the JSON text messages described above."
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
     "/api/timds/design-systems/{source}/submissions": {
       "get": {
         "operationId": "listSubmissions",
@@ -4823,6 +4960,35 @@
             "format": "uuid"
           }
         }
+      },
+      "FeedTicket": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "ticket": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Opaque single-use credential for one WebSocket upgrade."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Sixty seconds after issue."
+          },
+          "url": {
+            "type": "string",
+            "description": "wss:// (ws:// on a local http host) upgrade URL for openSourceFeed carrying the ticket; append after=<seq> to resume."
+          }
+        },
+        "required": [
+          "apiVersion",
+          "ticket",
+          "expiresAt",
+          "url"
+        ]
       }
     },
     "responses": {

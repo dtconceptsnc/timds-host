@@ -22,6 +22,12 @@ The host has since extended the vendored contract additively with
 (`getSourceEvents`, schema `EventFeed`) and an optional per-source `seq` on
 `Event`. Existing paths and response fields are unchanged.
 
+The contract also documents the live feed: `POST
+/api/timds/design-systems/{source}/feed/tickets` (`createFeedTicket`, schema
+`FeedTicket`) and the ticket-authorized WebSocket upgrade
+`GET /api/timds/design-systems/{source}/feed` (`openSourceFeed`, 101). The
+harness does not open WebSockets; the feed is accepted on the deployed host.
+
 This pin includes the public preview CSS GET/HEAD `Cache-Control: no-store`
 contract correction from [portal PR #89](https://github.com/dtconceptsnc/toperator/pull/89).
 The sync changes only those two header constants; API v1, paths, operations and

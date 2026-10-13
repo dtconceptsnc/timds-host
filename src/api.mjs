@@ -83,6 +83,14 @@ export function createApi({ getCoordinator, provision, mcp }) {
       }
       throw fail(404,'Route not found');
     }
+    // Live feed ticket: single use, 60 s, bound to this principal and source.
+    // The WebSocket upgrade itself is routed before OAuth in entrypoint.mjs.
+    match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/feed\/tickets$/);
+    if(match) {
+      if(method!=='POST')throw fail(405,'Use POST');
+      const reference=segment(match[1]),row=await source(reference),issued=await call(row.id,'feedTicket',[reference]);
+      return jsonResponse({ticket:issued.ticket,expiresAt:issued.expiresAt,url:`${hostOrigin(env).replace(/^http/,'ws')}/api/timds/design-systems/${row.id}/feed?ticket=${issued.ticket}`});
+    }
     match=path.match(/^\/api\/timds\/submissions\/([^/]+)\/publish$/);
     if(match&&method==='POST') {
       const id=segment(match[1]), result=await call(await located('submission',id),'publish',[id,input]);
