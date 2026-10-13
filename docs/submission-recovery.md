@@ -48,8 +48,12 @@ the observed “Submission changed; retry with a new submission” error. The re
 the original response/checkpoint was lost is not established by these reads.
 
 Syntax checks, host typecheck and the full Worker/container build passed for this
-fix. No tests were added. Deployment and actual replay of the existing submission
-remain separate acceptance steps: verify the same submission becomes submitted,
-the review head stays `8aa175f2…`, the fork and saved documentation survive, and
-phone review, publication and rollback complete normally. Do not clear leases,
-replace identities or recreate the saved file to obtain a successful receipt.
+fix. No tests were added. The deployed fix was replayed with the exact original
+body through the normal authenticated API. It returned HTTP 200, the same
+submission ID in `submitted`, unchanged review head `8aa175f2…`, and preserved
+fork revision `560c366a…`. The returned snapshot retains the original
+`docs/studio-manual-proof.md` (114 bytes, SHA-256
+`c557363da72aa5e5a0770c64492705398f10d7b2abbe4cf133e30a0d323bcf89`).
+No lease, source/session/submission identity, review branch or saved file was
+replaced. Phone review, publication and rollback remain separate acceptance
+steps; successful submission recovery does not claim those are complete.
