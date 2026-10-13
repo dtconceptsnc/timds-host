@@ -9,14 +9,15 @@ gitignored, owner-only `.env` holds both the nonsecret installation record
 (account, Worker name, origins, Access audience, designer principal, Artifacts
 bindings) and the runtime secrets; `scripts/deploy-host.example.env` lists the
 keys. Created resource ids go to `.env.deploy-state.json` (also gitignored).
-The Cloudflare CLI OAuth tokens are read from the local wrangler and cloudflare
-CLI config files. `import-secrets` fills the runtime secrets once from a
+Every Cloudflare API call runs under the cf CLI's own sign-in (`cf auth login`);
+its OAuth token is read from the cloudflare CLI config file only to be redacted
+from logs. No wrangler sign-in is involved. `import-secrets` fills the runtime secrets once from a
 legacy server over SSH (TIMDS_SECRETS_SSH_HOST and TIMDS_SECRETS_SSH_FILE in
 `.env`); afterwards nothing depends on that machine. Logs and the secrets fifo
 go to TIMDS_DEPLOY_DIR (default /tmp/timds-host-deploy).
 """
 from pathlib import Path
-import os,sys,json,tomllib,subprocess,re
+import os,sys,json,subprocess,re
 ROOT=Path(__file__).resolve().parents[1];ENV=ROOT/'.env'
 INSTALLATION=['CLOUDFLARE_ACCOUNT_ID','TIMDS_WORKER_NAME','TIMDS_HOST_ORIGIN','TIMDS_STUDIO_ORIGIN','TIMDS_PUBLIC_ORIGIN','TIMDS_PORTAL_ORIGIN','TIMDS_AGENT_PUSH_QUEUE_ID','TIMDS_ACCESS_TEAM_DOMAIN','TIMDS_ACCESS_AUD','TIMDS_DESIGNER_PRINCIPAL_ID','TIMDS_DESIGNER_MODEL','TIMDS_ARTIFACTS_BINDINGS','TIMDS_ARTIFACTS_REST_FALLBACK','TIMDS_WORKERS_SUBDOMAIN_ALIASES','TIMDS_MEDIA_LEGACY_BINDINGS','TIMDS_MEDIA_ALLOWED_ORIGINS','TIMDS_LEGACY_PUBLIC_HOSTS','TIMDS_STUDIO_FRAME_ORIGINS','TIMDS_ACCESS_INVITATIONS_ENABLED']
 RUNTIME_KEYS=['CLOUDFLARE_API_TOKEN','TIMDS_BUILDS_API_TOKEN','OPENAI_API_KEY','TIMDS_BOOTSTRAP_SECRET','TIMDS_PORTAL_TRANSFER_SECRET']
@@ -42,11 +43,14 @@ def state():
  WORK.mkdir(parents=True,exist_ok=True);return json.loads(STATE.read_text()) if STATE.exists() else {}
 def save(s):STATE.write_text(json.dumps(s,indent=2)+'\n')
 def credentials():
- broad=tomllib.loads((Path.home()/'Library/Preferences/.wrangler/config/default.toml').read_text())['oauth_token'];builds=json.loads((Path.home()/'Library/Preferences/cloudflare/config/default.json').read_text())['oauth_token'];return broad,builds
+ # The cf CLI authenticates every call with its own sign-in (`cf auth login`).
+ # Its token is read here only so logs and error output can redact it.
+ try:return (json.loads((Path.home()/'Library/Preferences/cloudflare/config/default.json').read_text())['oauth_token'],)
+ except (OSError,KeyError,ValueError):raise RuntimeError('Cloudflare CLI sign-in unavailable: run `node_modules/.bin/cf auth login`')
 def environment():
- broad,_=credentials();e=os.environ.copy();s=state()
+ e=os.environ.copy();s=state();e.pop('CLOUDFLARE_API_TOKEN',None)
  e.update({k:CONFIG[k] for k in INSTALLATION if CONFIG.get(k) is not None})
- e.update({'CLOUDFLARE_API_TOKEN':broad,'TIMDS_AGENT_PUSH_QUEUE_ID':CONFIG.get('TIMDS_AGENT_PUSH_QUEUE_ID') or s.get('queueId','')})
+ e.update({'TIMDS_AGENT_PUSH_QUEUE_ID':CONFIG.get('TIMDS_AGENT_PUSH_QUEUE_ID') or s.get('queueId','')})
  return e
 def cf(args,parse=True,extra=None,stdin=None,pass_fds=(),cwd=ROOT):
  e=environment();e.update(extra or {});r=subprocess.run([str(ROOT/'node_modules/.bin/cf'),*args],env=e,cwd=cwd,capture_output=True,text=True,input=stdin,pass_fds=pass_fds)

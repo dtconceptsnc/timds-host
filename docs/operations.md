@@ -131,9 +131,10 @@ installation record and the runtime secrets from the checkout's `.env`
 (gitignored, owner-only; start from
 [`scripts/deploy-host.example.env`](../scripts/deploy-host.example.env)) and
 keeps created resource ids in `.env.deploy-state.json`. Nothing
-installation-specific is tracked; see [verification](verification.md). The
-Cloudflare CLI OAuth tokens come from the local wrangler and cloudflare CLI
-config files, and `cf deploy` receives the runtime secrets through a fifo.
+installation-specific is tracked; see [verification](verification.md). Every
+Cloudflare API call runs under the cf CLI's own sign-in (`cf auth login`; no
+wrangler sign-in is needed), and `cf deploy` receives the runtime secrets
+through a fifo.
 
 ```sh
 python3 scripts/deploy-host.py deploy
