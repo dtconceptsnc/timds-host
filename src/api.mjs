@@ -3,7 +3,7 @@ import { Catalog } from './store/catalog.mjs';
 import { fail } from './store/errors.mjs';
 import { apiHeaders, assertApiVersion, readJson, jsonResponse } from './http.mjs';
 import { streamJsonFileTrees } from './repository/file-trees.mjs';
-import { hostOrigin } from './http.mjs';
+import { hostOrigin, oauthOrigin } from './http.mjs';
 import { verifyBootstrapSecret } from './auth/access.mjs';
 import { importApi } from './imports/api.mjs';
 import { requestDiagnostic } from './requests/diagnostics.mjs';
@@ -91,7 +91,7 @@ export function createApi({ getCoordinator, provision, mcp }) {
     if(match) {
       if(method!=='POST')throw fail(405,'Use POST');
       const reference=segment(match[1]),row=await source(reference),issued=await call(row.id,'feedTicket',[reference]);
-      return jsonResponse({ticket:issued.ticket,expiresAt:issued.expiresAt,url:`${hostOrigin(env).replace(/^http/,'ws')}/api/timds/design-systems/${row.id}/feed?ticket=${issued.ticket}`});
+      return jsonResponse({ticket:issued.ticket,expiresAt:issued.expiresAt,url:`${oauthOrigin(env,url.origin).replace(/^http/,'ws')}/api/timds/design-systems/${row.id}/feed?ticket=${issued.ticket}`});
     }
     match=path.match(/^\/api\/timds\/submissions\/([^/]+)\/publish$/);
     if(match&&method==='POST') {

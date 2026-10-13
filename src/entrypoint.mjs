@@ -3,7 +3,7 @@ import { createHostOAuth } from './auth/oauth.mjs';
 import { createApi } from './api.mjs';
 import { createProvisioner } from './provision.mjs';
 import { Catalog } from './store/catalog.mjs';
-import { apiHeaders, errorResponse, hostOrigin } from './http.mjs';
+import { apiHeaders, errorResponse, oauthOrigin } from './http.mjs';
 import { parsePreviewBuildEvent, createPreviewBuildHandler } from './preview/events.mjs';
 import { createPreviews } from './preview/index.mjs';
 import { agentPushEvent } from '../runtime/policy.mjs';
@@ -53,7 +53,8 @@ export class PublicRoots extends WorkerEntrypoint {
 // POST .../feed/tickets issued under OAuth; the source coordinator consumes it.
 const feedRoute=/^\/api\/timds\/design-systems\/([^/]+)\/feed$/;
 async function feedUpgrade(request,env,ctx,reference) {
-  const url=new URL(request.url),origin=hostOrigin(env);
+  // The Studio custom domain is an accepted OAuth origin; a feed socket opened there stays on it.
+  const url=new URL(request.url),origin=oauthOrigin(env,url.origin);
   if(url.origin!==origin)throw fail(421,'Use the configured host origin');
   if(request.method!=='GET')throw fail(405,'Use GET with Upgrade: websocket');
   if((request.headers.get('Upgrade')||'').toLowerCase()!=='websocket')throw fail(426,'Upgrade: websocket is required');
