@@ -1,0 +1,117 @@
+{
+  "recordedAt": "2026-10-13T20:22:52.663Z",
+  "builds": [
+    {
+      "label": "baseline",
+      "status": "stopped",
+      "outcome": "success",
+      "createdAt": "2026-10-13T19:13:38.664Z",
+      "stoppedAt": "2026-10-13T19:15:11.768Z",
+      "totalMs": 93104,
+      "installMs": 18652,
+      "buildMs": 46791,
+      "deployMs": 13740,
+      "astroChecks": 2,
+      "astroBuilds": 2
+    },
+    {
+      "label": "cacheWarmup",
+      "status": "stopped",
+      "outcome": "success",
+      "createdAt": "2026-10-13T20:12:05.430Z",
+      "stoppedAt": "2026-10-13T20:13:51.506Z",
+      "totalMs": 106076,
+      "installMs": 12930,
+      "buildMs": 31167,
+      "deployMs": 9164,
+      "astroChecks": 2,
+      "astroBuilds": 2
+    },
+    {
+      "label": "cacheReuse",
+      "status": "stopped",
+      "outcome": "success",
+      "createdAt": "2026-10-13T20:14:15.777Z",
+      "stoppedAt": "2026-10-13T20:16:10.582Z",
+      "totalMs": 114805,
+      "installMs": 19032,
+      "buildMs": 53400,
+      "deployMs": 12789,
+      "astroChecks": 2,
+      "astroBuilds": 2
+    },
+    {
+      "label": "staticPackaging",
+      "status": "stopped",
+      "outcome": "success",
+      "createdAt": "2026-10-13T20:18:31.113Z",
+      "stoppedAt": "2026-10-13T20:20:11.636Z",
+      "totalMs": 100523,
+      "installMs": 20875,
+      "buildMs": 52277,
+      "deployMs": 11453,
+      "astroChecks": 2,
+      "astroBuilds": 1
+    },
+    {
+      "label": "singleCheckStaticPackaging",
+      "status": "stopped",
+      "outcome": "success",
+      "createdAt": "2026-10-13T20:20:57.352Z",
+      "stoppedAt": "2026-10-13T20:22:10.018Z",
+      "totalMs": 72666,
+      "installMs": 21677,
+      "buildMs": 33833,
+      "deployMs": 6550,
+      "astroChecks": 1,
+      "astroBuilds": 1
+    }
+  ],
+  "samples": [
+    {
+      "path": "/design-system/brand/foundation/",
+      "status": 200,
+      "sha256": "f6891c4c7354340a33a385ce246b53d2b72c0685c1d8234098998718cb0bc668",
+      "size": 34049,
+      "afterStatus": 200,
+      "afterSize": 34049,
+      "afterSha256": "f6891c4c7354340a33a385ce246b53d2b72c0685c1d8234098998718cb0bc668",
+      "identical": true,
+      "finalStatus": 200,
+      "finalSha256": "f6891c4c7354340a33a385ce246b53d2b72c0685c1d8234098998718cb0bc668",
+      "finalIdentical": true
+    },
+    {
+      "path": "/design-system/tokens.json",
+      "status": 200,
+      "sha256": "f8c717135a118f4d9928747631733ef71d4e4ce347c90bda937465725b097258",
+      "size": 150827,
+      "afterStatus": 200,
+      "afterSize": 150827,
+      "afterSha256": "f8c717135a118f4d9928747631733ef71d4e4ce347c90bda937465725b097258",
+      "identical": true,
+      "finalStatus": 200,
+      "finalSha256": "f8c717135a118f4d9928747631733ef71d4e4ce347c90bda937465725b097258",
+      "finalIdentical": true
+    },
+    {
+      "path": "/design-system/bundle.json",
+      "status": 200,
+      "sha256": "236130268c847ad53410adfb8a942a696878600f8451c9b9628977233d0ea297",
+      "size": 66439,
+      "afterStatus": 200,
+      "afterSize": 66439,
+      "afterSha256": "236130268c847ad53410adfb8a942a696878600f8451c9b9628977233d0ea297",
+      "identical": true,
+      "finalStatus": 200,
+      "finalSha256": "236130268c847ad53410adfb8a942a696878600f8451c9b9628977233d0ea297",
+      "finalIdentical": true
+    }
+  ],
+  "scope": "Only the existing review Preview uses one workspace check plus direct static packaging. Parent template remains unchanged pending controller deployment; cache experiment reverted.",
+  "checks": {
+    "previewTests": 17,
+    "typecheck": true
+  },
+  "sourceDescription": "Representative static Astro design system; all runs used the same submitted revision. Source and deployment identifiers omitted."
+}
