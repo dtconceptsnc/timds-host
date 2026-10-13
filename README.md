@@ -32,8 +32,15 @@ Local tests must state whether they use that namespace or an explicit test adapt
 
 The Phase 0 spike deployed a container-backed SQLite Durable Object, executed
 Git against a disposable Artifacts repository, and exercised D1, R2 and a Queue
-using `cf` alone. Reproduction details and sanitized receipts belong in
-`docs/evidence/phase-0.md`.
+using `cf` alone. Reproduction details and sanitized receipts are in
+[Phase 0 evidence](docs/evidence/phase-0.md).
+
+A second [Workers Builds spike](docs/evidence/cf-preview-builds.md) proved
+`cf deploy` on main and `cf previews deploy` on a review branch, including real
+success events and public HTML. Both spikes' remote resources were cleaned up.
+The tested beta needs an explicit preview migration on newly created Builds
+connections and has no Preview-delete CLI command; the documented cleanup uses
+the verified Cloudflare API. No Wrangler command was required.
 
 ## Contract
 
@@ -48,6 +55,10 @@ host responses against the vendored OpenAPI contract. [CI instructions](docs/ci.
 describe the automatic foundation checks and separate manually dispatched test
 of an explicitly selected disposable host. A green foundation build does not
 claim live host conformance; the initial portal acceptance run is still pending.
+
+The [architecture plan](docs/architecture.md) describes the proposed coordinator,
+grant consistency, publication recovery, identity and per-system migration
+protocols. It separates planned implementation from the evidence above.
 
 ## License
 

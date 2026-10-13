@@ -1,0 +1,16 @@
+{
+  "name": "timds-host-cf-preview-builds-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "cf build",
+    "deploy": "cf deploy",
+    "deploy:preview": "cf previews deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "beta",
+    "cf": "1.0.0-beta.14",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  }
+}

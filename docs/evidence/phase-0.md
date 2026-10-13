@@ -77,8 +77,10 @@ Artifacts/D1/R2/Queue proof; its receipt is recorded below after execution.
    remain a documented cf gap (`wrangler tail`; future cf live-log equivalent).
    Secrets can use `cf workers secrets bulk --file <secure-file>` or
    `cf deploy --secrets-file <secure-file>`; `cf workers secrets put` does not exist.
-   `cf previews deploy [preview-name]` exists, but execution inside a Workers Builds
-   trigger is a separate acceptance test and has not been claimed here.
+   The follow-up [Workers Builds spike](./cf-preview-builds.md) subsequently proved
+   `cf deploy` and `cf previews deploy` inside real Artifacts push-triggered builds,
+   including success events and public HTML. It documents the required Preview
+   migration step and direct-API Preview deletion exception in cf beta.14.
 
 ## Official references
 

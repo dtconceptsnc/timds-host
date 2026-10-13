@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "testedAt": "2026-10-13",
+  "toolchain": {
+    "cf": "1.0.0-beta.14",
+    "vite": "8.3.4",
+    "cloudflareVitePlugin": "2.0.0-beta.sha-91c870c02"
+  },
+  "workerName": "timds-host-preview-spike-69-4c8f",
+  "main": {
+    "buildUuid": "32fee9a6-5b0d-4011-b150-99151d2069ac",
+    "commitHash": "322482704b5c213b19dcd7b444a266af43eeeb22",
+    "workerVersion": "e857048c-91a0-4f04-bb41-109d7f7ab11a"
+  },
+  "preview": {
+    "buildUuid": "4a2f3e59-f75a-4872-932f-adcbfb68f65c",
+    "commitHash": "333b674cfdcaeac44de00a3c3477d89ffd2c3fb9",
+    "branch": "review-cf-proof",
+    "previewId": "2ba8d3da342f4c7c97b831b74ce44668"
+  },
+  "events": [
+    {
+      "type": "cf.workersBuilds.worker.build.succeeded",
+      "source": {
+        "workerName": "timds-host-preview-spike-69-4c8f",
+        "type": "workersBuilds.worker"
+      },
+      "payload": {
+        "buildUuid": "32fee9a6-5b0d-4011-b150-99151d2069ac",
+        "status": "stopped",
+        "buildOutcome": "success"
+      },
+      "trigger": {
+        "branch": "main",
+        "commitHash": "322482704b5c213b19dcd7b444a266af43eeeb22",
+        "buildCommand": "npm run build",
+        "deployCommand": "npx cf deploy"
+      }
+    },
+    {
+      "type": "cf.workersBuilds.worker.build.succeeded",
+      "source": {
+        "workerName": "timds-host-preview-spike-69-4c8f",
+        "type": "workersBuilds.worker"
+      },
+      "payload": {
+        "buildUuid": "4a2f3e59-f75a-4872-932f-adcbfb68f65c",
+        "status": "stopped",
+        "buildOutcome": "success"
+      },
+      "trigger": {
+        "branch": "review-cf-proof",
+        "commitHash": "333b674cfdcaeac44de00a3c3477d89ffd2c3fb9",
+        "buildCommand": "npm run build",
+        "deployCommand": "npx cf previews deploy"
+      }
+    }
+  ],
+  "http": [
+    {
+      "url": "https://timds-host-preview-spike-69-4c8f.ratebucket.workers.dev",
+      "status": 200,
+      "contentType": "text/html",
+      "mainMarker": true,
+      "previewMarker": false
+    },
+    {
+      "url": "https://08b7a0c3-timds-host-preview-spike-69-4c8f.ratebucket.workers.dev",
+      "status": 200,
+      "contentType": "text/html",
+      "mainMarker": false,
+      "previewMarker": true
+    },
+    {
+      "url": "https://review-cf-proof-timds-host-preview-spike-69-4c8f.ratebucket.workers.dev",
+      "status": 200,
+      "contentType": "text/html",
+      "mainMarker": false,
+      "previewMarker": true
+    }
+  ],
+  "cleanup": [
+    "build connection",
+    "build settings",
+    "event subscription",
+    "preview",
+    "Worker",
+    "repository",
+    "namespace",
+    "HTTP pull consumer",
+    "Queue"
+  ],
+  "cleanupHttpStatus": 404,
+  "sharedDeploymentCredential": "retained unchanged"
+}

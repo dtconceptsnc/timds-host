@@ -102,8 +102,8 @@ Before running the suite:
 2. Grant that identity publication rights for **this fixture only**.
 3. Create or select a separate disposable member identity and short-lived
    credential for invitation, claim, and shared-writer assertions.
-4. Deploy the narrow portable-submissions identity-route correction under
-   review in the portal; no service was restarted during these fixture checks.
+4. Verify the narrow portable-submissions identity-route correction is loaded
+   by the production portal (subsequently satisfied by #77; see below).
 5. Run the exact toolkit client suite against `https://timds.com`, inspect its
    redacted evidence, and verify resource cleanup before claiming conformance.
 
@@ -114,3 +114,14 @@ the portal host at `/tmp/timds69-provision-conformance.mjs`,
 existing server process environment, not printed or copied into these files.
 Remove the disposable source through the ordinary lifecycle after acceptance
 and evidence review; do not delete its records directly.
+
+## Subsequent compatibility update
+
+The independent #60 acceptance landed the same submissions identity-route
+correction in portal PR #77. Read-only verification found production checkout
+`3a1a46c`, the authorization module updated at `2026-10-13T02:16:59Z`, and the
+API service active since `2026-10-13T02:18:18Z`. The #69 portal branch rebased
+onto that commit and removed its duplicate fix. This removes the compatibility
+deployment prerequisite; it does not establish owner authentication, fixture
+publication authority or a passing conformance run. No service was restarted
+by this verification.

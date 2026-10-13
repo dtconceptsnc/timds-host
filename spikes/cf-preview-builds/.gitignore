@@ -1,0 +1,6 @@
+node_modules/
+.cloudflare/
+dist/
+.spike-state.json
+.env*
+.spike-build-config.json
