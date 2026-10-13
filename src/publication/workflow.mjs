@@ -38,7 +38,9 @@ export class PublicationWorkflow extends WorkflowEntrypoint {
     // Another attempt can acquire the lease after the read-only readiness
     // check. Persist this as queue state, then wait outside the stage retry.
     if(!claim)return{queuePending:true};
-    let primary;try{return await publicationServices(this.ctx,this.env,coordinator,lease)[name](input);}
+    // The coordinator writes the publication_stage feed row (deduplicated per
+    // queue cycle) under this lease; the Workflow never writes SQLite itself.
+    let primary;try{await store.recordPublicationStage({publicationId,stage:name,...lease});return await publicationServices(this.ctx,this.env,coordinator,lease)[name](input);}
     catch(error){
      const message=/^Isolated publication (?:workspace|token_reference|token_cycle|media_reference|artifact_reference) check failed$/.test(error?.message||'')?error.message:`Publication ${name} failed`;
      const fresh=await store.publication(publicationId).catch(()=>null),committed=Boolean(fresh?.checkpoints_json?.pointerEventId||row.checkpoints_json?.pointerEventId);

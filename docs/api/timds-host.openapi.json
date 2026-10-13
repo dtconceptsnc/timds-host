@@ -3,7 +3,7 @@
   "info": {
     "title": "TimDS Host API",
     "version": "1.0.0",
-    "description": "Portable hosted editing and multiplayer contract. The toolkit selects a host URL and speaks v1; it does not depend on Supabase, the portal, git or a specific runtime. The portal implements this contract today; a standalone host can implement the same routes. Optional X-TimDS-API-Version and JSON apiVersion default to 1. Success JSON carries apiVersion:1. Unknown response fields must be ignored. Credentials come from the existing identity/device flow; this document covers host work operations, not identity provisioning or operator catalogue administration. Internal Worker RPC, callbacks and consumer MCP JSON-RPC are separate service boundaries. Sessions, submissions, claims, members and events are stored behind one collaboration store. Publication is preflight, merge, build, prepare, release, close with serializable step receipts. New asynchronous behavior is triggered by pushes or session alarms."
+    "description": "Portable hosted editing and multiplayer contract. The toolkit selects a host URL and speaks v1; it does not depend on Supabase, the portal, git or a specific runtime. The portal implements this contract today; a standalone host can implement the same routes. Optional X-TimDS-API-Version and JSON apiVersion default to 1. Success JSON carries apiVersion:1. Unknown response fields must be ignored. Credentials come from the existing identity/device flow; this document covers host work operations, not identity provisioning or operator catalogue administration. Internal Worker RPC, callbacks and consumer MCP JSON-RPC are separate service boundaries. Sessions, submissions, claims, members and events are stored behind one collaboration store. Publication is preflight, merge, build, prepare, release, close with serializable step receipts. New asynchronous behavior is triggered by pushes or session alarms. Every accepted coordinator command appends one audit event with a per-source monotonic seq; GET .../events?after=<seq> replays them in commit order exactly once."
   },
   "servers": [
     {
@@ -764,6 +764,222 @@
         }
       }
     },
+    "/api/timds/design-systems/{source}/events": {
+      "get": {
+        "operationId": "getSourceEvents",
+        "summary": "Replay the source's append-only event feed after a sequence cursor",
+        "description": "Ascending by seq, the per-source monotonic sequence committed with each event row. Reads committed rows without waiting on the source's writer queue; the caller needs the same read authorization as active-work. Resume with after set to the last seq received; latestSeq is the newest committed seq and hasMore reports a further page. Each event is delivered once per cursor walk, with no gaps across coordinator restarts. publication_stage details.stage is one of preflight, merge, build, prepare, release, flip, close (the Workflow stage names); the published event commits during flip, before the close stage row.",
+        "tags": [
+          "Collaboration"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Return events with seq greater than this cursor. Defaults to 0 (the beginning). A non-negative integer; anything else fails with 400.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum events per page. Defaults to 100; values above 500 are capped at 500. Zero, negative or non-integer values fail with 400.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 100
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Events are ordered by ascending seq.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventFeed"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}/feed/tickets": {
+      "post": {
+        "operationId": "createFeedTicket",
+        "summary": "Issue a single-use ticket for the source's live event feed",
+        "description": "Requires the same read authorization as active-work (and the OAuth write scope that every POST requires). The ticket is an opaque 256-bit base64url token bound to the calling principal and this source, valid for 60 seconds and consumed by the first WebSocket upgrade that presents it. Browsers cannot send a bearer header on a WebSocket upgrade, so the upgrade route accepts this ticket instead. Issue a fresh ticket for every connection and reconnection.",
+        "tags": [
+          "Collaboration"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiVersion": {
+                    "type": "integer",
+                    "const": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ticket issued.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedTicket"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}/feed": {
+      "get": {
+        "operationId": "openSourceFeed",
+        "summary": "Open the source's live event and presence feed (WebSocket)",
+        "description": "Not a JSON operation. Send GET with Upgrade: websocket; the request carries no bearer header and is authorized only by the single-use ticket from createFeedTicket, which must belong to this source. A same-host Origin header is required when present. On success the host answers 101 Switching Protocols, replays committed events with seq greater than after in ascending seq order, then streams new events as they commit; a connection never sends a seq at or below one it already sent. Server text messages are JSON: {type:'event', seq, event} where event is the same view the events route returns (Event with seq, principal_name and actor_name); {type:'ready', after, latestSeq} once replay completes; {type:'presence', viewers:[{principalId, name, type, viewing:{sessionId}|{draftId}|null}]} on every connect, disconnect and viewing change; {type:'error', message} for an invalid client message. Client text messages: the raw string ping (answered pong without waking the coordinator; send every 25 seconds), {type:'ping'} (no-op), {type:'presence'} (returns the current viewer list), {type:'viewing', sessionId} | {type:'viewing', draftId} | {type:'viewing', viewing:null}. Close codes: 4410 the source is archived, deleting or deleted (do not reconnect); 4401 access changed (reconnect with a new ticket); 4100 the bounded replay (5,000 events per connection) has more rows (reconnect at once with after set to the last seq received); 1011 replay or delivery failed (reconnect with backoff). Presence is ephemeral and never persisted.",
+        "tags": [
+          "Collaboration"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ticket",
+            "in": "query",
+            "required": true,
+            "description": "Single-use feed ticket from createFeedTicket.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Replay events with seq greater than this cursor; use the last seq received when reconnecting. Defaults to 0.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "Upgrade",
+            "in": "header",
+            "required": true,
+            "description": "Must be websocket; anything else fails with 426.",
+            "schema": {
+              "type": "string",
+              "const": "websocket"
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols. The connection carries the JSON text messages described above."
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
     "/api/timds/design-systems/{source}/submissions": {
       "get": {
         "operationId": "listSubmissions",
@@ -1107,7 +1323,7 @@
       "post": {
         "operationId": "startDesignerRequest",
         "summary": "Start an instruction in a new or existing live session",
-        "description": "Reuse requestId and identical prompt/target for retries. Targeting a session or draft requires owner/publisher authority; the runner joins that exact live sandbox.",
+        "description": "Reuse requestId and identical prompt/target for retries. Targeting a session or draft requires owner/publisher authority; the runner joins that exact live sandbox. A Request that names a session or draft is queued behind earlier Requests for that session and starts only when its runner is idle (submitted, failed, conflicted, sleeping or closed); a busy session never consumes an attempt or fails the Request.",
         "tags": [
           "Requests"
         ],
@@ -2975,6 +3191,63 @@
           }
         }
       }
+    },
+    "/api/timds/design-systems/{source}/principals": {
+      "get": {
+        "operationId": "listSourcePrincipals",
+        "summary": "List people and agents who can be invited into this Design System's sessions",
+        "description": "Active principals with a read, write or publish grant on the source, plus the configured designer agent, sorted by name and bounded to 500. Same read authorization as active-work; never returns emails or credentials and never waits behind the source writer queue.",
+        "tags": [
+          "Collaboration"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrincipalDirectory"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3242,6 +3515,15 @@
           },
           "canInvite": {
             "type": "boolean"
+          },
+          "runner": {
+            "$ref": "#/components/schemas/RunnerPresence",
+            "description": "Present on active-work sessions/drafts and the session status view."
+          },
+          "queueLength": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Requests queued for this session and not yet started (active-work and status views)."
           }
         },
         "required": [
@@ -3667,11 +3949,16 @@
       },
       "Event": {
         "type": "object",
-        "description": "Append-only audit. Additional fields are forward compatible.",
+        "description": "Append-only audit. Additional fields are forward compatible. Every accepted coordinator command writes one row: session_started, draft_created, member_joined, claimed, updated, submitted, closed, request_received, request_started, request_submitted, request_failed, publication_queued, publication_stage (details_json.stage), publication_failed, published, live_state (details_json.state), plus authority_changed, source_deletion_fenced, source_deleted and deleted_source_imported. Unknown event types must be ignored. Request events carry originating_request_id and details_json.requestId; submitted Requests also carry details_json.submissionId; failures carry a safe details_json.error.",
         "properties": {
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Per-source monotonic sequence assigned in the same transaction as the row; feed cursor."
           },
           "event_type": {
             "type": "string"
@@ -3780,6 +4067,54 @@
           "drafts",
           "events",
           "publicationEvents"
+        ]
+      },
+      "EventFeed": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Event"
+                },
+                {
+                  "required": [
+                    "id",
+                    "event_type",
+                    "seq",
+                    "created_at"
+                  ]
+                }
+              ]
+            }
+          },
+          "latestSeq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Newest committed seq for the source; 0 when it has no events."
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "True when more events follow the last returned seq."
+          }
+        },
+        "required": [
+          "apiVersion",
+          "sourceId",
+          "events",
+          "latestSeq",
+          "hasMore"
         ]
       },
       "DraftList": {
@@ -3933,6 +4268,23 @@
                 "type": "null"
               }
             ]
+          },
+          "queuePosition": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 when the Request is running, finished, starts its own session, or is next with no runner ahead of it; otherwise the number of Requests ahead of it in its target session, counting the one whose runner currently holds the session."
+          },
+          "targetSessionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The session or draft named when the Request was created; null for a Request that starts its own session."
           }
         },
         "required": [
@@ -4691,6 +5043,143 @@
             "format": "uuid"
           }
         }
+      },
+      "FeedTicket": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "ticket": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Opaque single-use credential for one WebSocket upgrade."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Sixty seconds after issue."
+          },
+          "url": {
+            "type": "string",
+            "description": "wss:// (ws:// on a local http host) upgrade URL for openSourceFeed carrying the ticket; append after=<seq> to resume."
+          }
+        },
+        "required": [
+          "apiVersion",
+          "ticket",
+          "expiresAt",
+          "url"
+        ]
+      },
+      "RunnerPresence": {
+        "type": "object",
+        "description": "The designer runner's stored state for one session, read from its live session record without starting a container. idle: no Request has run in the session; sleeping: the last run finished and its container stopped; unknown: the record could not be read within the bounded timeout.",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "starting",
+              "running",
+              "submitting",
+              "submitted",
+              "conflicted",
+              "failed",
+              "sleeping",
+              "closed",
+              "unknown"
+            ]
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "submissionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "requestId",
+          "submissionId",
+          "error"
+        ]
+      },
+      "PrincipalDirectory": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "principals": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "user",
+                    "agent"
+                  ]
+                },
+                "active": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "type",
+                "active"
+              ]
+            }
+          }
+        },
+        "required": [
+          "apiVersion",
+          "sourceId",
+          "principals"
+        ]
       }
     },
     "responses": {

@@ -17,6 +17,16 @@ const jsonFile = (snapshot, path) => {
 };
 const change = (snapshot, files, note, extra = {}) => ({ baseRevision: snapshot.session.baseRevision, lastUpdateHash: snapshot.session.lastUpdateHash || '', changedFiles: files, deletedPaths: [], note, ...extra });
 const clean = result => { assert.notEqual(result.stale, true, 'write must not be stale'); assert.deepEqual(result.conflicts || [], [], 'write must merge without conflict'); return result; };
+const PUBLICATION_STAGES = ['preflight', 'merge', 'build', 'prepare', 'release', 'flip', 'close'];
+// Event types must appear in this relative order; other rows may interleave.
+const assertOrdered = (rows, types, message) => {
+  let position = -1;
+  for (const type of types) {
+    const next = rows.findIndex((row, index) => index > position && row.event_type === type);
+    assert.ok(next > position, `${message}: ${type} missing or out of order`);
+    position = next;
+  }
+};
 
 test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, async t => {
   // Fail, rather than skip or silently select a real system, when unconfigured.
@@ -39,6 +49,25 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
     throw new Error(`${name} did not finish within ${config.timeoutMs}ms`);
   };
   const publicationDone = id => waitForPublication(id, () => client.publication(id), { timeoutMs: config.timeoutMs, onRetry: event => evidence.publicationRetries.push(event) });
+  // Walk the feed from a cursor; seq must be consecutive (no gaps, no repeats),
+  // and a second walk from the same cursor must replay the same rows.
+  const readFeed = async after => {
+    const events = []; let cursor = after, page;
+    do {
+      page = await client.events(config.sourceId, cursor, 500);
+      events.push(...page.events); cursor = page.events.at(-1)?.seq ?? cursor;
+    } while (page.hasMore && page.events.length);
+    events.forEach((row, index) => assert.equal(row.seq, after + 1 + index, 'event feed seq is gapless and ascending'));
+    assert.ok(page.latestSeq >= cursor, 'latestSeq covers every returned event');
+    const replay = [];
+    for (cursor = after; replay.length < events.length;) {
+      const again = await client.events(config.sourceId, cursor, 500);
+      if (!again.events.length) break;
+      replay.push(...again.events); cursor = again.events.at(-1).seq;
+    }
+    assert.deepEqual(replay.slice(0, events.length).map(row => row.id), events.map(row => row.id), 'events?after= replays the same rows exactly once');
+    return events;
+  };
   t.after(async () => {
     // Only settled publications are safe to close; failed ones may still retry.
     const { cleanup, publicationCleanup, publicationAttempts, failures } = await cleanupRunResources(resources, {
@@ -61,6 +90,10 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   assert.equal(before.canPublish, true, 'the fixture caller must have a publisher grant');
   assert.equal(before.sessions.length, 0, 'fixture must have no active sessions from another run');
   assert.equal(before.drafts.length, 0, 'fixture must have no active drafts from another run');
+  const feedStart = (await client.events(config.sourceId, 0, 1)).latestSeq;
+  assert.ok(Number.isInteger(feedStart) && feedStart >= 0, 'event feed exposes latestSeq');
+  await assert.rejects(client.events(config.sourceId, -1), /HTTP 400/, 'a negative cursor is rejected');
+  await assert.rejects(client.events(config.sourceId, 0, 0), /HTTP 400/, 'a zero limit is rejected');
   const input = { systemId: config.systemId, idempotencyKey: `conformance:${runId}:start`, note: `Conformance ${short}: inspect disposable fixture` };
   const initial = tracked(await client.start(input));
   assert.match(jsonFile(initial, 'timds.json').name, /^TimDS conformance\b/i, 'fixture manifest name must begin "TimDS conformance"; refuse production-source changes');
@@ -176,9 +209,24 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   assert.equal((await client.rollback(config.sourceId, { version: v2 })).action, 'rollback', 'restore the newest fixture publication after proving rollback');
   assert.deepEqual(await currentVersion(v2), pinnedTwo);
 
+  phase('Event feed replays sessions, members, claims and every publication stage');
+  const runFeed = await readFeed(feedStart);
+  assertOrdered(runFeed.filter(row => row.session_id === draft.session.id), ['draft_created', 'member_joined', 'claimed', 'updated', 'closed'], 'draft lifecycle feed');
+  assert.ok(runFeed.some(row => row.event_type === 'member_joined' && row.session_id === draft.session.id && row.details_json?.principalId === config.memberPrincipalId), 'invited member join is in the feed');
+  assert.ok(runFeed.some(row => row.event_type === 'session_started' && row.session_id === first.session.id), 'session start is in the feed');
+  for (const publication of [p1, p2]) {
+    const rows = runFeed.filter(row => row.details_json?.publicationId === publication.id);
+    assert.equal(rows[0]?.event_type, 'publication_queued', 'publication feed begins when the publication is queued');
+    assert.deepEqual([...new Set(rows.filter(row => row.event_type === 'publication_stage').map(row => row.details_json.stage))], PUBLICATION_STAGES, 'one publication_stage per Workflow stage, in order');
+    assertOrdered(rows, ['publication_queued', 'publication_stage', 'published'], `publication ${publication.id} feed`);
+    const flip = rows.find(row => row.event_type === 'publication_stage' && row.details_json.stage === 'flip');
+    assert.ok(rows.find(row => row.event_type === 'published').seq > flip.seq, 'published commits during the flip stage');
+  }
+
   phase('Designer Request completes with a frozen submission');
   const requestSession = tracked(await client.start({ systemId: config.systemId, idempotencyKey: `conformance:${runId}:request`, note: `Conformance ${short}: Request fixture` }));
   const requestId = randomUUID();
+  const requestFeedStart = (await client.events(config.sourceId, 0, 1)).latestSeq;
   const request = { requestId, sessionId: requestSession.session.id, prompt: `This is disposable TimDS host conformance ${short}. Create only docs/conformance-request-${short}.md containing exactly "TimDS host conformance ${short} passed." followed by a newline. Submit this change with the note "Conformance ${short}: designer Request". Do not publish.` };
   const requested = await client.startRequest(config.sourceId, request);
   assert.equal(requested.requestId, requestId);
@@ -197,6 +245,12 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   assert.equal(requestSubmission.note, request.prompt, 'the original human instruction is the submission audit note');
   assert.equal(requestSubmission.publication, null, 'a Request must not start publication');
   assert.deepEqual(await readPublicStamp(currentStampUrl, { systemId: config.systemId }), pinnedTwo, 'the Request cannot move the public pointer');
+  const requestFeed = (await readFeed(requestFeedStart)).filter(row => row.originating_request_id === requestId);
+  assert.equal(requestFeed.filter(row => row.event_type === 'request_received').length, 1, 'a retried Request is received once');
+  assertOrdered(requestFeed, ['request_received', 'member_joined', 'request_started', 'request_submitted', 'submitted'], 'designer Request feed');
+  assert.equal(requestFeed.find(row => row.event_type === 'request_submitted').details_json.submissionId, complete.submissionId);
+  assert.ok(!requestFeed.some(row => row.event_type === 'request_failed'), 'a completed Request records no failure');
+  assert.ok((await client.activeWork(config.sourceId)).events.every(row => Number.isInteger(row.seq)), 'active-work events carry seq');
   await client.close(requestSession.session.id);
   assert.equal((await client.close(requestSession.session.id)).session.status, 'closed', 'close is idempotent');
   assert.equal((await client.history(requestSession.session.id)).session.status, 'closed', 'history survives fork cleanup');

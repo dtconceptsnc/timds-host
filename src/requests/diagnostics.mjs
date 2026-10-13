@@ -8,8 +8,8 @@ const stages = {
   'host-boundary': new Set(['coordinator-rpc','coordinator-operation','mutation-prepare','mutation-cleanup']),
   'publication-preflight': new Set(['authority','merge','metadata','commit','build','stamp']),
   'designer-request-create': new Set(['source','authority','configuration','input','target','reservation','projection','schedule']),
-  'designer-request-execute': new Set(['lease','source','identity','principal','authority','target','recovery','designer','finish']),
-  'designer-start': new Set(['configuration','identity','input','principal','preview','session','session-identity','claims','runtime-status','credentials','runtime-start']),
+  'designer-request-execute': new Set(['lease','source','identity','principal','authority','target','recovery','designer','requeue','finish']),
+  'designer-start': new Set(['configuration','identity','input','principal','preview','session','session-identity','claim','claims','runtime-status','credentials','runtime-start']),
   'cloudflare-preview': new Set(['worker-list','worker-write','worker-delete','worker-subdomain','account-subdomain','build-token-verify','build-token-list','build-worker-read','build-worker-create','build-worker-delete','build-preview-migrate','build-triggers-list','build-preview-list','build-connection-delete','branch-preview-delete','unknown']),
   'cloudflare-artifacts': new Set(['repository-read','tokens-list','token-mint','token-revoke','other']),
 };

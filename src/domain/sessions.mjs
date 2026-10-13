@@ -7,6 +7,7 @@ import { sessionFilePath, parseSessionResolution } from './paths.mjs';
 export const TIMDS_HOST_API_VERSION = 1;
 export const TIMDS_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export const TIMDS_CHANGESET_MAX_BYTES = 10 * 1024 * 1024;
+export const TIMDS_EVENT_FEED_LIMIT = 500;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
 
@@ -72,7 +73,8 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
   }
   async function leased(id, task, publicationId = null) {
     const lease = randomUUID(); const session = await store.claim(id, lease, publicationId);
-    try { return await task(session, (patch, submission, audit) => store.checkpoint(id, lease, patch, submission, audit ? { ...audit, originating_request_id: audit.originating_request_id || session.originating_request_id || null } : null)); }
+    const stamp = audit => ({ ...audit, originating_request_id: audit.originating_request_id || session.originating_request_id || null });
+    try { return await task(session, (patch, submission, audit) => store.checkpoint(id, lease, patch, submission, audit ? (Array.isArray(audit) ? audit.map(stamp) : stamp(audit)) : null)); }
     finally { await store.release(id, lease); }
   }
   const canPublish = async (source, actor) => { try { if (!authorization.authorizePublish) return false; await authorization.authorizePublish(source, actor); return true; } catch (error) { if (![403,404].includes(error.statusCode)) throw error; return false; } };
@@ -93,13 +95,23 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     const sessions = await Promise.all(rows.map(async row => ({ ...timdsSessionView(row, source), ...await details(actor, row, source) })));
     return { apiVersion: TIMDS_HOST_API_VERSION, sourceId: source.id, canPublish: await canPublish(source, actor), sessions, drafts: sessions.filter(row => row.kind === 'draft'), events: await store.events(source.id), publicationEvents: store.publications ? await store.publications(source.id) : [] };
   }
+  // Ascending per-source feed: same read authorization as activeWork, no writer queue.
+  async function sourceEvents(actor, id, query = {}) {
+    const integer = (value, fallback) => value === undefined || value === null || value === '' ? fallback : /^\d{1,15}$/.test(String(value)) ? Number(value) : NaN;
+    const after = integer(query.after, 0), limit = integer(query.limit, 100);
+    if (!Number.isSafeInteger(after)) throw fail(400, 'after must be a non-negative event sequence');
+    if (!Number.isSafeInteger(limit) || limit < 1) throw fail(400, `limit must be 1–${TIMDS_EVENT_FEED_LIMIT}`);
+    const source = await sourceFor(actor, id);
+    const page = await store.eventsAfter(source.id, after, Math.min(limit, TIMDS_EVENT_FEED_LIMIT));
+    return { apiVersion: TIMDS_HOST_API_VERSION, sourceId: source.id, events: page.events, latestSeq: page.latestSeq, hasMore: page.hasMore };
+  }
   async function join(actor, id, input = {}) {
     const { session, source } = await owned(id, actor);
     const principalId = input.principalId || actor.principalId;
     if (!uuid.test(principalId || '')) throw fail(400, 'principalId is required');
     if (principalId !== actor.principalId && session.owner_principal_id !== actor.principalId && !await canPublish(source, actor)) throw fail(403, 'Only the session owner or a publisher may invite members');
     if (authorization.authenticatePrincipal) await authorization.authenticatePrincipal(principalId);
-    await store.addMember({ session_id: id, principal_id: principalId, role: session.owner_principal_id === principalId ? 'owner' : 'member', invited_by: actor.principalId });
+    await store.addMember({ session_id: id, principal_id: principalId, role: session.owner_principal_id === principalId ? 'owner' : 'member', invited_by: actor.principalId }, event(actor, 'member_joined'));
     return status(actor, id);
   }
   async function claim(actor, id, input = {}) {
@@ -107,7 +119,7 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     const patterns = input.patterns;
     if (!Array.isArray(patterns) || !patterns.length || patterns.length > 100 || patterns.some(pattern => typeof pattern !== 'string' || !pattern.trim() || pattern.length > 500 || pattern.startsWith('/') || pattern.includes('..') || /[\\\x00-\x1f]/.test(pattern))) throw fail(400, 'Claims require 1–100 safe relative patterns');
     if (typeof (input.note || '') !== 'string' || (input.note || '').length > 2000) throw fail(400, 'Claim note is too long');
-    const row = await store.putClaim({ session_id: id, principal_id: actor.principalId, patterns: [...new Set(patterns)], note: (input.note || '').trim(), kind: 'advisory', expires_at: session.expires_at || new Date(now() + TIMDS_SESSION_TTL_MS).toISOString() });
+    const row = await store.putClaim({ session_id: id, principal_id: actor.principalId, patterns: [...new Set(patterns)], note: (input.note || '').trim(), kind: 'advisory', expires_at: session.expires_at || new Date(now() + TIMDS_SESSION_TTL_MS).toISOString() }, event(actor, 'claimed', { originating_request_id: actor.requestId || session.originating_request_id || null }));
     const work = await activeWork(actor, source.id);
     // Advisory glob overlap deliberately errs toward warning, never exclusion.
     const prefix = value => value.split(/[?*[{]/)[0];
@@ -161,7 +173,7 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     if (session && ((session.kind || 'session') !== kind || (session.name || null) !== name || (session.draft_session_id || null) !== (draft?.id || null) || (session.origin_revision || null) !== fromRevision)) throw fail(409, 'This idempotency key belongs to different session origins');
     if (!session) session = await store.insert({ id: randomUUID(), source_id: source.id, owner_principal_id: actor.principalId, owner_user_id: actor.userId || null, owner_token_id: actor.tokenId || null, originating_request_id: actor.requestId || null, idempotency_key: key || null, status: 'starting', kind, name, draft_session_id: draft?.id || null, origin_revision: fromRevision, expires_at: kind === 'draft' ? null : new Date(now() + TIMDS_SESSION_TTL_MS).toISOString() });
     if (onSessionReserved && ['starting','open'].includes(session.status)) await onSessionReserved(session, source);
-    if (store.addMember) await store.addMember({ session_id: session.id, principal_id: actor.principalId, role: 'owner', invited_by: actor.principalId });
+    if (store.addMember) await store.addMember({ session_id: session.id, principal_id: actor.principalId, role: 'owner', invited_by: actor.principalId }, event(actor, 'member_joined', { originating_request_id: actor.requestId || session.originating_request_id || null }));
     if (session.status !== 'starting') { if (onSessionStarted) await leased(session.id, async (row, checkpoint) => checkpoint(await onSessionStarted(row, source))); return snapshot(actor, session.id); }
     return leased(session.id, async (row, checkpoint) => {
       if (row.status !== 'starting') {
@@ -209,7 +221,10 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
         if (integrated.conflicts?.length) return conflictResult(actor, source, session, changes, { ...integrated, files: result.files, baseRevision: result.baseRevision }, checkpoint);
       }
       const patch = { id: submission.id, head_commit: result.headCommit, preview_url: result.previewUrl || '', diff_json: result.diff || [] };
-      const saved = await checkpoint({ base_revision: result.baseRevision || result.headCommit, last_update_hash: '' }, patch, event(actor, 'submitted', { submission_id: submission.id, note: changes.note, merged_keys: result.mergedKeys || [], conflicted_keys: result.conflictedKeys || [] }));
+      const submitted = event(actor, 'submitted', { submission_id: submission.id, note: changes.note, merged_keys: result.mergedKeys || [], conflicted_keys: result.conflictedKeys || [] });
+      // A designer Request's runner result is recorded in the same transaction, immediately before its submission.
+      const audit = actor.type === 'agent' && actor.requestId ? [event(actor, 'request_submitted', { submission_id: submission.id, note: changes.note, details_json: { requestId: actor.requestId, submissionId: submission.id } }), submitted] : submitted;
+      const saved = await checkpoint({ base_revision: result.baseRevision || result.headCommit, last_update_hash: '' }, patch, audit);
       if (store.removeChangeClaim) await store.removeChangeClaim(id, actor.principalId);
       if (target && store.markIntegrated) await store.markIntegrated(submission.id, result.headCommit);
       return output(saved, source, { files: result.files, submission: timdsSubmissionView({ ...submission, ...patch, status: target ? 'closed' : 'submitted' }), conflicts: [] });
@@ -270,7 +285,7 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     if (!publication || !['closing','failed'].includes(publication.status) || !publication.checkpoints_json?.pointerEventId || !session || publication.source_id !== session.source_id || !(await store.submissions(sessionId)).some(row => row.id === publication.submission_id && row.source_id === publication.source_id)) throw fail(409, 'Publication cleanup does not match this session');
     return close({ operator: true, system: true, userId: publication.actor_user_id, principalId: publication.actor_principal_id, requestId: publication.originating_request_id, tokenId: null }, sessionId, false, publicationId);
   }
-  return { activeWork, join, claim, createDraft, listDrafts, draftSnapshot, closeDraft, previewTokens, start, snapshot, submit, update, status, history, close, closeForPublication, cleanupExpired };
+  return { activeWork, sourceEvents, join, claim, createDraft, listDrafts, draftSnapshot, closeDraft, previewTokens, start, snapshot, submit, update, status, history, close, closeForPublication, cleanupExpired };
 }
 
 // Serve only CSS values, never source text or executable rules from a fork.

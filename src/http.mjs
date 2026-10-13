@@ -36,3 +36,11 @@ export function hostOrigin(env) {
 export function assertApiVersion(request, input = {}) {
   if ((request.headers.has('X-TimDS-API-Version') && request.headers.get('X-TimDS-API-Version') !== '1') || (input.apiVersion !== undefined && input.apiVersion !== 1)) throw fail(400, 'Unsupported TimDS API version');
 }
+
+export function oauthOrigin(env, requestOrigin) {
+  const canonical = hostOrigin(env);
+  if (!env.TIMDS_STUDIO_ORIGIN || requestOrigin !== env.TIMDS_STUDIO_ORIGIN) return canonical;
+  const studio = new URL(env.TIMDS_STUDIO_ORIGIN);
+  if (studio.protocol !== 'https:' || studio.origin !== env.TIMDS_STUDIO_ORIGIN) throw fail(503, 'The Studio origin must be an exact HTTPS origin');
+  return studio.origin;
+}

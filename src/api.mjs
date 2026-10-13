@@ -3,7 +3,7 @@ import { Catalog } from './store/catalog.mjs';
 import { fail } from './store/errors.mjs';
 import { apiHeaders, assertApiVersion, readJson, jsonResponse } from './http.mjs';
 import { streamJsonFileTrees } from './repository/file-trees.mjs';
-import { hostOrigin } from './http.mjs';
+import { hostOrigin, oauthOrigin } from './http.mjs';
 import { verifyBootstrapSecret } from './auth/access.mjs';
 import { importApi } from './imports/api.mjs';
 import { requestDiagnostic } from './requests/diagnostics.mjs';
@@ -64,10 +64,13 @@ export function createApi({ getCoordinator, provision, mcp }) {
       const operation=action==='claims'?'claim':action;
       return respond(await call(await located('session',id),operation,[id,...(method==='POST'&&action!=='close'?[input]:[])]));
     }
-    match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/(active-work|submissions|drafts|rollback|requests)(?:\/([^/]+))?(?:\/(snapshot|close))?$/);
+    match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/principals$/);
+    if(match){if(method!=='GET')throw fail(405,'Use GET');const row=await source(segment(match[1]));return respond(await call(row.id,'principals',[]));}
+    match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/(active-work|events|submissions|drafts|rollback|requests)(?:\/([^/]+))?(?:\/(snapshot|close))?$/);
     if(match) {
       const reference=segment(match[1]), action=match[2], child=match[3] && segment(match[3]), tail=match[4], row=await source(reference);
       if(action==='active-work'&&!child&&method==='GET')return respond(await call(row.id,'activeWork',[reference]));
+      if(action==='events'&&!child&&method==='GET')return respond(await call(row.id,'sourceEvents',[reference,{after:url.searchParams.get('after'),limit:url.searchParams.get('limit')}]));
       if(action==='submissions'&&!child&&method==='GET')return respond(await call(row.id,'listSubmissions',[]));
       if(action==='drafts') {
         if(!child&&method==='GET')return respond(await call(row.id,'listDrafts',[reference]));
@@ -81,6 +84,14 @@ export function createApi({ getCoordinator, provision, mcp }) {
         if(child&&!tail&&method==='GET')return respond(await call(row.id,'readRequest',[row.id,child]));
       }
       throw fail(404,'Route not found');
+    }
+    // Live feed ticket: single use, 60 s, bound to this principal and source.
+    // The WebSocket upgrade itself is routed before OAuth in entrypoint.mjs.
+    match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/feed\/tickets$/);
+    if(match) {
+      if(method!=='POST')throw fail(405,'Use POST');
+      const reference=segment(match[1]),row=await source(reference),issued=await call(row.id,'feedTicket',[reference]);
+      return jsonResponse({ticket:issued.ticket,expiresAt:issued.expiresAt,url:`${oauthOrigin(env,url.origin).replace(/^http/,'ws')}/api/timds/design-systems/${row.id}/feed?ticket=${issued.ticket}`});
     }
     match=path.match(/^\/api\/timds\/submissions\/([^/]+)\/publish$/);
     if(match&&method==='POST') {

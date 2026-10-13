@@ -20,6 +20,8 @@ const workflow=`${name}-publication`;
 export default defineConfig({
   worker: {
     name,
+    workersDev:true,
+    domains:process.env.TIMDS_STUDIO_ORIGIN?[new URL(process.env.TIMDS_STUDIO_ORIGIN).hostname]:[],
     compatibilityDate: '2026-10-12',
     compatibilityFlags: ['nodejs_compat', 'enable_ctx_exports', 'global_fetch_strictly_public'],
     entrypoint,
@@ -48,9 +50,11 @@ export default defineConfig({
       PUSHES:bindings.queue({name:`${name}-events`}),
       PUBLICATION_WORKFLOW:bindings.workflow({name:workflow,worker:name,exportName:'PublicationWorkflow'}),
       HOST_ORIGIN:bindings.text(process.env.TIMDS_HOST_ORIGIN || 'http://127.0.0.1:8787'),
+      TIMDS_STUDIO_ORIGIN:bindings.text(process.env.TIMDS_STUDIO_ORIGIN || ''),
       TIMDS_WORKERS_SUBDOMAIN_ALIASES:bindings.text(process.env.TIMDS_WORKERS_SUBDOMAIN_ALIASES || '{}'),
       TIMDS_PUBLIC_ORIGIN:bindings.text(process.env.TIMDS_PUBLIC_ORIGIN || 'http://127.0.0.1:8788'),
       TIMDS_PORTAL_ORIGIN:bindings.text(process.env.TIMDS_PORTAL_ORIGIN || ''),
+      TIMDS_STUDIO_FRAME_ORIGINS:bindings.text(process.env.TIMDS_STUDIO_FRAME_ORIGINS || ''),
       TIMDS_ACCESS_INVITATIONS_ENABLED:bindings.text(process.env.TIMDS_ACCESS_INVITATIONS_ENABLED==='true'?'true':'false'),
       TIMDS_HOST_WORKER_NAME:bindings.text(name),
       ACCESS_TEAM_DOMAIN:bindings.text(process.env.TIMDS_ACCESS_TEAM_DOMAIN || ''),

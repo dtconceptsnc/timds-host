@@ -17,6 +17,7 @@ dist/
 *.pfx
 worker-configuration.d.ts
 .DS_Store
+__pycache__/
 
 # Installation/customer operational receipts belong in private operator storage.
 /docs/evidence/

@@ -22,6 +22,7 @@ import { createSourceDeletion } from '../lifecycle/deletion.mjs';
 import { createSourceInvitations } from '../invitations/service.mjs';
 import { readSourceView } from '../source-view.mjs';
 import { readImportedPublicMedia } from '../mcp/public-media.mjs';
+import { createSourceFeed } from './feed.mjs';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const safeError = error => ({ statusCode:Number.isInteger(error?.statusCode)?error.statusCode:500,
@@ -74,7 +75,16 @@ export class SystemCoordinator extends DurableObject {
       schedule:async due=>{const prior=await ctx.storage.getAlarm();if(!prior||due<prior)await ctx.storage.setAlarm(due);}});
     this.deletion=createSourceDeletion({sourceId,storage:ctx.storage,catalog:this.catalog,store:this.store,artifacts:this.artifacts,preview:this.preview,live:this.requests.live,stopMedia:options=>this.media.expire({fenced:true,...options}),mediaInventory:()=>this.media.inventory(),runMutation:this.engine.runMutation,env,origin:hostOrigin(env)});
     this.invitations=createSourceInvitations({sourceId,catalog:this.catalog,store:this.store,env});
+    // Live feed: hibernatable sockets; raw `ping` heartbeats never wake the object.
+    this.feed=createSourceFeed({sourceId,ctx,store:this.store,catalog:this.catalog,authorize:(actor,reference)=>this.engine.invoke({operation:'sourceEvents',actor,args:[reference,{limit:1}]}),
+      watch:(id,options)=>this.requests.live.watch(id,options)});
+    this.store.onEvent(row=>this.feed.onEvent(row));
+    if(typeof WebSocketRequestResponsePair==='function')ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping','pong'));
   }
+  async fetch(request){try{return await this.feed.accept(request);}catch(error){return errorResponse(error);}}
+  async webSocketMessage(ws,message){try{await this.feed.message(ws,message);}catch{try{ws.close(1011,'Feed error');}catch{}}}
+  async webSocketClose(ws){await this.feed.closed(ws);}
+  async webSocketError(ws){await this.feed.closed(ws);}
   async mediaOperation(input){try{return {ok:true,value:await this.media.invoke(input)};}catch(error){return {ok:false,error:safeError(error)};}}
   async mediaUpload(request,route){try{return await this.media.upload(request,route);}catch(error){return errorResponse(error);}}
   async mediaFetch(request,route){try{return await this.media.fetch(request,route);}catch(error){return errorResponse(error);}}
@@ -94,6 +104,11 @@ export class SystemCoordinator extends DurableObject {
       else if(['listInvitations','reserveInvitation','revokeInvitation'].includes(operation))value=await this.engine.runMutation(()=>this.invitations.admin({operation:{listInvitations:'list',reserveInvitation:'reserve',revokeInvitation:'revoke'}[operation],actor,input:args[0]}));
       else if(['prepareDeletion','readDeletion','confirmDeletion','deletionHistory'].includes(operation))value=await this.engine.runMutation(()=>this.deletion.invoke({operation:{prepareDeletion:'prepare',readDeletion:'read',confirmDeletion:'confirm',deletionHistory:'history'}[operation],actor,input:args[0]}));
       else if(operation==='createRequest'||operation==='readRequest')value=await this.engine.requestsInvoke({operation:operation==='createRequest'?'create':'read',actor,args});
+      else if(operation==='feedTicket')value=await this.feed.ticket(actor,args[0]);
+      // Presence: committed rows plus each open session's stored runner record; never queued, never starts a container.
+      else if(operation==='activeWork'||operation==='status')value=await this.requests.presence(await this.engine.invoke({operation,actor,args}));
+      // Invite directory: activeWork's read authorization, D1 grants only, no writer queue.
+      else if(operation==='principals')value=await this.engine.runRead(actor,async verified=>{const source=await this.store.getSource(this.sourceId);if(!source||source.archived_at||source.lifecycle_status!=='ready')throw fail(404,'Design System not found');await this.authorization.authorizeSource(source,verified);return {apiVersion:1,sourceId:source.id,principals:await this.catalog.sourcePrincipals(source.id,this.env.TIMDS_DESIGNER_PRINCIPAL_ID)};});
       else if(operation==='rollback')value=await this.engine.rollbackVersion({actor,input:args[0],operationId:crypto.randomUUID()});
       else if(operation==='authority')value=await this.engine.mutateAuthority({...args[0],actor});
       else if(operation==='archive'||operation==='restore')value=await this.engine.setArchived({...args[0],actor,restore:operation==='restore'});
@@ -103,7 +118,11 @@ export class SystemCoordinator extends DurableObject {
         value=await this.engine.runMutation(()=>{if(this.store.deletionFence())throw fail(409,'Publication is fenced by source deletion');return this.publicationApi.publish(actor,...args);});
         httpStatus=value.status;value=value.body;
         await this.store.flushOutbox();
+      } else if(operation==='sourceEvents') {
+        // Event feed: committed SQLite rows after the activeWork read check; never queued.
+        value=await this.engine.invoke({operation,actor,args});
       } else value=await this.engine.invoke({operation,actor,args});
+      this.feed.afterOperation(operation,args);
       value=this.projectActiveUrls(value,{preflightSubmission:operation==='publish'&&value?.preflight?this.store.getSubmission(args[0]):undefined});
       return {ok:true,value,...(httpStatus?{httpStatus}:{})};
     } catch(error) {return {ok:false,error:safeError(requestDiagnostic(error,'coordinator-operation','host-boundary'))};}
@@ -125,7 +144,7 @@ export class SystemCoordinator extends DurableObject {
   initializeSource(input){return this.engine.initializeSource(input);}
   checkpointProvision(input){return this.engine.checkpointProvision(input);}
   completeProvision(input){return this.engine.completeProvision(input);}
-  fencePrincipal(input){return this.engine.fencePrincipal(input);}
+  fencePrincipal(input){this.feed.closePrincipal(input?.principalId);return this.engine.fencePrincipal(input);}
   async publicVersion(label,includeReadView=false) {
     // Anonymous immutable reads must remain available during source edits.
     // getSource overlays the committed SQLite pointer on current D1 authority.

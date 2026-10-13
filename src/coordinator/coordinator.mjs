@@ -5,11 +5,12 @@ import { fail, principalId } from '../store/errors.mjs';
 import { readSourceView } from '../source-view.mjs';
 import { requestDiagnostic } from '../requests/diagnostics.mjs';
 
-const domainOperations = new Set(['activeWork','join','claim','createDraft','listDrafts','draftSnapshot','closeDraft','start','snapshot','submit','update','status','history','close']);
+const domainOperations = new Set(['activeWork','sourceEvents','join','claim','createDraft','listDrafts','draftSnapshot','closeDraft','start','snapshot','submit','update','status','history','close']);
 // These domain methods read committed rows and current D1 authority only.
 // Git snapshots/history can acquire repository capabilities and stay serialized.
-const metadataOperations = new Set(['activeWork','listDrafts','status']);
-const publicationOperations = new Set(['getSource','get','getSubmission','submissions','submissionsForSource','publicationsForSource','publication','publicationBySubmission','reservePublication','attachPublicationJob','publicationReadiness','claimPublicationJob','renewPublicationLease','yieldPublicationLease','authorizePublication','checkpointPublication','releasePublicationVersion','getExecutionJob','getLifecycleOperation','resolveRollbackVersion','publishedRelease','publicationEventsForSources']);
+// sourceEvents is the event feed: committed SQLite rows after the activeWork read check.
+const metadataOperations = new Set(['activeWork','sourceEvents','listDrafts','status']);
+const publicationOperations = new Set(['getSource','get','getSubmission','submissions','submissionsForSource','publicationsForSource','publication','publicationBySubmission','reservePublication','attachPublicationJob','publicationReadiness','claimPublicationJob','renewPublicationLease','yieldPublicationLease','authorizePublication','checkpointPublication','recordPublicationStage','releasePublicationVersion','getExecutionJob','getLifecycleOperation','resolveRollbackVersion','publishedRelease','publicationEventsForSources']);
 const sameProvisionInput = (left, right) => left == null && right == null ||
   left != null && right != null && left.fileTreeDigest === right.fileTreeDigest && left.grantPublisher === right.grantPublisher;
 
