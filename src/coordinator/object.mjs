@@ -8,6 +8,7 @@ import { createRepositoryAdapter } from '../repository/adapter.mjs';
 import { createArtifactsAdapter } from '../repository/artifacts.mjs';
 import { createHostRequests } from '../requests/index.mjs';
 import { createLivePreviewHosts } from '../live/hosts.mjs';
+import { createActiveWorkersUrlProjection } from '../live/url-projection.mjs';
 import { createAgentForkSubscriptions } from '../live/subscriptions.mjs';
 import { createPublicationService } from '../publication/service.mjs';
 import { createPublicationApi } from '../publication/api.mjs';
@@ -35,6 +36,7 @@ export class SystemCoordinator extends DurableObject {
     const sourceId=ctx.id.name;
     if(!uuid.test(sourceId||''))throw new Error('Coordinator name must be a source UUID');
     this.sourceId=sourceId;
+    this.projectActiveUrls=createActiveWorkersUrlProjection({sourceId,aliases:env.TIMDS_WORKERS_SUBDOMAIN_ALIASES||'{}'});
     this.catalog=new Catalog(env.CATALOG);
     this.artifacts=createArtifactsAdapter({env});
     this.preview=createPreviews({env});
@@ -102,6 +104,7 @@ export class SystemCoordinator extends DurableObject {
         httpStatus=value.status;value=value.body;
         await this.store.flushOutbox();
       } else value=await this.engine.invoke({operation,actor,args});
+      value=this.projectActiveUrls(value,{preflightSubmission:operation==='publish'&&value?.preflight?this.store.getSubmission(args[0]):undefined});
       return {ok:true,value,...(httpStatus?{httpStatus}:{})};
     } catch(error) {return {ok:false,error:safeError(requestDiagnostic(error,'coordinator-operation','host-boundary'))};}
   }

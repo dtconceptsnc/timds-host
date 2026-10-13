@@ -48,6 +48,7 @@ export default defineConfig({
       PUSHES:bindings.queue({name:`${name}-events`}),
       PUBLICATION_WORKFLOW:bindings.workflow({name:workflow,worker:name,exportName:'PublicationWorkflow'}),
       HOST_ORIGIN:bindings.text(process.env.TIMDS_HOST_ORIGIN || 'http://127.0.0.1:8787'),
+      TIMDS_WORKERS_SUBDOMAIN_ALIASES:bindings.text(process.env.TIMDS_WORKERS_SUBDOMAIN_ALIASES || '{}'),
       TIMDS_PUBLIC_ORIGIN:bindings.text(process.env.TIMDS_PUBLIC_ORIGIN || 'http://127.0.0.1:8788'),
       TIMDS_PORTAL_ORIGIN:bindings.text(process.env.TIMDS_PORTAL_ORIGIN || ''),
       TIMDS_ACCESS_INVITATIONS_ENABLED:bindings.text(process.env.TIMDS_ACCESS_INVITATIONS_ENABLED==='true'?'true':'false'),
