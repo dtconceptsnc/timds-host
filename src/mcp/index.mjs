@@ -5,6 +5,7 @@ import { readPublishedArtifactFile } from '../publication/artifacts.mjs';
 import { fail } from '../store/errors.mjs';
 import { publishedFile, publicOrigins, publicSystemUrls, safePublicPath } from '../public/index.mjs';
 import { blockToMarkdown, pageToMarkdown } from './markdown.mjs';
+import { readPublicDerivedLayer } from './derived-layer.mjs';
 
 const scope={systemId:z.string().min(1).max(300),version:z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._+-]{0,99}$/).optional()};
 const readOnly={readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false};
@@ -36,8 +37,8 @@ async function gapRequestId(fields) {
  */
 export function createReadServer({resolvePublished,bucket,readFile=readPublishedArtifactFile,publicOrigin,createRequest,actor}) {
   const server=new McpServer({name:'timds-design-system-read',version:'0.1.0'},{instructions});
-  const resolve=async args=>{
-    const resolved=await resolvePublished(args.systemId,args.version||null);
+  const resolve=async(args,includeReadView=false)=>{
+    const resolved=await resolvePublished(args.systemId,args.version||null,includeReadView);
     if (resolved.source.system_id!==args.systemId || resolved.version.source_id!==resolved.source.id || args.version&&resolved.version.version_label!==args.version) throw fail(404,'Published Design System not found');
     return resolved;
   };
@@ -69,6 +70,10 @@ export function createReadServer({resolvePublished,bucket,readFile=readPublished
     const format=args.format||'markdown',header={system:systemStamp(resolved),page:{id:page.id,title:page.title,url:page.url},format};
     if(args.block){const wanted=args.block.trim().replace(/^#/,''),block=(page.blocks||[]).find(block=>block.id===wanted||block.id===`${page.id}#${wanted}`||block.id.split('#').at(-1)===wanted);if(!block)throw fail(404,'Published block not found');return {...header,block:block.id,...(format==='markdown'?{markdown:blockToMarkdown(block)}:{blocks:[block]})};}
     return {...header,...(format==='markdown'?{markdown:pageToMarkdown(page)}:{blocks:page.blocks||[]})};
+  });
+  server.registerTool('read_derived_layer',{description:'Read a bounded published derived layer and its exact source/version receipt from one current-pointer resolution. No authored source, private metadata or write authority is returned.',inputSchema:z.object({...scope,metadataOnly:z.boolean().optional()}),annotations:readOnly},async args=>{
+    try{const value=await readPublicDerivedLayer({resolved:await resolve(args,true),bucket,readFile,publicOrigin,metadataOnly:args.metadataOnly===true});return {content:[{type:'text',text:'Published derived layer and version receipt.'}],structuredContent:value};}
+    catch(error){return {...toolError(error),structuredContent:{error:{statusCode:[400,404,409].includes(error?.statusCode)?error.statusCode:503}}};}
   });
   const canWrite=actor?.principalId && (Array.isArray(actor.scopes)?actor.scopes.includes('timds:write'):actor.accessMode==='write');
   if(canWrite&&createRequest)tool('report_gap','Create a Request describing a Design System gap. Use only when the user agrees to report it. Identical reports by this caller on this immutable release reuse their Request.',{...scope,kind:z.enum(['missing-guidance','missing-token','missing-role','missing-media','incorrect','other']),title:z.string().trim().min(3).max(200),detail:z.string().trim().min(1).max(4000),reference:z.string().max(500).optional()},async args=>{

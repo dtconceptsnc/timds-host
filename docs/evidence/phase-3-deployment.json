@@ -3,7 +3,7 @@
   "catalogId": "bea1c205-b5a9-48ef-a18b-9c501b5bb504",
   "snapshots": "timds-host-69-snapshots",
   "releases": "timds-host-69-releases",
-  "mainVersion": "4de6f130-b68f-4e74-8434-b1e941a913cc",
+  "mainVersion": "eec5b502-381e-4ad1-994b-b2b19e063cf7",
   "mainOrigin": "https://timds-host-69.ratebucket.workers.dev",
   "publicOrigin": "https://timds-host-69-public.ratebucket.workers.dev",
   "releaseLock": {
@@ -11,7 +11,7 @@
     "type": "Indefinite",
     "enabled": true
   },
-  "recordedAt": "2026-10-13T11:52:01.867880+00:00",
+  "recordedAt": "2026-10-13T12:43:58.540085+00:00",
   "publicVersion": "a3861f83-94a5-41c6-990a-56f89e35239f",
   "toolchain": "cf@1.0.0-beta.14",
   "containerImages": {
@@ -54,7 +54,7 @@
   ],
   "catalogMigration": "0001_catalog.sql",
   "catalogStatements": 18,
-  "authenticatedHostConformance": "Human OAuth and authenticated /me passed; bootstrap/provision/full host conformance pending",
+  "authenticatedHostConformance": "CLI OAuth, authenticated /me, admin bootstrap, organization/designer creation and source provisioning passed; session/Studio/publication conformance in progress",
   "oauthDiscovery": {
     "authorizationServer": {
       "path": "/.well-known/oauth-authorization-server",
@@ -109,7 +109,7 @@
       "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
       "nosniff": "nosniff",
       "location": null,
-      "sha256": "f43ad63eb4957b536b406020ceb4d4dbc2744221e0dcba51fbeb1af430cb82d3",
+      "sha256": "87557a9369db08f93ff1c2bf2f9b17f467820ee867b12630588a18da19b8edf3",
       "localMatch": true
     },
     {
@@ -120,7 +120,7 @@
       "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
       "nosniff": "nosniff",
       "location": null,
-      "sha256": "9fde5666f866b3015d4b4eeb3e1f0e01fc2a8a4bf3d3870ecaf213858e2f28e6",
+      "sha256": "8b439178d2fcd36505fcff2d1c26ff45ac86f8fedc12668fa078e91123431982",
       "localMatch": true
     },
     {
@@ -160,7 +160,7 @@
     "serviceAuthStatus": 302,
     "apiAnonymousStatus": 401
   },
-  "deploymentScope": "Studio, Access, frozen provisioning/retry receipts, external-push reconciliation, validated callback-origin CSP and same-origin consent referrer policy",
+  "deploymentScope": "Studio, Access, frozen provisioning/retry receipts, external-push reconciliation, validated callback-origin CSP, same-origin consent referrer policy, configured designer principal, bounded Request creation diagnostics, Studio read timeout recovery and mobile topbar, Workers-compatible no-follow Preview/public stamp fetches, configured gpt-6-sol MODEL, persisted safe failed task diagnostics, metadata read facade, source/import read hooks and publication preflight diagnostics, outer RPC diagnostics and unactivated legacy serving service",
   "oauthConsentRedirect": {
     "browserBeforeFix": "Chrome ERR_BLOCKED_BY_CLIENT after consent POST; no CLI credential saved",
     "cause": "Fresh browser POST returned403 under no-referrer; after same-origin policy CLI code exchange and credential persistence succeeded",
@@ -177,6 +177,62 @@
       "principalId": "cca20844-e655-40dc-92f5-a51a9ee6b206",
       "type": "user",
       "admin": false
+    },
+    "studioAfterReferrerFix": "Normal same-origin HTTPS Studio OAuth callback completed successfully",
+    "toolkitLandingHardening": "src/oauth.mjs now waits response finish/disconnect and graceful server.close with5s forced fallback; typecheck/pack check passed, browser retest pending"
+  },
+  "designerPrincipalId": "789e056d-9120-4fb3-8610-5a10df98911d",
+  "designerBindingReadbackMatched": true,
+  "pendingLocalChanges": [],
+  "requestInvestigation": {
+    "requestId": "71a9b933-f7c9-4f09-a7cc-1a358f33910c",
+    "initialStatus": 500,
+    "reservationPresent": true,
+    "catalogTablePresent": true,
+    "diagnosticDeployment": "276b6f45-167c-406d-a9b9-6f41ccdef806",
+    "retry": "same original ID created native session and entered running after redirect fix; dispatch job succeeded, runner failed",
+    "runtimeBuffer": {
+      "available": true,
+      "byteLengthAvailable": true,
+      "runtime": "workerd compatibility2026-10-12 nodejs_compat"
+    },
+    "jobId": "62cf28ba-099f-43b0-8f6e-986c7590257d",
+    "requestedBy": "cca20844-e655-40dc-92f5-a51a9ee6b206",
+    "runnerPrincipalId": "789e056d-9120-4fb3-8610-5a10df98911d",
+    "initialFailureCause": "unproven; diagnostic-only deployment did not reproduce first500",
+    "executionFailure": {
+      "operation": "cloudflare-preview",
+      "stage": "worker-list",
+      "errorClass": "TypeError",
+      "statusCode": 502
+    },
+    "executionFailureCause": "Native workerd rejects redirect:error before network; local exact-compatibility invocation reproduced; manual reached Cloudflare API with anonymous dummy credential",
+    "fix": "Preview API/readiness and publication public-read use redirect:manual; success-status checks reject3xx",
+    "fixVersion": "3d88ce66-aee0-4a4d-bb04-95db7db69747",
+    "nativeSessionId": "9fce67ce-39fb-462d-8fee-b549e167b8d0",
+    "runnerFailure": {
+      "state": "failed",
+      "diagnosticsRetained": false,
+      "modelBinding": "missing in prior deployed host; corrected to gpt-6-sol and readback verified",
+      "cause": "missing MODEL was a confirmed wiring defect; corrected configuration passed fresh native Request through submission"
+    },
+    "cliSubmissionAfterRedirectFix": {
+      "submissionId": "189cf3bd-5082-4c9e-8a47-f74094139f83",
+      "state": "succeeded",
+      "previewRendered": "Overview"
+    },
+    "freshRequest": {
+      "requestId": "a8d19bc9-11cb-4d60-93e5-591999562bf3",
+      "status": "succeeded",
+      "proof": "native model execution and completion callback produced submission",
+      "version": "74d5b5fe-f77b-448f-b5f7-2705e9d452ab",
+      "runnerState": "submitted",
+      "sessionId": "bea77f26-c8be-4363-8740-302e0a4098d5",
+      "submissionId": "0da402f3-da45-4160-b952-2ad7ce63c9a2",
+      "observedAt": "2026-10-13T12:30:52.734Z",
+      "errorPresent": false
     }
-  }
+  },
+  "designerModel": "gpt-6-sol",
+  "modelBindingReadbackMatched": true
 }

@@ -20,6 +20,15 @@ export class Catalog {
   async run(sql, ...values) { try { return await this.primary().prepare(sql).bind(...values).run(); } catch (error) { storageError(error); } }
   async batch(statements) { const db = this.primary(); try { return await db.batch(statements.map(([sql, values]) => db.prepare(sql).bind(...values))); } catch (error) { storageError(error); } }
   async principal(id) { return identity(await this.first('SELECT * FROM principals WHERE id=?', id)); }
+  async principalPage(after = '') {
+    const rows = await this.all('SELECT id,type,name,status FROM principals WHERE id>? ORDER BY id LIMIT 201', after);
+    return {principals:rows.slice(0,200),nextPrincipalCursor:rows.length>200?rows[199].id:null};
+  }
+  async publisherPage(sourceId, after = '') {
+    const rows = await this.all(`SELECT p.id,p.type,p.name,p.status FROM publishers g JOIN principals p ON p.id=g.principal_id
+      WHERE g.source_id=? AND p.id>? ORDER BY p.id LIMIT 201`,sourceId,after);
+    return {publishers:rows.slice(0,200),nextPublisherCursor:rows.length>200?rows[199].id:null};
+  }
   async resolveIdentity({ issuer, subject, type = 'user', name = '' }) {
     if (!issuer || !subject || !['user','agent'].includes(type)) throw fail(400, 'A verified identity is required');
     await this.run('INSERT INTO principals(id,type,name,issuer,subject) VALUES(?,?,?,?,?) ON CONFLICT(issuer,subject) DO NOTHING', this.ids(), type, String(name).slice(0, 320), issuer, subject);

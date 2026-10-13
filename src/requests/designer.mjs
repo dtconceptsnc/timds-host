@@ -1,4 +1,5 @@
 import { sessionIdPattern, agentPushEvent } from '../../runtime/policy.mjs';
+import { requestDiagnostic } from './diagnostics.mjs';
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
 
 /** Native live DO dispatch. The model can submit bounded changes, never publish. */
@@ -13,28 +14,41 @@ export function createDesigner({designerPrincipalId, authorization, sessions, st
   return {
     configured,principalId:designerPrincipalId,
     async start(source,request,prompt,{sessionId,caller}={}) {
-      if(!configured)throw fail(503,'The designer runner is not configured');
-      if(!sessionIdPattern.test(request?.id || '') || request.source_id!==source.id || !source.system_id)throw fail(409,'Designer Request must belong to the Design System');
-      if(typeof prompt!=='string' || !prompt.trim() || Buffer.byteLength(prompt)>32*1024)throw fail(400,'Designer Request must be 1–32 KiB');
-      const actor=await actorFor(source.id,request.id,request.runner_principal_id);
-      await ensurePreview(source);
-      let started;
-      if(sessionId){
-        if(!caller)throw fail(403,'A session owner must authorize the Request');
-        await runMutation(()=>sessions.join(caller,sessionId,{principalId:actor.principalId}));
-        started=await runMutation(()=>sessions.status(actor,sessionId));
-        if(started.session.status!=='open' || started.session.expiresAt && Date.parse(started.session.expiresAt)<=Date.now())throw fail(410,'The target session is closed or expired');
-      }else started=await runMutation(()=>sessions.start(actor,{systemId:source.system_id,idempotencyKey:`designer:${request.id}`}));
-      const session=await store.get(started.session.id);
-      if(session.source_id!==source.id || (!sessionId && (session.owner_principal_id!==actor.principalId || session.originating_request_id!==request.id)))throw fail(409,'Designer session Request identity mismatch');
-      const activeWork=sessions.activeWork?await sessions.activeWork(actor,source.id):null;
-      const claims=activeWork?.claims || activeWork?.sessions?.flatMap(item=>item.claims || []) || [];
-      const taskPrompt=claims.length?`${prompt}\n\nActive advisory work claims (coordinate with these intentions; overlap does not forbid your task):\n${Buffer.from(JSON.stringify(claims.map(claim=>({sessionId:claim.sessionId || claim.session_id,principalId:claim.principalId || claim.principal_id,patterns:claim.patterns,note:claim.note})))).subarray(0,12000).toString('utf8')}`:prompt;
-      const state=await live.runner(session.id);
-      if(state.runner?.requestId===request.id)return {requestId:request.id,session:started.session,runner:state.runner};
-      const credential=await live.credentials({sessionId:session.id});
-      const run=await live.runner(session.id,'run','POST',{...credential,prompt:taskPrompt,note:prompt.slice(0,2000),requestId:request.id});
-      return {requestId:request.id,session:started.session,runner:run.runner || run};
+      let stage='configuration';
+      try {
+        if(!configured)throw fail(503,'The designer runner is not configured');
+        stage='identity';
+        if(!sessionIdPattern.test(request?.id || '') || request.source_id!==source.id || !source.system_id)throw fail(409,'Designer Request must belong to the Design System');
+        stage='input';
+        if(typeof prompt!=='string' || !prompt.trim() || Buffer.byteLength(prompt)>32*1024)throw fail(400,'Designer Request must be 1–32 KiB');
+        stage='principal';
+        const actor=await actorFor(source.id,request.id,request.runner_principal_id);
+        stage='preview';
+        await ensurePreview(source);
+        stage='session';
+        let started;
+        if(sessionId){
+          if(!caller)throw fail(403,'A session owner must authorize the Request');
+          await runMutation(()=>sessions.join(caller,sessionId,{principalId:actor.principalId}));
+          started=await runMutation(()=>sessions.status(actor,sessionId));
+          if(started.session.status!=='open' || started.session.expiresAt && Date.parse(started.session.expiresAt)<=Date.now())throw fail(410,'The target session is closed or expired');
+        }else started=await runMutation(()=>sessions.start(actor,{systemId:source.system_id,idempotencyKey:`designer:${request.id}`}));
+        stage='session-identity';
+        const session=await store.get(started.session.id);
+        if(session.source_id!==source.id || (!sessionId && (session.owner_principal_id!==actor.principalId || session.originating_request_id!==request.id)))throw fail(409,'Designer session Request identity mismatch');
+        stage='claims';
+        const activeWork=sessions.activeWork?await sessions.activeWork(actor,source.id):null;
+        const claims=activeWork?.claims || activeWork?.sessions?.flatMap(item=>item.claims || []) || [];
+        const taskPrompt=claims.length?`${prompt}\n\nActive advisory work claims (coordinate with these intentions; overlap does not forbid your task):\n${Buffer.from(JSON.stringify(claims.map(claim=>({sessionId:claim.sessionId || claim.session_id,principalId:claim.principalId || claim.principal_id,patterns:claim.patterns,note:claim.note})))).subarray(0,12000).toString('utf8')}`:prompt;
+        stage='runtime-status';
+        const state=await live.runner(session.id);
+        if(state.runner?.requestId===request.id)return {requestId:request.id,session:started.session,runner:state.runner};
+        stage='credentials';
+        const credential=await live.credentials({sessionId:session.id});
+        stage='runtime-start';
+        const run=await live.runner(session.id,'run','POST',{...credential,prompt:taskPrompt,note:prompt.slice(0,2000),requestId:request.id});
+        return {requestId:request.id,session:started.session,runner:run.runner || run};
+      } catch(error) { throw requestDiagnostic(error,stage,'designer-start'); }
     },
     async status(id){const result=await live.runner(id);return result.runner || {state:result.state};},
     async complete({sessionId,requestId,changeSet}) {

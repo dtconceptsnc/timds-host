@@ -1,10 +1,13 @@
 import { fail } from './store/errors.mjs';
+import { safeRequestDiagnostic } from './requests/diagnostics.mjs';
 
 export const apiHeaders = { 'X-TimDS-API-Version': '1', 'Cache-Control': 'no-store' };
 export function jsonResponse(value, status = 200) { return Response.json({ apiVersion: 1, ...value }, { status, headers: apiHeaders }); }
 export function errorResponse(error) {
   const status = Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599 ? error.statusCode : 500;
   return jsonResponse({ error: status >= 500 ? 'The TimDS host could not complete this operation' : error.message,
+    ...(safeRequestDiagnostic(error?.requestDiagnostic)?{diagnostic:safeRequestDiagnostic(error.requestDiagnostic)}:{}),
+    ...(safeRequestDiagnostic(error?.cleanupDiagnostic)?{cleanupDiagnostic:safeRequestDiagnostic(error.cleanupDiagnostic)}:{}),
     ...(status<500&&Array.isArray(error?.conflicts)?{conflicts:error.conflicts,...(/^[a-f0-9]{40}$/.test(error.mainRevision||'')?{mainRevision:error.mainRevision}:{})}:{}) }, status);
 }
 export async function readJson(request, limit = 16 * 1024 * 1024) {

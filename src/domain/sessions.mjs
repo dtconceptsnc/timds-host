@@ -267,7 +267,7 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
   }
   async function closeForPublication(sessionId, publicationId) {
     const [publication, session] = await Promise.all([store.publication(publicationId), store.get(sessionId)]);
-    if (!publication || publication.status !== 'closing' || !session || publication.source_id !== session.source_id || !(await store.submissions(sessionId)).some(row => row.id === publication.submission_id)) throw fail(409, 'Publication cleanup does not match this session');
+    if (!publication || !['closing','failed'].includes(publication.status) || !publication.checkpoints_json?.pointerEventId || !session || publication.source_id !== session.source_id || !(await store.submissions(sessionId)).some(row => row.id === publication.submission_id && row.source_id === publication.source_id)) throw fail(409, 'Publication cleanup does not match this session');
     return close({ operator: true, system: true, userId: publication.actor_user_id, principalId: publication.actor_principal_id, requestId: publication.originating_request_id, tokenId: null }, sessionId, false, publicationId);
   }
   return { activeWork, join, claim, createDraft, listDrafts, draftSnapshot, closeDraft, previewTokens, start, snapshot, submit, update, status, history, close, closeForPublication, cleanupExpired };

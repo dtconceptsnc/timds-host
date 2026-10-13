@@ -97,6 +97,7 @@ export class LiveSessionRuntime {
     if(prior?.requestId===input.requestId)return this.status();
     if(active(prior))throw Object.assign(new Error('Another Request is running in this session'),{status:409});
     if(!sessionIdPattern.test(input.requestId||''))throw new Error('Invalid Request');
+    if(typeof this.env.MODEL!=='string'||!this.env.MODEL.trim()||this.env.MODEL.length>100)throw Object.assign(new Error('Designer model is not configured'),{statusCode:503});
     const run=validateRun(input,{maxPromptBytes:48*1024});await this.wake();await this.sync();
     const output=(await this.command(['git','rev-parse','HEAD'],'/workspace/repo')).stdout;
     const revision=(typeof output==='string'?output:new TextDecoder().decode(output)).trim();
@@ -147,11 +148,13 @@ export class LiveSessionRuntime {
     }
     return this.locked(async()=>{
     const run=this.run();if(!active(run)){const live=this.record();if(live?.state==='closed')return;if(Date.now()-(live?.lastActivityAt||0)>=this.idleTimeout()){if(this.ctx.container?.running)await this.ctx.container.destroy();await this.report('sleeping');if(live?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(live.expiresAt));}else await this.schedule(live.lastActivityAt+this.idleTimeout());return;}
+    let taskDiagnostics;
     try{
       this.assertOpen();if(!this.ctx.container?.running||Date.now()-(run.state==='submitting'?run.completionStartedAt||run.startedAt:run.startedAt)>taskMs)throw new Error('Task stopped');
       let result;
       try{const file=await new this.Files(this.ctx.container).readFile('/workspace/task/result.json');result=JSON.parse(await file.text());}catch(error){if(!this.FileError.is(error)||error.code!=='ENOENT')throw error;}
       if(result){
+        taskDiagnostics=safeTaskDiagnostics(result.diagnostics);
         if(result.state!=='succeeded')throw new Error('Task failed');
         this.ctx.storage.kv.put('task',{...run,state:'submitting',completionStartedAt:run.completionStartedAt||Date.now(),diagnostics:safeTaskDiagnostics(result.diagnostics)});
         let response;
@@ -167,7 +170,7 @@ export class LiveSessionRuntime {
         if(response.status<500&&response.status!==429)throw new Error('Submission rejected');
       }
       await this.schedule(Date.now()+1000);
-    }catch{this.ctx.storage.kv.put('task',{...run,state:'failed',error:'The Request failed or exceeded its time limit'});if(this.ctx.container?.running)await this.ctx.container.destroy();await this.report('failed');if(this.record()?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(this.record().expiresAt));}
+    }catch{this.ctx.storage.kv.put('task',{...run,state:'failed',...(taskDiagnostics?{diagnostics:taskDiagnostics}:{}),error:'The Request failed or exceeded its time limit'});if(this.ctx.container?.running)await this.ctx.container.destroy();await this.report('failed');if(this.record()?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(this.record().expiresAt));}
   });}
   async fetch(request){
     let phase='wake';

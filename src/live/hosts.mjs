@@ -9,7 +9,9 @@ export function liveWorkerName(id) {
 /** Explicitly registers every workers.dev hostname; a hostname pattern alone does not route Workers. */
 export function createLivePreviewHosts({ env = {}, fetchImpl = fetch } = {}) {
   const account = env.TIMDS_ARTIFACTS_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID;
-  const token = env.CLOUDFLARE_API_TOKEN || env.TIMDS_ARTIFACTS_API_TOKEN;
+  // Reuse the registered Builds deployment credential for Workers Scripts Write.
+  // Artifacts binding access does not require a developer OAuth API token.
+  const token = env.TIMDS_BUILDS_API_TOKEN || env.CLOUDFLARE_API_TOKEN || env.TIMDS_ARTIFACTS_API_TOKEN;
   const service = env.TIMDS_HOST_WORKER_NAME;
   const base = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account || '')}`;
   let subdomain;

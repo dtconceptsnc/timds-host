@@ -2,8 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { createDesignSystemSessions } from '../domain/sessions.mjs';
 import { createSqliteCollaborationStore } from '../store/sqlite.mjs';
 import { fail, principalId } from '../store/errors.mjs';
+import { readSourceView } from '../source-view.mjs';
+import { requestDiagnostic } from '../requests/diagnostics.mjs';
 
 const domainOperations = new Set(['activeWork','join','claim','createDraft','listDrafts','draftSnapshot','closeDraft','start','snapshot','submit','update','status','history','close']);
+// These domain methods read committed rows and current D1 authority only.
+// Git snapshots/history can acquire repository capabilities and stay serialized.
+const metadataOperations = new Set(['activeWork','listDrafts','status']);
 const publicationOperations = new Set(['getSource','get','getSubmission','submissions','submissionsForSource','publicationsForSource','publication','publicationBySubmission','reservePublication','attachPublicationJob','claimPublicationJob','renewPublicationLease','yieldPublicationLease','authorizePublication','checkpointPublication','releasePublicationVersion','getExecutionJob','getLifecycleOperation','resolveRollbackVersion','publishedRelease','publicationEventsForSources']);
 const sameProvisionInput = (left, right) => left == null && right == null ||
   left != null && right != null && left.fileTreeDigest === right.fileTreeDigest && left.grantPublisher === right.grantPublisher;
@@ -13,7 +18,7 @@ const sameProvisionInput = (left, right) => left == null && right == null ||
  * repository calls. Durable Object event delivery alone is not a mutex.
  */
 export function createCoordinator({ sourceId, storage, catalog, repository, authorization, publication, requests,
-  clock = () => Date.now(), ids = randomUUID, onSessionReserved, onSessionStarted, cleanupAgentSession }) {
+  clock = () => Date.now(), ids = randomUUID, onSessionReserved, onSessionStarted, cleanupAgentSession, nextLifecycleAlarm=()=>null }) {
   const store = createSqliteCollaborationStore({sourceId,storage,catalog,clock,ids});
   let tail = Promise.resolve();
   const serialized = task => {
@@ -26,7 +31,11 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
         const source = await catalog.source(sourceId);
         if (source) await store.initialize(source);
         return await task();
-      } finally { await store.scheduleAlarm({extraAt:requestService?.requestStore?.nextAlarm?.() ?? null}); }
+      } catch(error) { throw requestDiagnostic(error,'mutation-prepare','host-boundary'); }
+      finally {
+        try { const times=[requestService?.requestStore?.nextAlarm?.(),nextLifecycleAlarm()].filter(value=>value!=null);await store.scheduleAlarm({extraAt:times.length?Math.min(...times):null}); }
+        catch(error) { throw requestDiagnostic(error,'mutation-cleanup','host-boundary'); }
+      }
     });
     tail = result.catch(() => {});
     return result;
@@ -35,6 +44,7 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     getSource: store.getSource, get: store.get, getSubmission: store.getSubmission,
     submissions: store.submissions, getLifecycleOperation: store.getLifecycleOperation,
     getExecutionJob: store.getExecutionJob, findFork: store.findFork, updateSession: store.updateSession,
+    sessionRepository:store.sessionRepository,recordSessionRepository:store.recordSessionRepository,
     sessionForRequest: store.sessionForRequest, requestReceipt: store.requestReceipt,
     appendEvent: store.appendEvent, eventForHead: store.eventForHead,
   });
@@ -51,39 +61,56 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     return {...actor,principalId:principal.id,type:principal.type,operator:principal.admin,system:false};
   };
   const engine = {
-    invoke: ({operation,actor,args = []}) => serialized(async () => {
+    invoke: ({operation,actor,args = []}) => {
+      if(store.deletionFence())throw fail(409,'This Design System is deleting or deleted');
       if (!domainOperations.has(operation)) throw fail(404, 'Unknown coordinator operation');
-      const result = await sessions[operation](await activeActor(actor),...args);
-      // A success response has durable locators/audit; lost projection is safe
-      // to retry because the SQL event and outbox committed together.
-      await store.flushOutbox();
-      return result;
-    }),
+      if (metadataOperations.has(operation)) return activeActor(actor).then(verified => sessions[operation](verified,...args));
+      return serialized(async () => {
+        if(store.deletionFence())throw fail(409,'This Design System is deleting or deleted');
+        const result = await sessions[operation](await activeActor(actor),...args);
+        // A success response has durable locators/audit; lost projection is safe
+        // to retry because the SQL event and outbox committed together.
+        await store.flushOutbox();
+        return result;
+      });
+    },
     previewTokens: (...args) => serialized(() => sessions.previewTokens(...args)),
-    currentSource: () => serialized(() => store.getSource(sourceId)),
-    resource: (kind,id) => serialized(() => {
+    currentSource: () => store.getSource(sourceId),
+    sourceView: async actor => {
+      const verified=await activeActor(actor),source=await store.getSource(sourceId);
+      const facts=verified.operator?await catalog.readAuthority(sourceId,verified.principalId):await auth.authorizeSource(source,{...verified,accessMode:'read'});
+      if(facts.principal?.status!=='active'||verified.operator&&!facts.principal.admin)throw fail(403,'An active TimDS identity is required');
+      if(!facts.source||facts.organizationStatus!=='active'||!(verified.operator?['ready','deleting','deleted']:['ready']).includes(facts.source.lifecycle_status))throw fail(409,'Design System is unavailable');
+      return readSourceView({storage,source,canAdmin:facts.principal.admin,canRollback:facts.publisher&&!facts.source.archived_at});
+    },
+    resource: async (kind,id) => {
       if (kind === 'session') return store.get(id);
       if (kind === 'submission') return store.getSubmission(id);
       if (kind === 'publication') return store.publication(id);
       if (kind === 'version') return store.getVersion(id);
       throw fail(404, 'Unknown coordinator resource');
-    }),
-    hasSessionAccess: (principal) => serialized(() => store.hasSessionAccess(principal,sourceId)),
-    requestBinding: requestId => serialized(async () => {
+    },
+    hasSessionAccess: async principal => store.hasSessionAccess(principal,sourceId),
+    requestBinding: async requestId => {
       if (requestService?.binding) return requestService.binding(requestId);
       const session = store.sessionForRequest(sourceId,requestId);
       return session && {sourceId,requestId,sessionId:session.id,principalId:session.owner_principal_id,status:session.status};
-    }),
+    },
     requestStore: (operation,args = []) => serialized(async () => {
+      if(store.deletionFence()){if(operation==='due')return [];if(['reserve','claim','retry'].includes(operation))throw fail(409,'Designer Requests are disabled by deletion');}
       if (!requestService || !['reserve','get','getJob','jobForRequest','claim','finish','fail','retry','due','validateLease','nextAlarm'].includes(operation)) throw fail(404, 'Unknown Request store operation');
       const result = await (requestService.requestStore || requestService)[operation](...args);
       await store.flushOutbox(); return result;
     }),
-    requestsInvoke: ({operation,actor,args = []}) => serialized(async () => {
+    requestsInvoke: ({operation,actor,args = []}) => {
       if (!requestService || !['create','read'].includes(operation)) throw fail(404, 'Unknown Request operation');
-      const result = await requestService[operation](await activeActor(actor),...args);
-      await store.flushOutbox(); return result;
-    }),
+      if (operation === 'read') return activeActor(actor).then(verified => requestService.read(verified,...args));
+      return serialized(async () => {
+        if(store.deletionFence())throw fail(409,'Designer Requests are disabled by deletion');
+        const result = await requestService.create(await activeActor(actor),...args);
+        await store.flushOutbox(); return result;
+      });
+    },
     executeRequest: (requestId,lease) => {
       if (!requestService) throw fail(503, 'Designer Requests are not configured');
       // Native model execution stays outside the coordinator queue. The service
@@ -91,6 +118,7 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
       return requestService.execute(requestId,lease);
     },
     runtimeCallback: (operation,body) => {
+      if(store.deletionFence()&&!(operation==='live-state'&&body?.state==='closed'))throw fail(410,'This Design System is deleting or deleted');
       if (!requestService?.callback) throw fail(503, 'Live callbacks are not configured');
       if (['live-credentials','live-state'].includes(operation)) return requestService.callback(operation,body);
       if (!['complete','expired','pushed'].includes(operation)) throw fail(404, 'Unknown live callback');
@@ -105,6 +133,18 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     recordPreviewBuild: input => serialized(() => store.recordPreviewBuild(input)),
     closeForPublication: (sessionId,publicationId) => serialized(async () => { const result = await sessions.closeForPublication(sessionId,publicationId); await store.flushOutbox(); return result; }),
     mutateAuthority: command => serialized(() => store.mutateAuthority(command)),
+    setArchived: ({actor,operationId,restore=false}) => serialized(async () => {
+      const verified=await activeActor(actor),source=await store.getSource(sourceId);
+      if(!verified.operator)throw fail(403,'An active administrator is required');
+      if(!source||source.lifecycle_status!=='ready')throw fail(409,'Only an initialized Design System can be archived or restored');
+      const prior=await catalog.authorityOperation(operationId);
+      if(prior&&(prior.source_id!==sourceId||prior.actor_id!==verified.principalId||!Object.hasOwn(prior.command,'archivedAt')||(prior.command.archivedAt===null)!==restore))throw fail(409,'Lifecycle operation belongs to a different action');
+      const now=new Date(clock()).toISOString();
+      const command=prior?.command||{archivedAt:restore?null:now,sourcePatch:{archived_by_principal_id:restore?null:verified.principalId,updated_at:now}};
+      const receipt=await store.mutateAuthority({operationId,actor:verified,command});
+      const current=await store.getSource(sourceId);
+      return {apiVersion:1,action:restore?'restore':'archive',operationId:receipt.id,source:{id:sourceId,systemId:current.system_id,archivedAt:current.archived_at||null,lifecycleStatus:current.lifecycle_status}};
+    }),
     fencePrincipal: input => serialized(() => store.fencePrincipal(input)),
     rollbackVersion: ({actor,input,operationId}) => serialized(async () => {
       const verified = await activeActor(actor);
@@ -155,6 +195,7 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     // and lease-fenced cleanup can resume after eviction and process restart.
     alarm: () => serialized(async () => {
       const projection = await store.flushOutbox(100,{requireDrained:false});
+      if(store.deletionFence())return {projection,expired:[],publications:0,deleting:true};
       const expired = await sessions.cleanupExpired({limit:5});
       const queued = store.pendingPublications();
       if (publisher?.recover) for (const row of queued.sort((a,b) => a.queue_position-b.queue_position)) await publisher.recover(row);
@@ -164,6 +205,10 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     repositoryContext,
     // Local capability for injected services, never exposed as an RPC method.
     runMutation: serialized,
+    // Trusted local metadata capability: callers still execute the domain's
+    // source/member/grant checks. It never reconciles authority, arms an alarm,
+    // projects an outbox or waits behind an external repository operation.
+    runRead: async (actor,read) => read(await activeActor(actor)),
   };
   return engine;
 }

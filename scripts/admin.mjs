@@ -6,11 +6,13 @@ import { readCredentials } from '@dtconcepts/timds/auth';
 const usage = `TimDS host administration
 node scripts/admin.mjs <command> --host https://host.example [options]
 
-Commands: me, bootstrap, organization, provision, agent, grant
+Commands: me, bootstrap, organization, provision, agent, grant,
+          publishers, principals, archive, restore
 --credentials PATH  Existing TimDS CLI credential store (default CLI location)
 --input PATH        JSON operation body for organization/provision/agent/grant
---source-id UUID    Source receiving a grant
---operation-id UUID Stable bootstrap operation ID, reused on retry
+--source-id UUID    Source for grants, publisher/identity reads or archive/restore
+--cursor UUID       Next page cursor from a publisher/identity read
+--operation-id UUID Stable bootstrap/archive/restore operation ID, reused on retry
 --secret-file PATH  Private bootstrap secret file, used only for bootstrap
 
 Sign in with the OAuth-capable TimDS CLI first. This command never prints tokens.
@@ -21,11 +23,15 @@ async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     host: { type: 'string' }, credentials: { type: 'string' }, input: { type: 'string' },
     'source-id': { type: 'string' }, 'operation-id': { type: 'string' }, 'secret-file': { type: 'string' },
+    cursor: { type: 'string' },
     help: { type: 'boolean' },
   } });
   if (values.help || !positionals.length) { process.stdout.write(usage); return; }
   const [command] = positionals;
-  if (positionals.length !== 1 || !['me','bootstrap','organization','provision','agent','grant'].includes(command)) throw new Error('Choose a supported command; use --help');
+  if (positionals.length !== 1 || !['me','bootstrap','organization','provision','agent','grant','publishers','principals','archive','restore'].includes(command)) throw new Error('Choose a supported command; use --help');
+  const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  if(['grant','publishers','principals','archive','restore'].includes(command)&&!uuid.test(values['source-id']||''))throw new Error('This command requires --source-id UUID');
+  if(values.cursor&&(!['publishers','principals'].includes(command)||!uuid.test(values.cursor)))throw new Error('--cursor requires a publisher/identity read and a UUID');
   const origin = new URL(values.host);
   if ((origin.protocol !== 'https:' && !(origin.protocol === 'http:' && ['localhost','127.0.0.1'].includes(origin.hostname))) || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) throw new Error('Use an exact HTTPS host origin');
   const credentials = await readCredentials({ credentialsPath: values.credentials });
@@ -38,6 +44,12 @@ async function main() {
     headers['X-TimDS-Bootstrap-Secret'] = (await readFile(values['secret-file'], 'utf8')).trim();
     input = { apiVersion: 1, operationId: values['operation-id'] };
     path = '/api/timds/bootstrap';
+  } else if (['publishers','principals'].includes(command)) {
+    path=`/api/timds/admin/systems/${values['source-id']}/${command==='publishers'?'authority':'principals'}${values.cursor?`/${values.cursor}`:''}`;
+  } else if (['archive','restore'].includes(command)) {
+    if(!uuid.test(values['operation-id']||''))throw new Error('Archive/restore requires a stable --operation-id UUID');
+    input={apiVersion:1,operationId:values['operation-id']};
+    path=`/api/timds/admin/systems/${values['source-id']}/${command}`;
   } else if (command !== 'me') {
     if (!values.input) throw new Error('This command requires a saved --input JSON operation');
     input = JSON.parse(await readFile(values.input, 'utf8'));

@@ -4,6 +4,8 @@ import { apiHeaders, assertApiVersion, readJson, jsonResponse } from './http.mjs
 import { streamJsonFileTrees } from './repository/file-trees.mjs';
 import { hostOrigin } from './http.mjs';
 import { verifyBootstrapSecret } from './auth/access.mjs';
+import { importApi } from './imports/api.mjs';
+import { requestDiagnostic } from './requests/diagnostics.mjs';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function segment(value) { try { return decodeURIComponent(value); } catch { throw fail(400,'Invalid route encoding'); } }
@@ -20,7 +22,9 @@ export function createApi({ getCoordinator, provision, mcp }) {
     const located = async (kind,id) => { if (!uuid.test(id)) throw fail(404,'Resource not found'); const row=await catalog.resource(kind,id); if (!row) throw fail(404,'Resource not found'); return row.source_id; };
     let statusOverride;
     const call = async (sourceId,operation,args=[]) => {
-      const envelope = await getCoordinator(context,sourceId).api({operation,actor,args});
+      let envelope;
+      try { envelope = await getCoordinator(context,sourceId).api({operation,actor,args}); }
+      catch(error) { throw requestDiagnostic(error,'coordinator-rpc','host-boundary'); }
       if (!envelope.ok) throw Object.assign(fail(envelope.error.statusCode,envelope.error.message),envelope.error.details || {});
       statusOverride=envelope.httpStatus;
       return envelope.value;
@@ -41,6 +45,8 @@ export function createApi({ getCoordinator, provision, mcp }) {
     if (path === '/api/timds/sessions' && method === 'POST') {
       const row=await source(input.systemId); return respond(await call(row.id,'start',[input]));
     }
+    const sourceRoute=path.match(/^\/api\/timds\/design-systems\/([^/]+)$/);
+    if(sourceRoute&&method==='GET'){const row=await source(segment(sourceRoute[1]));return respond(await call(row.id,'sourceView'));}
     let match=path.match(/^\/api\/timds\/sessions\/([^/]+)(?:\/(status|history|submit|update|close|join|claims))?$/);
     if (match) {
       const id=segment(match[1]), action=match[2] || 'snapshot';
@@ -77,11 +83,22 @@ export function createApi({ getCoordinator, provision, mcp }) {
     if(path.startsWith('/api/timds/admin/')) {
       const principal=await catalog.principal(actor.principalId);
       if(!principal?.admin||principal.status!=='active')throw fail(403,'An active administrator is required');
+      if(path==='/api/timds/admin/imports'||path.startsWith('/api/timds/admin/imports/'))return jsonResponse(await importApi({path,method,input,actor,context,catalog,getCoordinator}));
       if(path==='/api/timds/admin/organizations'&&method==='POST') {
         if(!uuid.test(input.id||'')||typeof input.name!=='string'||input.name.length>200)throw fail(400,'Organization id and name are required');
         return jsonResponse({organization:await catalog.ensureOrganization({id:input.id,name:input.name})});
       }
       if(path==='/api/timds/admin/systems'&&method==='POST'&&provision)return respond(await provision({input,actor,env,context,catalog}));
+      match=path.match(/^\/api\/timds\/admin\/systems\/([^/]+)\/deletion(?:\/([^/]+))?(?:\/(confirm|history))?$/);
+      if(match){
+        const row=await source(segment(match[1])),operationId=match[2]?segment(match[2]):input.operationId,action=match[3];
+        if(!uuid.test(operationId||'')||Object.keys(input).some(key=>!['apiVersion','operationId','impactHash','typedRepository','portalConsumerProof'].includes(key)))throw fail(400,'A stable deletion operation UUID is required');
+        if(!match[2]&&method==='POST')return respond(await call(row.id,'prepareDeletion',[{operationId}]));
+        if(match[2]&&!action&&method==='GET')return respond(await call(row.id,'readDeletion',[{operationId}]));
+        if(action==='confirm'&&method==='POST')return respond(await call(row.id,'confirmDeletion',[{...input,operationId}]),202);
+        if(action==='history'&&method==='GET')return respond(await call(row.id,'deletionHistory',[{operationId}]));
+        throw fail(405,'Use the deletion prepare, read or confirmation route');
+      }
       if(path==='/api/timds/admin/agents'&&method==='POST') {
         if(!uuid.test(input.id||'')||typeof input.name!=='string'||!input.name.trim()||input.name.length>200)throw fail(400,'A stable agent UUID and name are required');
         const saved=await catalog.resolveIdentity({issuer:`urn:timds:host:${hostOrigin(env)}`,subject:`agent:${input.id}`,type:'agent',name:input.name});
@@ -98,12 +115,27 @@ export function createApi({ getCoordinator, provision, mcp }) {
         const saved=await catalog.finalizePrincipalDeactivation({operationId:input.operationId,actor});
         return jsonResponse({principal:{id:saved.id,status:saved.status}});
       }
+      match=path.match(/^\/api\/timds\/admin\/systems\/([^/]+)\/(authority|principals)(?:\/([^/]+))?$/);
+      if(match&&method==='GET') {
+        const row=await source(segment(match[1])),after=match[3]?segment(match[3]):'';
+        if(row.lifecycle_status!=='ready')throw fail(409,'Source authority is unavailable until initialization or transfer completes');
+        if(after&&!uuid.test(after))throw fail(400,'A principal cursor UUID is required');
+        const page=match[2]==='authority'?await catalog.publisherPage(row.id,after):await catalog.principalPage(after);
+        return jsonResponse({apiVersion:1,sourceId:row.id,authorityVersion:row.authority_version,...page});
+      }
+      match=path.match(/^\/api\/timds\/admin\/systems\/([^/]+)\/(archive|restore)$/);
+      if(match&&method==='POST') {
+        const row=await source(segment(match[1]));
+        if(!uuid.test(input.operationId||'')||Object.keys(input).some(key=>!['apiVersion','operationId'].includes(key)))throw fail(400,'A stable lifecycle operation UUID is required');
+        return respond(await call(row.id,match[2],[{operationId:input.operationId}]));
+      }
       match=path.match(/^\/api\/timds\/admin\/systems\/([^/]+)\/authority$/);
       if(match&&method==='POST') {
         const row=await source(segment(match[1]));
+        if(row.lifecycle_status!=='ready')throw fail(409,'Source authority is unavailable until initialization or transfer completes');
         if(!uuid.test(input.operationId||''))throw fail(400,'An operation UUID is required');
         const allowed=['principalId','read','write','publish'];
-        if(!input.command||Object.keys(input.command).some(key=>!allowed.includes(key))||!uuid.test(input.command.principalId||'')||['read','write','publish'].some(key=>key in input.command&&typeof input.command[key]!=='boolean'))throw fail(400,'Use a principal and explicit read, write or publish permissions');
+        if(!input.command||Object.keys(input.command).some(key=>!allowed.includes(key))||!uuid.test(input.command.principalId||'')||!['read','write','publish'].some(key=>key in input.command)||['read','write','publish'].some(key=>key in input.command&&typeof input.command[key]!=='boolean'))throw fail(400,'Use a principal and explicit read, write or publish permissions');
         return respond(await call(row.id,'authority',[{operationId:input.operationId,command:input.command}]));
       }
     }

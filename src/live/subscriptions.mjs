@@ -3,7 +3,9 @@ import { sessionIdPattern } from '../../runtime/policy.mjs';
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
 export function createAgentForkSubscriptions({ env = {}, fetchImpl = fetch } = {}) {
   const account = env.TIMDS_ARTIFACTS_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID;
-  const token = env.TIMDS_ARTIFACTS_API_TOKEN || env.CLOUDFLARE_API_TOKEN;
+  // Reuse the registered Builds deployment credential for Workers Scripts Write.
+  // Artifacts binding access does not require a developer OAuth API token.
+  const token = env.TIMDS_BUILDS_API_TOKEN || env.CLOUDFLARE_API_TOKEN || env.TIMDS_ARTIFACTS_API_TOKEN;
   const queue = env.TIMDS_AGENT_PUSH_QUEUE_ID;
   const base = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account || '')}/event_subscriptions/subscriptions`;
   async function request(suffix, method = 'GET', body) {

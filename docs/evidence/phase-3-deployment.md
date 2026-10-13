@@ -22,8 +22,10 @@ All image builds, pushes, container preparation and deployments completed.
 The final recorded API deployment includes the corrected repository transfer
 deadline, trusted Studio static assets, approved Access configuration and frozen
 source-provisioning input/retry receipts. It is version
-`4de6f130-b68f-4e74-8434-b1e941a913cc`, also including external-push
-reconciliation, callback-origin CSP and same-origin consent referrer policy.
+`eec5b502-381e-4ad1-994b-b2b19e063cf7`, also including external-push
+reconciliation, callback-origin CSP, same-origin consent referrer policy and
+the configured designer principal and `gpt-6-sol` model, metadata read facade,
+and bounded publication/Request diagnostics.
 Anonymous API access returns 401; its health route returns 200 and deliberately
 reports `ready:false, phase:integration`. The public companion rejects API paths
 with 404 and successfully initializes the anonymous read MCP server with
@@ -35,8 +37,10 @@ through a private FIFO and were never written into the project or evidence.
 The one-time bootstrap credential is separately controlled by the root agent.
 
 This proves deployed native wiring and public read service isolation. It does
-**not** claim the authenticated host conformance suite has passed: administrator bootstrap, authenticated container operations,
-publication and migration acceptance are subsequent gates.
+**not** claim the authenticated host conformance suite has passed. Human OAuth,
+administrator bootstrap, organization/designer creation and source provisioning
+have since succeeded; session/Studio/publication and migration acceptance remain
+in progress.
 
 OAuth authorization-server and path-specific RFC 9728 resource discovery both
 return 200 with the deployed origin. The authorization server advertises code
@@ -84,3 +88,54 @@ Read-only request diagnostics found Worker observability unset. The discovered
 existing operator OAuth profiles. No logging settings were changed. A count-only
 inspection of the dedicated OAuth namespace showed zero grant keys and three
 consent keys during the failed attempts; no credential values were read.
+
+The same-origin HTTPS Studio OAuth callback also completed normally after the
+referrer-policy correction. Administrator bootstrap, organization creation and
+designer-principal creation succeeded through the authenticated API. The latest
+deployment’s settings readback confirms designer principal
+`789e056d-9120-4fb3-8610-5a10df98911d`. The isolated source provisioning returned
+ready. Subsequent session and Studio acceptance remain in progress.
+
+The toolkit callback listener was hardened separately to wait for response
+finish/disconnect and drain connections before shutdown, with a five-second
+forced-close bound for stalled connections. Typecheck and package dry-run passed;
+this is not yet a verified explanation/fix for Chrome’s loopback landing display.
+The latest deployment includes the Studio mobile topbar fix and bounded read
+timeout recovery, file-export timeout, obsolete-read guards and field labels.
+Live HTML, JavaScript and CSS match the local files at verification.
+
+The first designer Request returned HTTP 500 before durable reservation. The
+D1 request table existed but initially contained no row for that Request ID. A
+diagnostic deployment exposes only an allowlisted operation/stage/error class.
+The exact same-ID, same-instruction retry was then accepted and GET returned
+200/queued. Its durable reservation binds the expected source, human and designer
+principal. The initial failure did not reproduce; its cause remains unproven. An actual local workerd invocation with the same compatibility
+settings confirms global Buffer and Buffer.byteLength are available.
+
+The Request then reached dead-letter without creating a session. Its persisted
+diagnostic and the independent CLI submission both identified Preview worker-list
+fetch throwing TypeError/502 before any HTTP response. A native local workerd
+invocation with the exact deployment compatibility settings reproduced that
+`redirect:'error'` is rejected, while `redirect:'manual'` reached the API
+(HTTP 400 using a deliberately invalid anonymous probe credential). The deployed
+fix uses manual for both Preview fetches and publication public-stamp verification;
+existing status checks reject redirects. Node container fetches are unchanged.
+Typecheck, native build and deployment passed. The original CLI submission
+`189cf3bd-5082-4c9e-8a47-f74094139f83` then succeeded and its branch Preview
+rendered the real Overview. The original Request created native session
+`9fce67ce-39fb-462d-8fee-b549e167b8d0`, entered running, then failed in its
+runner. Its dispatch job completed; the failed runner remains an immutable audit
+record. The initial pre-reservation 500 remains a separate unproven failure.
+
+Inspection found the host had omitted the `MODEL` binding that the ported
+runtime passes to Codex. The configuration now binds `gpt-6-sol` by default
+and supports `TIMDS_DESIGNER_MODEL`; missing model configuration fails before
+launch. Failed results also retain the existing allowlisted task diagnostics.
+Typecheck and cf deployment passed; settings readback confirms `gpt-6-sol`.
+Fresh disposable Request `a8d19bc9-11cb-4d60-93e5-591999562bf3` was accepted
+from Studio on the new version. It created native session
+`bea77f26-c8be-4363-8740-302e0a4098d5`, ran the configured model, and reached
+`submitted` at `2026-10-13T12:30:52.734Z` with submission
+`0da402f3-da45-4160-b952-2ad7ce63c9a2` and no error. This verifies the native
+runner, bounded change collection and completion callback through a real Request.
+The original failed Request is retained unchanged for audit.

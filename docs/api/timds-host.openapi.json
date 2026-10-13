@@ -1172,7 +1172,7 @@
                   },
                   "prompt": {
                     "type": "string",
-                    "description": "1\u201332 KiB UTF-8 instruction.",
+                    "description": "1–32 KiB UTF-8 instruction.",
                     "minLength": 1
                   },
                   "requestId": {
@@ -1652,6 +1652,985 @@
           },
           "5XX": {
             "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}": {
+      "get": {
+        "operationId": "getDesignSystemSource",
+        "summary": "Read the authoritative current release and bounded rollback catalogue",
+        "description": "Standalone-host additive route. Requires current source read authority. The versions list contains up to100 newest first-publication label bindings; currentVersion remains available outside that window. Original duplicate history is not rewritten. No provider or storage internals are returned. Active host administrators may read ready archived sources to restore them; canRollback is false while archived.",
+        "tags": [
+          "Publication"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Source UUID or encoded system ID."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current host source and immutable release metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSourceView"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/authority": {
+      "get": {
+        "operationId": "listHostPublishers",
+        "tags": [
+          "Host administration"
+        ],
+        "summary": "Read current source publishers",
+        "description": "Requires current active host administrator and ready source. Returns up to 200 D1 identity summaries in UUID order. No identity creation, email matching, issuer or credential data. Source transfer does not confer administrator authority.",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current source-scoped administration result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "sourceId",
+                    "authorityVersion",
+                    "publishers",
+                    "nextPublisherCursor"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "authorityVersion": {
+                      "type": "integer"
+                    },
+                    "publishers": {
+                      "type": "array",
+                      "maxItems": 200,
+                      "items": {
+                        "$ref": "#/components/schemas/HostPrincipalSummary"
+                      }
+                    },
+                    "nextPublisherCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "changeHostSourceAuthority",
+        "tags": [
+          "Host administration"
+        ],
+        "summary": "Grant or revoke source permissions",
+        "description": "Current host admin only. Uses a durable coordinator barrier and current D1 authority. Reuse operationId and identical command after uncertain outcomes. Publishing requires a separate explicit grant even for administrators.",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "operationId",
+                  "command"
+                ],
+                "properties": {
+                  "apiVersion": {
+                    "const": 1
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "command": {
+                    "type": "object",
+                    "required": [
+                      "principalId"
+                    ],
+                    "properties": {
+                      "principalId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "read": {
+                        "type": "boolean"
+                      },
+                      "write": {
+                        "type": "boolean"
+                      },
+                      "publish": {
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "anyOf": [
+                      {
+                        "required": [
+                          "read"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "write"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "publish"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current source-scoped administration result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Durable authority operation receipt."
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/authority/{cursor}": {
+      "get": {
+        "operationId": "listHostPublishersPage",
+        "tags": [
+          "Host administration"
+        ],
+        "summary": "Read current source publishers",
+        "description": "Requires current active host administrator and ready source. Returns up to 200 D1 identity summaries in UUID order. No identity creation, email matching, issuer or credential data. Source transfer does not confer administrator authority.",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current source-scoped administration result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "sourceId",
+                    "authorityVersion",
+                    "publishers",
+                    "nextPublisherCursor"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "authorityVersion": {
+                      "type": "integer"
+                    },
+                    "publishers": {
+                      "type": "array",
+                      "maxItems": 200,
+                      "items": {
+                        "$ref": "#/components/schemas/HostPrincipalSummary"
+                      }
+                    },
+                    "nextPublisherCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/principals": {
+      "get": {
+        "operationId": "listHostPrincipals",
+        "tags": [
+          "Host administration"
+        ],
+        "summary": "Select existing host identities",
+        "description": "Requires current active host administrator and ready source. Returns up to 200 D1 identity summaries in UUID order. No identity creation, email matching, issuer or credential data. Source transfer does not confer administrator authority.",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current source-scoped administration result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "sourceId",
+                    "authorityVersion",
+                    "principals",
+                    "nextPrincipalCursor"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "authorityVersion": {
+                      "type": "integer"
+                    },
+                    "principals": {
+                      "type": "array",
+                      "maxItems": 200,
+                      "items": {
+                        "$ref": "#/components/schemas/HostPrincipalSummary"
+                      }
+                    },
+                    "nextPrincipalCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/principals/{cursor}": {
+      "get": {
+        "operationId": "listHostPrincipalsPage",
+        "tags": [
+          "Host administration"
+        ],
+        "summary": "Select existing host identities",
+        "description": "Requires current active host administrator and ready source. Returns up to 200 D1 identity summaries in UUID order. No identity creation, email matching, issuer or credential data. Source transfer does not confer administrator authority.",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current source-scoped administration result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "sourceId",
+                    "authorityVersion",
+                    "principals",
+                    "nextPrincipalCursor"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "authorityVersion": {
+                      "type": "integer"
+                    },
+                    "principals": {
+                      "type": "array",
+                      "maxItems": 200,
+                      "items": {
+                        "$ref": "#/components/schemas/HostPrincipalSummary"
+                      }
+                    },
+                    "nextPrincipalCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/archive": {
+      "post": {
+        "operationId": "archiveHostSource",
+        "tags": [
+          "Host administration"
+        ],
+        "summary": "archive the existing source",
+        "description": "Requires current active host administrator and ready source. Archive disables public serving and authoring authority while retaining repository, grants, releases and history. Restore retains the same immutable source identity. Replay the same operationId for the same action.",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "operationId"
+                ],
+                "properties": {
+                  "apiVersion": {
+                    "const": 1
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current source-scoped administration result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "action",
+                    "operationId",
+                    "source"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "action": {
+                      "const": "archive"
+                    },
+                    "operationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "source": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "systemId",
+                        "archivedAt",
+                        "lifecycleStatus"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "systemId": {
+                          "type": "string"
+                        },
+                        "archivedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "lifecycleStatus": {
+                          "const": "ready"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/restore": {
+      "post": {
+        "operationId": "restoreHostSource",
+        "tags": [
+          "Host administration"
+        ],
+        "summary": "restore the existing source",
+        "description": "Requires current active host administrator and ready source. Archive disables public serving and authoring authority while retaining repository, grants, releases and history. Restore retains the same immutable source identity. Replay the same operationId for the same action.",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "operationId"
+                ],
+                "properties": {
+                  "apiVersion": {
+                    "const": 1
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current source-scoped administration result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "action",
+                    "operationId",
+                    "source"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "action": {
+                      "const": "restore"
+                    },
+                    "operationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "source": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "systemId",
+                        "archivedAt",
+                        "lifecycleStatus"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "systemId": {
+                          "type": "string"
+                        },
+                        "archivedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "lifecycleStatus": {
+                          "const": "ready"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/deletion": {
+      "post": {
+        "operationId": "prepareSourceDeletion",
+        "summary": "Read deletion impact and prepare confirmation",
+        "description": "Active host administrator required. Source UUID remains permanently reserved after confirmed deletion.",
+        "tags": [
+          "Administration"
+        ],
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable deletion receipt. Immutable locked bytes and audit remain retained.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionOperation"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "operationId"
+                ],
+                "properties": {
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/deletion/{operationId}": {
+      "get": {
+        "operationId": "readSourceDeletion",
+        "summary": "Read source deletion progress",
+        "description": "Active host administrator required. Source UUID remains permanently reserved after confirmed deletion.",
+        "tags": [
+          "Administration"
+        ],
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable deletion receipt. Immutable locked bytes and audit remain retained.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionOperation"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/deletion/{operationId}/confirm": {
+      "post": {
+        "operationId": "confirmSourceDeletion",
+        "summary": "Confirm or resume permanently fenced source deletion",
+        "description": "Active host administrator required. Source UUID remains permanently reserved after confirmed deletion.",
+        "tags": [
+          "Administration"
+        ],
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Durable deletion receipt. Immutable locked bytes and audit remain retained.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionOperation"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "impactHash",
+                  "typedRepository"
+                ],
+                "properties": {
+                  "impactHash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "typedRepository": {
+                    "type": "string"
+                  },
+                  "portalConsumerProof": {
+                    "type": "string",
+                    "writeOnly": true,
+                    "description": "Imported sources only. Server-signed durable consumer attachment fence, never a browser-supplied count."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/deletion/{operationId}/history": {
+      "get": {
+        "operationId": "readDeletedSourceHistory",
+        "summary": "Read retained bounded session and event descriptors as an administrator",
+        "tags": [
+          "Administration"
+        ],
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded retained history and deletion receipt; no provider credentials."
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/imports/tombstone": {
+      "post": {
+        "operationId": "importDeletedSource",
+        "summary": "Permanently reserve an already-deleted portal source",
+        "description": "Active host administrator plus fresh signed original deletion readback required. Imports minimal identity and completed-deletion evidence only. No provider resources, release history, grants or activation. See docs/migration/import-protocol.md.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeletedSourceImport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Terminal deleted identity and audit receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedSourceImportReceipt"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing administrator authority or invalid signed proof"
+          },
+          "409": {
+            "description": "Existing source, mismatched evidence or conflicting immutable operation"
+          },
+          "503": {
+            "description": "Portal proof verification is not configured"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/imports/{operationId}": {
+      "get": {
+        "operationId": "readImportOperation",
+        "summary": "Read the authoritative transfer or deleted-source reservation receipt",
+        "description": "Requires an active host administrator. Deleted-source receipts are terminal and can never activate or thaw. Reading a deleted reservation finishes any interrupted local fence/audit projection.",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active-transfer, abort or terminal deleted-source receipt. See import protocol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DeletedSourceImportReceipt"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "operationId",
+                        "stage"
+                      ],
+                      "properties": {
+                        "operationId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "stage": {
+                          "enum": [
+                            "prepared",
+                            "sealed",
+                            "active",
+                            "aborted"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "An active host administrator is required"
+          },
+          "404": {
+            "description": "Unknown operation"
           }
         }
       }
@@ -2670,6 +3649,549 @@
         "required": [
           "apiVersion"
         ]
+      },
+      "HostPublishedVersion": {
+        "type": "object",
+        "required": [
+          "id",
+          "versionLabel",
+          "sourceCommit",
+          "contentDigest",
+          "publishedAt",
+          "rollbackEligible"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionLabel": {
+            "type": "string"
+          },
+          "sourceCommit": {
+            "type": "string"
+          },
+          "contentDigest": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string"
+          },
+          "rollbackEligible": {
+            "const": true
+          }
+        }
+      },
+      "HostSourceView": {
+        "type": "object",
+        "required": [
+          "apiVersion",
+          "source",
+          "currentVersion",
+          "versions",
+          "canRollback",
+          "canAdmin"
+        ],
+        "properties": {
+          "apiVersion": {
+            "const": 1
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "id",
+              "systemId",
+              "name",
+              "publishedVersionId",
+              "publishedVersion",
+              "sourceCommit",
+              "contentDigest",
+              "archivedAt",
+              "lifecycleStatus"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "systemId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "publishedVersionId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "publishedVersion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sourceCommit": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "contentDigest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "archivedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "lifecycleStatus": {
+                "type": "string"
+              }
+            }
+          },
+          "currentVersion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HostPublishedVersion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "versions": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/HostPublishedVersion"
+            }
+          },
+          "canRollback": {
+            "type": "boolean",
+            "description": "Current principal has the active publisher grant. Storage eligibility alone is not permission."
+          },
+          "canAdmin": {
+            "type": "boolean",
+            "description": "Current D1 principal is an active host administrator; portal roles confer no host authority."
+          }
+        }
+      },
+      "HostPrincipalSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "name",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "enum": [
+              "user",
+              "agent"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "DeletionOperation": {
+        "type": "object",
+        "required": [
+          "apiVersion",
+          "operationId",
+          "sourceId",
+          "status",
+          "phase",
+          "repository",
+          "impactHash",
+          "counts",
+          "retention",
+          "requiresConsumerProof",
+          "awaitingConsumerProof"
+        ],
+        "properties": {
+          "apiVersion": {
+            "const": 1
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "enum": [
+              "awaiting_confirmation",
+              "queued",
+              "running",
+              "awaiting_consumer_proof",
+              "failed",
+              "completed"
+            ]
+          },
+          "phase": {
+            "enum": [
+              "inspect",
+              "stop_work",
+              "remove_repositories",
+              "remove_preview",
+              "revoke_authority",
+              "verify",
+              "completed"
+            ]
+          },
+          "repository": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "namespace": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "impactHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "sessions": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "forks": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "publishers": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "requests": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "retention": {
+            "type": "object",
+            "properties": {
+              "immutableReleaseBytes": {
+                "const": "retained_inaccessible"
+              },
+              "audit": {
+                "const": "retained"
+              }
+            }
+          },
+          "requiresConsumerProof": {
+            "type": "boolean"
+          },
+          "awaitingConsumerProof": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "DeletedSourceImport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "portalSourceId",
+          "sourceId",
+          "exportDigest",
+          "manifest",
+          "portalProof"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "portalSourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "exportDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "portalProof": {
+            "type": "string",
+            "maxLength": 16384
+          },
+          "manifest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schemaVersion",
+              "kind",
+              "portalOrigin",
+              "organizationId",
+              "capturedAt",
+              "identity",
+              "deletion",
+              "legacyPublicRoots"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "const": 1
+              },
+              "kind": {
+                "const": "deleted-source"
+              },
+              "portalOrigin": {
+                "type": "string",
+                "format": "uri"
+              },
+              "organizationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "capturedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "identity": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "system_id",
+                  "operation_id",
+                  "source_id",
+                  "repo_id",
+                  "deleted_at",
+                  "created_at"
+                ],
+                "properties": {
+                  "system_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "operation_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "source_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "repo_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "deleted_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              "deletion": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "kind",
+                  "status",
+                  "stage",
+                  "system_id",
+                  "source_id",
+                  "repo_id",
+                  "owner",
+                  "repository_name",
+                  "artifacts_repository_id",
+                  "confirmed_at",
+                  "completed_at",
+                  "created_at",
+                  "updated_at"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "kind": {
+                    "const": "delete"
+                  },
+                  "status": {
+                    "const": "deleted"
+                  },
+                  "stage": {
+                    "const": "deleted"
+                  },
+                  "system_id": {
+                    "type": "string"
+                  },
+                  "source_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "repo_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "owner": {
+                    "type": "string"
+                  },
+                  "repository_name": {
+                    "type": "string"
+                  },
+                  "artifacts_repository_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "confirmed_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "completed_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "updated_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              "legacyPublicRoots": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Explicit reviewed portal-public-roots-v1 hostname metadata; no public pointer or content."
+              }
+            }
+          }
+        }
+      },
+      "DeletedSourceImportReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "receiptId",
+          "operationId",
+          "sourceId",
+          "portalSourceId",
+          "origin",
+          "exportDigest",
+          "stage",
+          "hostState",
+          "activationForbidden",
+          "originalDeletionOperationId",
+          "originalDeletedAt",
+          "capturedAt",
+          "recordedAt"
+        ],
+        "properties": {
+          "receiptId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "portalSourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "origin": {
+            "type": "string",
+            "format": "uri"
+          },
+          "exportDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "stage": {
+            "const": "deleted"
+          },
+          "hostState": {
+            "const": "deleted"
+          },
+          "activationForbidden": {
+            "const": true
+          },
+          "originalDeletionOperationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "originalDeletedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       }
     },
     "responses": {

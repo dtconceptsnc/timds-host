@@ -55,6 +55,10 @@ async function walk(root, relative = '') {
 }
 const types = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.json':'application/json','.md':'text/markdown; charset=utf-8','.txt':'text/plain; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2','.ttf':'font/ttf','.otf':'font/otf','.pdf':'application/pdf','.xml':'application/xml','.webmanifest':'application/manifest+json'};
 const mime = name => types[path.extname(name).toLowerCase()] || 'application/octet-stream';
+// Portal bundle fallbacks use their actual R2 ContentType; only absent metadata
+// falls back to the legacy public handler's exact extension table.
+const legacyTypes={...types,'.json':'application/json; charset=utf-8','.map':'application/json; charset=utf-8','.avif':'image/avif','.mp4':'video/mp4','.webm':'video/webm','.otf':'application/octet-stream','.xml':'application/octet-stream','.webmanifest':'application/octet-stream'};
+const legacyMime=name=>legacyTypes[path.extname(name).toLowerCase()]||'application/octet-stream';
 function bindings(system) {
   assert(system.source?.id === system.expectedSourceId && system.source.system_id === system.expectedSystemId && uuid(system.source.id) && safePath(system.source.system_id), 'source_identity_mismatch', {system: system.key});
   const versions = new Map(system.versions.map(v => [v.id, v]));
@@ -201,7 +205,9 @@ async function inventory({baseline, baselineDigest, opts, source, target}) {
         }
         if (!exact) aliases.push({key, localPath: reference.path, sha256: remote.sha256, size: remote.size});
       } else if (relative === 'bundle.json' || relative.startsWith('bundle/')) {
-        const supplement = {path: relative, mode: '100644', size: remote.size, sha256: remote.sha256, sourceKey: key};
+        const contentType=remote.contentType||legacyMime(relative);
+        assert(typeof contentType==='string'&&contentType.length<=200&&!/[\r\n\x00]/.test(contentType),'invalid_bundle_content_type');
+        const supplement = {path: relative, mode: '100644', size: remote.size, sha256: remote.sha256, sourceKey: key, contentType};
         supplements.push(supplement); byPath.set(relative, supplement);
       } else retained.push({key, sha256: remote.sha256, size: remote.size});
     }
@@ -214,7 +220,7 @@ async function inventory({baseline, baselineDigest, opts, source, target}) {
     const artifactFiles = [...files, ...supplements].sort((a, b) => a.path.localeCompare(b.path, 'en'));
     assert(new Set(artifactFiles.map(f => f.path)).size === artifactFiles.length, 'duplicate_artifact_path');
     if (opts.mode === 'host-releases') assert(artifactFiles.length <= 2000 && artifactFiles.every(f => f.size <= 12_000_000) && artifactFiles.reduce((sum, f) => sum + f.size, 0) <= 80_000_000, 'host_release_limits_exceeded');
-    const releaseOps = artifactFiles.map(file => ({key: newPrefix + file.path, path: file.path, size: file.size, sha256: file.sha256, contentType: mime(file.path), source: file.sourceKey ? {kind: 'r2', key: file.sourceKey} : {kind: 'local', sourceId: system.source.id, contentDigest: binding.contentDigest, path: file.path}, phase: 'file'}));
+    const releaseOps = artifactFiles.map(file => ({key: newPrefix + file.path, path: file.path, size: file.size, sha256: file.sha256, contentType: file.contentType||mime(file.path), source: file.sourceKey ? {kind: 'r2', key: file.sourceKey} : {kind: 'local', sourceId: system.source.id, contentDigest: binding.contentDigest, path: file.path}, phase: 'file'}));
     if (opts.mode === 'legacy') for (const item of reconciliations) {
       const fileOperation = releaseOps.find(operation => operation.path === item.localPath);
       assert(fileOperation, 'reconciliation_file_missing');
@@ -229,17 +235,22 @@ async function inventory({baseline, baselineDigest, opts, source, target}) {
     const stampBytes = opts.mode === 'legacy' ? oldStamp?.bytes || Buffer.from(JSON.stringify(stamp)) : Buffer.from(JSON.stringify(stamp, null, 2) + '\n');
     releaseOps.push({key: newPrefix + '.timds-artifact.json', path: '.timds-artifact.json', size: stampBytes.length, sha256: sha(stampBytes), contentType: 'application/json', source: {kind: 'generated', text: stampBytes.toString('utf8')}, phase: 'stamp'});
     const manifest = {version: 1, files: artifactFiles.map(({path, mode, size, sha256}) => ({path, mode, size, sha256})), totalBytes: artifactFiles.reduce((sum, file) => sum + file.size, 0)};
+    let releaseManifestDigest=null;
     if (opts.mode === 'host-releases') {
+      assert(uuid(binding.eventId)&&uuid(binding.versionId),'host_release_requires_first_event');
       const text = JSON.stringify({schemaVersion: 1, sourceId: system.source.id, version: stamp.version, stamp, manifest});
       assert(Buffer.byteLength(text) <= 2 * 1024 * 1024, 'host_receipt_too_large');
+      releaseManifestDigest=sha(text);
       releaseOps.push({key: newPrefix + '.timds-release.json', path: '.timds-release.json', size: Buffer.byteLength(text), sha256: sha(text), contentType: 'application/json', source: {kind: 'generated', text}, phase: 'receipt'});
     }
     const servingMap = {
       schemaVersion: 1, kind: 'timds-legacy-serving-map', sourceId: system.source.id, systemId: system.source.system_id,
       version: binding.version, contentDigest: binding.contentDigest, sourceCommit: binding.sourceCommit,
       firstPublicationEventId: binding.eventId, versionId: binding.versionId, entryPath: metadata.entryPath,
+      localPaths: files.map(file=>file.path),
+      bundleFallbacks: supplements.map(file=>({path:file.path,contentType:file.contentType})),
       behavior: {files: 'byte-preserving', consumerBundle: 'byte-preserving', html: 'legacy-public-roots-rewrite-required', entry: 'legacy-meta-refresh-resolution-required', missingText: 'legacy-llms-synthesis-required'},
-      files: artifactFiles.map(file => ({path: file.path, key: releaseOps.find(operation => operation.path === file.path).key, mode: file.mode, contentType: mime(file.path), size: file.size, sha256: file.sha256})),
+      files: artifactFiles.map(file => ({path: file.path, key: releaseOps.find(operation => operation.path === file.path).key, mode: file.mode, contentType: file.contentType||legacyMime(file.path), size: file.size, sha256: file.sha256})),
       publicOverrides: reconciliations.map(item => ({...item, storageStrategy: opts.mode === 'legacy' ? 'content-hashed-sidecar' : 'native-host-release', objectKey: opts.mode === 'legacy' ? item.sidecarKey : newPrefix + item.localPath})),
     };
     let servingMapRef = null;
@@ -258,7 +269,7 @@ async function inventory({baseline, baselineDigest, opts, source, target}) {
       if (prior && (prior.size !== operation.size || prior.sha256 !== operation.sha256 || opts.mode === 'host-releases' && prior.metadataSha256 !== operation.sha256)) { operation.status = 'collision'; conflicts.push({code: 'target_immutable_collision', key: operation.key, expectedSha256: operation.sha256, actualSha256: prior.sha256}); }
     }
     operations.push(...releaseOps);
-    releases.push({system: system.key, sourceId: system.source.id, systemId: system.source.system_id, ...binding, entryPath: metadata.entryPath, manifest, aliases, retainedUnknownObjects: retained, supplementCount: supplements.length, targetPrefix: newPrefix, reconciliations, servingMap, servingMapRef, ...(opts.mode === 'host-releases' ? {artifactRef: `release:${newPrefix}.timds-release.json`, stamp} : {})});
+    releases.push({system: system.key, sourceId: system.source.id, systemId: system.source.system_id, ...binding, entryPath: metadata.entryPath, manifest, aliases, retainedUnknownObjects: retained, supplementCount: supplements.length, targetPrefix: newPrefix, reconciliations, servingMap, servingMapRef, ...(opts.mode === 'host-releases' ? {artifactRef: `release:${newPrefix}.timds-release.json`, stamp, legacyPublic: {schemaVersion:1,behavior:'portal-public-roots-v1',firstPublicationEventId:binding.eventId,artifactManifestDigest:releaseManifestDigest,entryPath:metadata.entryPath,localPaths:servingMap.localPaths,bundleFallbacks:servingMap.bundleFallbacks}} : {})});
     log({stage: 'inventory', system: system.key, version: binding.version, files: manifest.files.length, missing: releaseOps.filter(o => o.status === 'missing').length, conflicts: conflicts.length, reconciledBundles: reconciliations.length});
   }
   const identity = {schemaVersion: 1, baselineSha256: baselineDigest, mode: opts.mode, source: {endpoint: source.conf.endpoint, bucket: source.conf.bucket}, target: {endpoint: target.conf.endpoint, bucket: target.conf.bucket}, systems: systems.map(s => ({key: s.key, sourceId: s.source.id, systemId: s.source.system_id})), releases, operations: operations.map(({status, ...operation}) => operation)};

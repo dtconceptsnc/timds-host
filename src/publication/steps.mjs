@@ -1,5 +1,6 @@
 // Seven repeatable stages. Durable receipts contain identities/references, never
 // credentials, local paths, large trees or a live checkout handle.
+import {finishCleanup} from '../requests/diagnostics.mjs';
 import {verifyPublishedRead} from './public-read.mjs';
 const fail=message=>Object.assign(new Error(message),{statusCode:409});
 export const PUBLICATION_STAGES=['preflight','merge','build','prepare','release','flip','close'];
@@ -20,7 +21,7 @@ export function createPublicationSteps({store,repository,artifacts,metadata,buil
    const preparedAt=row.checkpoints_json.releasePreparedAt||previous?.releasePreparedAt||now();if(!Number.isFinite(Date.parse(preparedAt)))throw fail('Invalid publication date');row=await checkpoint(row,'merge',{releasePreparedAt:preparedAt});
    const resume=row.checkpoints_json.artifactRef?previous:row.checkpoints_json;
    const checkout=await repository.preparePublication(source,submission,{sourceCommit:resume?.sourceCommit,parentRevision:resume?.parentRevision,commitDate:resume?.commitDate||submission.created_at});
-   try{
+   let primary;try{
     let releaseFiles=previous?.parentRevision===checkout.parentRevision?previous.releaseFiles:null;
     if(!releaseFiles){if(checkout.resumed)throw fail('Committed source has no immutable release metadata');releaseFiles=(await metadata({operation:'release-metadata',sourceId:source.id,publicationId,source:checkout.files,prior:checkout.priorFiles,preparedAt,note:submission.note})).files;}
     const sourceResult=await repository.commitSource(source,checkout.checkoutId,{files:releaseFiles,message:`Publish TimDS submission ${submission.id}`});
@@ -28,7 +29,7 @@ export function createPublicationSteps({store,repository,artifacts,metadata,buil
     await artifacts.put(sourceRef,{sourceCommit:sourceResult.headCommit,parentRevision:checkout.parentRevision,sourceFiles:sourceResult.files,releaseFiles,releasePreparedAt:preparedAt,commitDate:submission.created_at,submissionId:submission.id});
     await checkpoint(row,'merge',{sourceRef,mergedKeys:checkout.mergedKeys||[],conflictedKeys:checkout.conflictedKeys||[]});
     return{publicationId,sourceRef,sourceCommit:sourceResult.headCommit,parentRevision:checkout.parentRevision};
-   }finally{await repository.releaseCheckout(source,checkout.checkoutId);}
+   }catch(error){primary=error;throw error;}finally{await finishCleanup(()=>repository.releaseCheckout(source,checkout.checkoutId),primary);}
   },
   async build({publicationId,sourceRef}){
    const {row,source}=await context(publicationId);if(committed(row))return{publicationId,artifactRef:row.checkpoints_json.artifactRef,sourceRef:row.checkpoints_json.sourceRef};
@@ -49,7 +50,7 @@ export function createPublicationSteps({store,repository,artifacts,metadata,buil
    const artifact=await stored(artifactRef),snapshot=await stored(artifact.sourceRef);
    const verified=await metadata({operation:'stamp',sourceId:source.id,publicationId,source:snapshot.sourceFiles,artifact:artifact.files,sourceCommit:snapshot.sourceCommit,systemId:source.system_id});if(JSON.stringify(verified.stamp)!==JSON.stringify(stamp))throw fail('Immutable bytes differ from stamp');
    const checkout=await repository.preparePublication(source,submission,{sourceCommit:snapshot.sourceCommit,parentRevision:snapshot.parentRevision,commitDate:snapshot.commitDate});
-   try{
+   let primary;try{
     const committedSource=await repository.commitSource(source,checkout.checkoutId,{files:snapshot.releaseFiles,message:`Publish TimDS submission ${submission.id}`});if(committedSource.headCommit!==stamp.sourceCommit)throw fail('Reconstructed source differs from stamp');
     const releaseRef=await releaseArtifact({sourceId:source.id,files:artifact.files,stamp});
     const version={id:publicationId,source_id:source.id,version_label:stamp.version,source_commit:stamp.sourceCommit,content_digest:stamp.contentDigest,artifact_ref:releaseRef,source_ref:snapshot.sourceFiles.ref,stamp,publication_id:publicationId,created_at:snapshot.releasePreparedAt,artifact:verified.artifact};
@@ -57,7 +58,7 @@ export function createPublicationSteps({store,repository,artifacts,metadata,buil
     await repository.pushMain(source,checkout.checkoutId);row=await checkpoint(row,'release',{mainPushed:true});
     await repository.pushPublished(source,checkout.checkoutId,{files:artifact.files,stamp});await checkpoint(row,'release',{artifactPushed:true});
     return{publicationId,artifactRef,versionId:staged.versionId};
-   }finally{await repository.releaseCheckout(source,checkout.checkoutId);}
+   }catch(error){primary=error;throw error;}finally{await finishCleanup(()=>repository.releaseCheckout(source,checkout.checkoutId),primary);}
   },
   async flip({publicationId,versionId}){
    const {row,source}=await context(publicationId);if(row.status==='published')return{publicationId,result:row.result_json};

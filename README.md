@@ -15,6 +15,9 @@ migration and production cutover remain separate gates. See the
 Follow the [operations runbook](docs/operations.md) for resource creation,
 immutable release storage, credentials, API/public deployment, Access, first
 administrator bootstrap, organizations and source provisioning.
+Existing portal systems use the separate [inactive import and activation
+protocol](docs/migration/import-protocol.md); importing does not authorize an
+automatic production cutover.
 
 Node.js 22.18+, npm and a running local Docker engine are required. The project
 pins `cf@1.0.0-beta.14` and its Cloudflare Vite plugin in the lockfile. Container
@@ -44,9 +47,15 @@ host through `provider: { kind: 'hosted', url }`. The vendored
 [OpenAPI contract](docs/api/timds-host.openapi.json),
 [architecture](docs/architecture.md) and [conformance package](conformance/README.md)
 describe these boundaries. The build and conformance baseline pin toolkit
-`0.1.464`. Human login to this OAuth host currently requires the OAuth-capable
-toolkit change in [timds-toolkit PR #100](https://github.com/dtconceptsnc/timds-toolkit/pull/100)
-until it is released; the published device-login flow is not a host OAuth client.
+`0.1.464`. Human OAuth login is available in published toolkit `0.1.471`
+([merged OAuth support](https://github.com/dtconceptsnc/timds-toolkit/pull/100)).
+Use `timds auth login --oauth` with the host origin; the native merge/build
+container retains its validated `0.1.464` pin.
+
+The additive source read at `GET /api/timds/design-systems/:source` returns the
+authoritative published pointer, current version, at most 100 rollback versions,
+and the caller's current publisher permission. It excludes provider/storage
+internals and keeps the current descriptor available outside the bounded list.
 
 ## Verification and limitations
 

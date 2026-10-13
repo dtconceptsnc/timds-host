@@ -223,3 +223,8 @@ The [actual reconciliation dry-run](../evidence/artifact-backfill-reconciliation
 verified all 11 affected pinned public bundles (plus the two affected current
 bundles), with zero unresolved collisions. It made no writes and still requires
 a fresh baseline and reviewed plan before apply.
+
+The native compatibility implementation and exact import/routing metadata are
+documented in [legacy public-root compatibility](legacy-public-roots.md). The
+new plan separates original local files from R2-only bundle fallbacks and records
+the latter's actual ContentType. Existing plans need recapture/review before use.

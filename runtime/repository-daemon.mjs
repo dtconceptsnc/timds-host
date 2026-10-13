@@ -6,7 +6,7 @@ import {createSandboxRepositoryEngine} from './repository-engine.mjs';
 const allowed=new Set(['provisionFiles','readSource','start','snapshot','stale','submit','update','mergeIntoDraft','close','merge','preparePublication','commitSource','pushMain','pushPublished','releaseCheckout','stagePublished','stageSource']);
 let configuration, checkout, release, staged=[], stagedSource=[];
 const responseTrees=new Map();
-export function describeResponseTrees(result){
+export function describeResponseTrees(result = {}){
  responseTrees.clear();const descriptor={...result};
  for(const role of ['files','priorFiles'])if(Array.isArray(result[role])){
   const entries=result[role].map(file=>({...file,bytes:typeof file.content==='string'&&file.encoding==='base64'?Buffer.from(file.content,'base64'):Buffer.from(file.content)}));

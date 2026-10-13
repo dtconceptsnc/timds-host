@@ -8,16 +8,18 @@ import { createPreviews } from './preview/index.mjs';
 import { agentPushEvent } from '../runtime/policy.mjs';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { createPublicRoots } from './public/index.mjs';
+import { createLegacyPublicRoots } from './public/legacy.mjs';
+import { UUID } from './public/host-routes.mjs';
 import { createHostMcp } from './mcp/index.mjs';
 import { fail } from './store/errors.mjs';
 import { studioFetch } from './studio.mjs';
 
 const getCoordinator=(ctx,id)=>ctx.exports.SystemCoordinator.getByName(id);
 function publishedServices(env,ctx) {
-  const resolvePublished=async(systemId,label)=>{
+  const resolvePublished=async(systemId,label,includeReadView=false)=>{
     const source=await new Catalog(env.CATALOG).source(systemId);
     if(!source)throw fail(404,'Published Design System not found');
-    const result=await getCoordinator(ctx,source.id).publicVersion(label);
+    const result=await getCoordinator(ctx,source.id).publicVersion(label,includeReadView);
     if(!result)throw fail(404,'Published version not found');
     return result;
   };
@@ -27,10 +29,17 @@ function publishedServices(env,ctx) {
     if(!response.ok)throw fail(response.error.statusCode,response.error.message);
     return response.value;
   }});
-  return {roots:createPublicRoots(options),mcp};
+  const legacy=createLegacyPublicRoots({bucket:env,hostOrigin:env.HOST_ORIGIN,resolvePublished:async(sourceId,label)=>{
+    if(!UUID.test(sourceId))throw fail(404,'Published source not found');
+    const result=await getCoordinator(ctx,sourceId).publicVersion(label);
+    if(!result)throw fail(404,'Published version not found');
+    return result;
+  }});
+  return {roots:createPublicRoots(options),legacy,mcp};
 }
 const api=createApi({getCoordinator,provision:createProvisioner({getCoordinator}),mcp:(request,env,ctx,actor)=>publishedServices(env,ctx).mcp(request,env,ctx,actor)});
 export class PublicRoots extends WorkerEntrypoint {
+  legacyFetch(request,sourceId) {return publishedServices(this.env,this.ctx).legacy.fetch(request,sourceId);}
   fetch(request) {
     const services=publishedServices(this.env,this.ctx);
     return new URL(request.url).pathname==='/mcp'?services.mcp(request,this.env,this.ctx):services.roots.fetch(request);

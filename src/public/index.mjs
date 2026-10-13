@@ -1,5 +1,6 @@
 import { readPublishedArtifactFile } from '../publication/artifacts.mjs';
 import { fail } from '../store/errors.mjs';
+import { nativeViewerFile } from './native-base.mjs';
 
 const mime = new Map(Object.entries({html:'text/html; charset=utf-8',htm:'text/html; charset=utf-8',css:'text/css; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',json:'application/json; charset=utf-8',txt:'text/plain; charset=utf-8',md:'text/markdown; charset=utf-8',svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',gif:'image/gif',ico:'image/x-icon',woff:'font/woff',woff2:'font/woff2',ttf:'font/ttf',otf:'font/otf',pdf:'application/pdf',mp4:'video/mp4',webm:'video/webm',mp3:'audio/mpeg',wav:'audio/wav',xml:'application/xml; charset=utf-8',webmanifest:'application/manifest+json'}));
 export const publicContentType = path => mime.get(path.split('.').at(-1)?.toLowerCase()) || 'application/octet-stream';
@@ -69,10 +70,12 @@ export function createPublicRoots({resolvePublished,bucket,hostOrigin,publicOrig
           return new Response(null,{status:308,headers:{Location:location,'Cache-Control':route.label?'public, max-age=31536000, immutable':'public, max-age=300, must-revalidate'}});
         }
         if (path.endsWith('/')) path+='index.html';
-        const file=await publishedFile(readFile,bucket,version,path);
-        if (!file) throw fail(404,'Published file not found');
+        const stored=await publishedFile(readFile,bucket,version,path);
+        if (!stored) throw fail(404,'Published file not found');
+        const type=publicContentType(path);
+        const file=await nativeViewerFile(stored,{path,type,systemId:route.systemId,label:route.label});
         const etag=`"${file.sha256 || `${version.id}:${version.content_digest}`}"`;
-        const headers=new Headers({'Content-Type':publicContentType(path),'Cache-Control':route.label?'public, max-age=31536000, immutable':'public, max-age=300, must-revalidate','ETag':etag,'X-Content-Type-Options':'nosniff','Access-Control-Allow-Origin':'*','Referrer-Policy':'no-referrer'});
+        const headers=new Headers({'Content-Type':type,'Cache-Control':route.label?'public, max-age=31536000, immutable':'public, max-age=300, must-revalidate','ETag':etag,'X-Content-Type-Options':'nosniff','Access-Control-Allow-Origin':'*','Referrer-Policy':'no-referrer'});
         if (Number.isSafeInteger(file.size)) headers.set('Content-Length',String(file.size));
         if (request.headers.get('If-None-Match')?.split(',').some(value=>value.trim()===etag||value.trim()==='*')) {
           await file.body?.cancel(); headers.delete('Content-Length'); return new Response(null,{status:304,headers});

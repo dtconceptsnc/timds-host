@@ -38,10 +38,10 @@ export async function loadRelease(storage,version){
  const match=pattern.exec(version?.artifact_ref||'');if(!match)throw fail('Invalid immutable release reference');
  const bucket=storage.RELEASES||storage.releases;if(!bucket)throw fail('Immutable release storage unavailable');
  const root=match[1],object=await bucket.get(root+'.timds-release.json');if(!object||object.size>2*1024*1024)throw fail('Immutable release unavailable');
- const text=await object.text();if(await sha256(new TextEncoder().encode(text))!==object.customMetadata?.sha256)throw fail('Immutable release manifest changed');
+ const text=await object.text(),manifestDigest=await sha256(new TextEncoder().encode(text));if(manifestDigest!==object.customMetadata?.sha256)throw fail('Immutable release manifest changed');
  const receipt=JSON.parse(text);validateTreeManifest(receipt.manifest,{maxFiles:2000,maxBytes:80_000_000,maxFileBytes:12_000_000});
  if(receipt.schemaVersion!==1||prefix(receipt.sourceId,receipt.version)!==root||receipt.sourceId!==version.source_id||receipt.version!==version.version_label||JSON.stringify(receipt.stamp)!==JSON.stringify(version.stamp)||receipt.stamp.contentDigest!==version.content_digest||receipt.stamp.sourceCommit!==version.source_commit)throw fail('Immutable release identity changed');
- return{bucket,root,receipt};
+ return{bucket,root,receipt,manifestDigest};
 }
 export async function verifyRelease(storage,version){
  const {bucket,root,receipt}=await loadRelease(storage,version),manifest=receipt.manifest;

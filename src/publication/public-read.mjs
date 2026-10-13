@@ -33,7 +33,8 @@ export const fetchAnonymousPublicRead = createAnonymousPublicReadFetch();
 
 export async function verifyPublishedRead({root,stamp,fetchImpl=fetchAnonymousPublicRead}) {
  const url=new URL('.timds-artifact.json',root);
- const response=await fetchImpl(url,{method:'GET',headers:{Accept:'application/json'},redirect:'error',signal:AbortSignal.timeout(30_000)});
+ // Workerd supports manual/follow only. The non-OK check rejects redirects.
+ const response=await fetchImpl(url,{method:'GET',headers:{Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(30_000)});
  if(!response.ok)throw new Error('Published public stamp is unavailable');
  const reader=response.body?.getReader(),chunks=[];let size=0;
  while(reader){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>64*1024){await reader.cancel();throw new Error('Published public stamp exceeds limit');}chunks.push(value);}

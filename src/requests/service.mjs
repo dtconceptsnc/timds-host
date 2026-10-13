@@ -1,6 +1,7 @@
 // API v1 semantics extracted from toperator 74bceaa plus durable closed-fork
 // Request receipt recovery. Identity and Fetch routing belong to the host edge.
 import { timdsSessionView } from '../domain/sessions.mjs';
+import { requestDiagnostic, safeRequestDiagnostic } from './diagnostics.mjs';
 
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -38,19 +39,30 @@ export function createDesignerRequests({sourceId, store, requestStore, authoriza
   return {
     requestStore,
     async create(actor,id,body) {
-      if(body?.apiVersion!==undefined && body.apiVersion!==1)throw fail(400,'Unsupported TimDS API version');
-      const system=await source(id);
-      await authorization.authorizeSource(system,actor);
-      if(!designer.configured)throw fail(503,'The designer runner is not configured');
-      if(typeof body?.prompt!=='string' || !body.prompt.trim() || Buffer.byteLength(body.prompt)>32*1024)throw fail(400,'Describe the change in 1–32 KiB');
-      if(!uuid.test(body.requestId || ''))throw fail(400,'A requestId is required for safe retries');
-      await target(actor,system,body.sessionId);
-      const {request,job}=await requestStore.reserve({requestId:body.requestId,sourceId:system.id,requestedBy:principalId(actor),runnerPrincipalId:designer.principalId,prompt:body.prompt.trim(),sessionId:body.sessionId});
-      const current=['failed','dead_letter','cancelled'].includes(job.status)?await requestStore.retry(job.id):job;
-      // Resource locators must be visible before acknowledging durable work.
-      await store.flushOutbox();
-      if(current.status!=='succeeded')await schedule({requestId:request.id,jobId:job.id});
-      return {apiVersion:1,requestId:request.id,executionJobId:job.id};
+      let stage='input';
+      try {
+        if(body?.apiVersion!==undefined && body.apiVersion!==1)throw fail(400,'Unsupported TimDS API version');
+        stage='source';
+        const system=await source(id);
+        stage='authority';
+        await authorization.authorizeSource(system,actor);
+        stage='configuration';
+        if(!designer.configured)throw fail(503,'The designer runner is not configured');
+        stage='input';
+        if(typeof body?.prompt!=='string' || !body.prompt.trim() || Buffer.byteLength(body.prompt)>32*1024)throw fail(400,'Describe the change in 1–32 KiB');
+        if(!uuid.test(body.requestId || ''))throw fail(400,'A requestId is required for safe retries');
+        stage='target';
+        await target(actor,system,body.sessionId);
+        stage='reservation';
+        const {request,job}=await requestStore.reserve({requestId:body.requestId,sourceId:system.id,requestedBy:principalId(actor),runnerPrincipalId:designer.principalId,prompt:body.prompt.trim(),sessionId:body.sessionId});
+        const current=['failed','dead_letter','cancelled'].includes(job.status)?await requestStore.retry(job.id):job;
+        // Resource locators must be visible before acknowledging durable work.
+        stage='projection';
+        await store.flushOutbox();
+        stage='schedule';
+        if(current.status!=='succeeded')await schedule({requestId:request.id,jobId:job.id});
+        return {apiVersion:1,requestId:request.id,executionJobId:job.id};
+      } catch (error) { throw requestDiagnostic(error,stage); }
     },
     async read(actor,id,requestId) {
       const system=await source(id);
@@ -62,21 +74,32 @@ export function createDesignerRequests({sourceId, store, requestStore, authoriza
       const boundRunner=runner && (runner.requestId===requestId || (!runner.requestId && session?.originating_request_id===requestId))?runner:null;
       const receipt=!boundRunner?.submissionId && session?await store.requestReceipt(session.id,requestId):null;
       const error=boundRunner?.error || (!boundRunner && !receipt?.submission_id && ['failed','dead_letter','cancelled'].includes(job.status)?job.error_message:null);
-      return {apiVersion:1,requestId,status:job.status,error:error || null,session:session?timdsSessionView(session,system):null,sessionId:session?.id || null,submissionId:boundRunner?.submissionId || receipt?.submission_id || null,runner:boundRunner};
+      return {apiVersion:1,requestId,status:job.status,error:error || null,...(safeRequestDiagnostic(job.failure_diagnostic)?{diagnostic:safeRequestDiagnostic(job.failure_diagnostic)}:{}),session:session?timdsSessionView(session,system):null,sessionId:session?.id || null,submissionId:boundRunner?.submissionId || receipt?.submission_id || null,runner:boundRunner};
     },
     async execute(requestId,lease) {
-      const job=await requestStore.validateLease(lease);
-      if(job.job_type!=='timds_designer_request' || job.payload_json?.requestId!==requestId)throw fail(409,'Designer Request execution lease is unavailable');
-      const request=await requestStore.get(requestId),system=await source(job.payload_json.sourceId);
-      if(!request || request.source_id!==system.id || request.requested_by!==job.payload_json.requestedBy || (request.session_id || null)!==(job.payload_json.sessionId || null))throw fail(409,'Designer Request no longer matches its source');
-      const caller=await authorization.authenticatePrincipal(request.requested_by);
-      await authorization.authorizeSource(system,caller);
-      await target(caller,system,request.session_id);
-      // Recovery follows current authority checks, before join requires an open
-      // fork. A lost forwarding response cannot cause another model execution.
-      const result=await completed(system,request) || await designer.start(system,request,request.prompt,{sessionId:request.session_id,caller:sessionActor(caller)});
-      await runMutation(()=>requestStore.finish({...lease,result}));
-      return result;
+      let stage='lease';
+      try {
+        const job=await requestStore.validateLease(lease);
+        if(job.job_type!=='timds_designer_request' || job.payload_json?.requestId!==requestId)throw fail(409,'Designer Request execution lease is unavailable');
+        stage='source';
+        const request=await requestStore.get(requestId),system=await source(job.payload_json.sourceId);
+        stage='identity';
+        if(!request || request.source_id!==system.id || request.requested_by!==job.payload_json.requestedBy || (request.session_id || null)!==(job.payload_json.sessionId || null))throw fail(409,'Designer Request no longer matches its source');
+        stage='principal';
+        const caller=await authorization.authenticatePrincipal(request.requested_by);
+        stage='authority';
+        await authorization.authorizeSource(system,caller);
+        stage='target';
+        await target(caller,system,request.session_id);
+        // Recovery follows current authority checks, before join requires an open
+        // fork. A lost forwarding response cannot cause another model execution.
+        stage='recovery';
+        let result=await completed(system,request);
+        if(!result){stage='designer';result=await designer.start(system,request,request.prompt,{sessionId:request.session_id,caller:sessionActor(caller)});}
+        stage='finish';
+        await runMutation(()=>requestStore.finish({...lease,result}));
+        return result;
+      } catch(error) { throw requestDiagnostic(error,stage,'designer-request-execute'); }
     },
     async binding(requestId) {
       const request=await requestStore.get(requestId);

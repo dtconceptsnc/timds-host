@@ -4,6 +4,10 @@ import * as entrypoint from './src/index.ts' with { type: 'cf-worker' };
 
 const name=process.env.TIMDS_WORKER_NAME || 'timds-host';
 if(!/^[a-z0-9][a-z0-9-]{0,48}$/.test(name))throw new Error('Use a lowercase TIMDS_WORKER_NAME');
+const artifactsNamespaces=JSON.parse(process.env.TIMDS_ARTIFACTS_BINDINGS||'{}') as Record<string,string>;
+if(!artifactsNamespaces||Array.isArray(artifactsNamespaces)||typeof artifactsNamespaces!=='object'||new Set(Object.values(artifactsNamespaces)).size!==Object.keys(artifactsNamespaces).length)throw new Error('Use an explicit Artifacts namespace to binding map');
+for(const [namespace,binding] of Object.entries(artifactsNamespaces))if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(namespace)||typeof binding!=='string'||!/^ARTIFACTS_[A-Z0-9_]+$/.test(binding))throw new Error('Invalid Artifacts namespace binding');
+const artifactsBindings=Object.fromEntries(Object.entries(artifactsNamespaces).map(([namespace,binding])=>[binding,bindings.artifacts({namespace,dev:{remote:true}})]));
 const repository=defineContainer({name:`${name}-repository`,schedulingPolicy:'durable-object',images:{repository:{dockerfile:'./runtime/Repository.Dockerfile'}}});
 const live=defineContainer({name:`${name}-live`,schedulingPolicy:'durable-object',images:{agent:{dockerfile:'./runtime/Dockerfile'}}});
 const build=defineContainer({name:`${name}-build`,schedulingPolicy:'durable-object',images:{build:{dockerfile:'./runtime/Build.Dockerfile'}}});
@@ -25,6 +29,9 @@ export default defineConfig({
       PublicationWorkflow:exports.workflow({name:workflow,limits:{steps:32},concurrency:{limit:10},defaultRetention:{successRetention:'7 days',errorRetention:'30 days'}}),
     },
     env:{
+      ...artifactsBindings,
+      TIMDS_ARTIFACTS_BINDINGS:bindings.text(JSON.stringify(artifactsNamespaces)),
+      TIMDS_ARTIFACTS_REST_FALLBACK:bindings.text(process.env.TIMDS_ARTIFACTS_REST_FALLBACK==='true'?'true':'false'),
       ASSETS:bindings.assets(),
       CATALOG:bindings.d1({name:`${name}-catalog`}),
       SNAPSHOTS:bindings.r2({name:`${name}-snapshots`}),
@@ -34,16 +41,19 @@ export default defineConfig({
       PUBLICATION_WORKFLOW:bindings.workflow({name:workflow,worker:name,exportName:'PublicationWorkflow'}),
       HOST_ORIGIN:bindings.text(process.env.TIMDS_HOST_ORIGIN || 'http://127.0.0.1:8787'),
       TIMDS_PUBLIC_ORIGIN:bindings.text(process.env.TIMDS_PUBLIC_ORIGIN || 'http://127.0.0.1:8788'),
+      TIMDS_PORTAL_ORIGIN:bindings.text(process.env.TIMDS_PORTAL_ORIGIN || ''),
       TIMDS_HOST_WORKER_NAME:bindings.text(name),
       ACCESS_TEAM_DOMAIN:bindings.text(process.env.TIMDS_ACCESS_TEAM_DOMAIN || ''),
       ACCESS_AUD:bindings.text(process.env.TIMDS_ACCESS_AUD || ''),
       CLOUDFLARE_ACCOUNT_ID:bindings.text(process.env.CLOUDFLARE_ACCOUNT_ID || ''),
       TIMDS_AGENT_PUSH_QUEUE_ID:bindings.text(process.env.TIMDS_AGENT_PUSH_QUEUE_ID || ''),
       TIMDS_DESIGNER_PRINCIPAL_ID:bindings.text(process.env.TIMDS_DESIGNER_PRINCIPAL_ID || ''),
+      MODEL:bindings.text(process.env.TIMDS_DESIGNER_MODEL || 'gpt-6-sol'),
       CLOUDFLARE_API_TOKEN:bindings.secret(),
       TIMDS_BUILDS_API_TOKEN:bindings.secret(),
       OPENAI_API_KEY:bindings.secret(),
       TIMDS_BOOTSTRAP_SECRET:bindings.secret(),
+      TIMDS_PORTAL_TRANSFER_SECRET:bindings.secret(),
     },
     triggers:[triggers.queue({name:`${name}-events`,maxBatchSize:10,maxBatchTimeout:1})],
   },

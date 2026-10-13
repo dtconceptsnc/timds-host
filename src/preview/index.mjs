@@ -1,6 +1,24 @@
 // Portable Workers Builds controller adapted from toperator 74bceaa.
 // cf beta.14 commands/migration/delete route proved in docs/evidence/cf-preview-builds.md.
+import {requestDiagnostic,safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 const fail=(statusCode,message)=>Object.assign(new Error(message),{statusCode});
+const previewEndpoint = (method,route) => {
+  const path=route.split('?')[0];
+  if(path==='/workers/scripts')return 'worker-list';
+  if(path==='/workers/subdomain')return 'account-subdomain';
+  if(path==='/user/tokens/verify')return 'build-token-verify';
+  if(path==='/builds/tokens')return 'build-token-list';
+  if(path==='/builds/workers')return 'build-worker-create';
+  if(/^\/workers\/scripts\/[^/]+\/subdomain$/.test(path))return 'worker-subdomain';
+  if(/^\/workers\/scripts\/[^/]+$/.test(path))return method==='DELETE'?'worker-delete':'worker-write';
+  if(/^\/builds\/workers\/[^/]+\/triggers$/.test(path))return 'build-triggers-list';
+  if(/^\/builds\/workers\/[^/]+\/migrate_to_previews$/.test(path))return 'build-preview-migrate';
+  if(/^\/builds\/workers\/[^/]+\/previews$/.test(path))return 'build-preview-list';
+  if(/^\/builds\/workers\/[^/]+$/.test(path))return method==='DELETE'?'build-worker-delete':'build-worker-read';
+  if(/^\/builds\/repos\/connections\/[^/]+$/.test(path))return 'build-connection-delete';
+  if(/^\/workers\/workers\/[^/]+\/previews\/[^/]+$/.test(path))return 'branch-preview-delete';
+  return 'unknown';
+};
 export function designSystemPreviewWorker(source) {
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(source?.id || '')) throw fail(409, 'Design System identity is unavailable');
   return `timds-${source.id.replaceAll('-', '').toLowerCase()}`;
@@ -20,7 +38,8 @@ function previewBranch(source, branch) {
 export function createPreviews({ env = {}, fetchImpl = fetch } = {}) {
   const account = env.TIMDS_ARTIFACTS_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID;
   const buildsToken = env.TIMDS_BUILDS_API_TOKEN;
-  const workerToken = env.CLOUDFLARE_API_TOKEN || env.TIMDS_ARTIFACTS_API_TOKEN || buildsToken;
+  // Registered Builds deployment authority also controls the owned Preview Worker.
+  const workerToken = buildsToken || env.CLOUDFLARE_API_TOKEN || env.TIMDS_ARTIFACTS_API_TOKEN;
   const configured = Boolean(account && workerToken && buildsToken);
   const base = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account || '')}`;
   const marker = source => `timds-source:${source.id.toLowerCase()}`;
@@ -30,13 +49,21 @@ export function createPreviews({ env = {}, fetchImpl = fetch } = {}) {
     const headers = { Authorization:`Bearer ${builds ? buildsToken : workerToken}` };
     if (body && !(body instanceof FormData)) headers['Content-Type'] = 'application/json';
     let response;
-    try { response = await fetchImpl(`${accountScoped ? base : 'https://api.cloudflare.com/client/v4'}${route}`, { method, headers, body:body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body), signal:AbortSignal.timeout(30_000),redirect:'error' }); }
-    catch { throw fail(502, 'Cloudflare Preview request failed'); }
+    // Workerd rejects redirect:'error'; manual preserves the no-follow boundary
+    // and the response.ok check below rejects every redirect status.
+    try { response = await fetchImpl(`${accountScoped ? base : 'https://api.cloudflare.com/client/v4'}${route}`, { method, headers, body:body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body), signal:AbortSignal.timeout(30_000),redirect:'manual' }); }
+    catch (cause) {
+      const error=fail(502,'Cloudflare Preview request failed');
+      error.requestDiagnostic={...requestDiagnostic(cause,previewEndpoint(method,route),'cloudflare-preview').requestDiagnostic,statusCode:502};
+      throw error;
+    }
     if (missing && response.status === 404) return null;
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.success === false) {
       const codes = (payload.errors || []).map(x => Number(x.code)).filter(Number.isFinite);
-      throw fail(502, `Cloudflare Preview request failed (HTTP ${response.status}${codes.length ? `; codes ${codes.join(',')}` : ''})`);
+      const error=requestDiagnostic(fail(502,'Cloudflare Preview request failed'),previewEndpoint(method,route),'cloudflare-preview');
+      error.requestDiagnostic=safeRequestDiagnostic({...error.requestDiagnostic,providerStatus:response.status,providerCodes:codes});
+      throw error;
     }
     return payload.result ?? null;
   }
@@ -141,6 +168,12 @@ export function createPreviews({ env = {}, fetchImpl = fetch } = {}) {
   }
   const adapter = {
     configured, prepareSource, ensureSource:prepareSource, ensurePreview:prepareSource, ensure:prepareSource,
+    async inspectSourcePreview(source) {
+      const found=await worker(source);
+      if(!found)return null;
+      const config=await connection(source,found);
+      return {workerName:found.id,workerTag:found.tag,repositoryId:config?.git_repository?.repo_id==null?null:String(config.git_repository.repo_id)};
+    },
     async previewUrl(source, branch) {
       previewBranch(source, branch);
       if (!subdomain) subdomain = (await request('/workers/subdomain'))?.subdomain;
@@ -167,19 +200,24 @@ export function createPreviews({ env = {}, fetchImpl = fetch } = {}) {
       if(matches.length!==1 || !/^[a-f0-9]{32}$/.test(matches[0].preview_id || ''))throw fail(503,'The exact Preview metadata is not ready');
       const url=await adapter.previewUrl(source,branch);
       let response;
-      try{response=await fetchImpl(url,{method:'GET',redirect:'error',signal:AbortSignal.timeout(30_000)});}
+      try{response=await fetchImpl(url,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(30_000)});}
       catch{throw fail(503,'The submitted Preview is not ready');}
       const ready=response.status===200 && /^text\/html(?:;|$)/i.test(response.headers.get('content-type') || '');
       await response.body?.cancel();
       if(!ready)throw fail(503,'The submitted Preview is not ready');
       return {url,workerTag:found.tag,previewId:matches[0].preview_id};
     },
-    async deleteSourcePreview(source) {
+    async deleteSourcePreview(source,{expected}={}) {
       const found = await worker(source);
       if (!found) return;
-      await connection(source, found);
+      if(expected!==undefined&&(!expected||expected.workerName!==designSystemPreviewWorker(source)||expected.workerTag!==found.tag))throw fail(409,'The Preview Worker identity changed after deletion review');
+      const connected=await connection(source, found);
+      if(expected&&connected&&expected.repositoryId!==String(connected.git_repository.repo_id))throw fail(409,'The Preview connection changed after deletion review');
       await deleteConnection(source, found);
       await request(`/builds/workers/${encodeURIComponent(found.tag)}`, { method:'DELETE', builds:true, missing:true });
+      const current=await worker(source);
+      if(current&&current.tag!==found.tag)throw fail(409,'The Preview Worker identity changed during deletion');
+      if(!current)return;
       await request(`/workers/scripts/${designSystemPreviewWorker(source)}`, { method:'DELETE', missing:true });
       // The shared Builds deployment token is operator-owned, never source-owned.
     },

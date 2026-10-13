@@ -33,9 +33,12 @@ export CLOUDFLARE_ACCOUNT_ID='<account-id>'
 export TIMDS_HOST_ORIGIN='https://timds-example.<workers-subdomain>.workers.dev'
 export TIMDS_PUBLIC_ORIGIN='https://timds-example-public.<workers-subdomain>.workers.dev'
 export TIMDS_AGENT_PUSH_QUEUE_ID='<queue-id-from-next-step>'
+export TIMDS_ARTIFACTS_BINDINGS='{"example":"ARTIFACTS_EXAMPLE"}'
+export TIMDS_ARTIFACTS_REST_FALLBACK='false'
 export TIMDS_ACCESS_TEAM_DOMAIN='https://<team>.cloudflareaccess.com'
 export TIMDS_ACCESS_AUD='<access-application-audience>'
 export TIMDS_DESIGNER_PRINCIPAL_ID=''
+export TIMDS_DESIGNER_MODEL='gpt-6-sol'
 ```
 
 The Worker name must match `[a-z0-9][a-z0-9-]{0,48}`. Both origins are exact
@@ -44,6 +47,13 @@ leave its two settings empty: interactive authentication fails closed. Set them
 and redeploy after configuring the application. Leaving origin/account/queue
 settings unset on a later deployment replaces their values with defaults;
 retain the installation's environment outside the checkout.
+
+The Artifacts map binds each approved organization namespace to one unique
+`ARTIFACTS_...` binding. Add and deploy a namespace entry before provisioning or
+importing its sources. Unconfigured namespaces fail closed. Runtime repository
+operations use the native binding, not a developer OAuth token; the namespace
+can initialize on its first repository creation. Keep REST fallback disabled
+unless explicitly operating a separately validated Artifacts API credential.
 
 ## Create storage and the event queue
 
@@ -88,12 +98,12 @@ bytes or a different source commit.
 ## Runtime secrets and deployment
 
 Have your secret manager write a private flat JSON file outside the repository
-(owner-only directory and file mode `0600`) with these four keys:
+(owner-only directory and file mode `0600`) with these runtime keys:
 
 | Key | Purpose |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Server-side Artifacts repository/capability control and owned Preview Worker/Queue subscription operations |
-| `TIMDS_BUILDS_API_TOKEN` | Active long-lived API credential for Builds, registered exactly once as its Builds deployment token |
+| `CLOUDFLARE_API_TOKEN` | Optional explicit Artifacts REST fallback only; native namespace bindings do not need it |
+| `TIMDS_BUILDS_API_TOKEN` | Active long-lived user API credential with Workers Scripts Write and Workers Builds Configuration Edit; registered exactly once as the Builds deployment token; also controls owned Preview/live Workers and Queue event subscriptions |
 | `OPENAI_API_KEY` | Live designer execution |
 | `TIMDS_BOOTSTRAP_SECRET` | Fresh random installation-only secret for the first human administrator |
 
@@ -102,6 +112,10 @@ The Builds credential must pass `/user/tokens/verify` and match exactly one
 intended deployment credential through Cloudflare's Builds setup before using
 previews; `npx cf builds tokens list` lists registration metadata. A temporary
 CLI OAuth token is not a replacement for this registered runtime API token.
+Workers Scripts Write also authorizes event subscription creation/deletion, so
+a separate Queues Write grant is not required for those calls. No zone/DNS
+permissions are needed for workers.dev previews. See the exact
+[runtime authority inventory](evidence/runtime-cloudflare-auth.md).
 Do not paste credential-bearing Artifacts repository-create responses: creation
 issues a capability. The host captures and revokes that initial capability.
 
@@ -162,13 +176,13 @@ Set the resulting `TIMDS_ACCESS_AUD` and `TIMDS_ACCESS_TEAM_DOMAIN` and redeploy
 the API. `/authorize` and `/service-auth` should redirect anonymous browsers to
 Access, while discovery stays public and anonymous API calls return 401.
 
-Until the OAuth-capable toolkit is released, use a reviewed checkout of
-[timds-toolkit PR #100](https://github.com/dtconceptsnc/timds-toolkit/pull/100)
-and install that checkout's dependencies with `npm ci`. Keep its path in
-`TIMDS_TOOLKIT_ROOT`; the host's own toolkit/build pin remains `0.1.464`.
+OAuth support shipped in `@dtconcepts/timds@0.1.471`
+([merged change](https://github.com/dtconceptsnc/timds-toolkit/pull/100)).
+Use that published CLI for login; the native merge/build container remains
+pinned to its validated `0.1.464` release.
 
 ```sh
-node "$TIMDS_TOOLKIT_ROOT/bin/timds.mjs" auth login \
+npx --yes --package @dtconcepts/timds@0.1.471 timds auth login \
   --portal-url "$TIMDS_HOST_ORIGIN" --oauth
 node scripts/admin.mjs me --host "$TIMDS_HOST_ORIGIN"
 node scripts/admin.mjs bootstrap --host "$TIMDS_HOST_ORIGIN" \
@@ -216,7 +230,8 @@ remain tied to the initiating human's current source authority.
 
 Choose and record a fresh source UUID, provisioning operation UUID, organization
 UUID, immutable system ID, namespace and repository name. Namespace/repository
-names use lowercase letters, digits and hyphens. Initialize a fresh standalone
+names use lowercase letters, digits and hyphens. The namespace must already
+appear in the deployed `TIMDS_ARTIFACTS_BINDINGS` map. Initialize a fresh standalone
 seed with the host's pinned toolkit, then convert its Preview tooling to `cf`:
 
 ```sh
@@ -312,6 +327,45 @@ use the OAuth-capable CLI to start a session on `example/core`. Provisioning
 does not publish it. Run the [live conformance lifecycle](../conformance/README.md)
 against this disposable source before onboarding production systems.
 
+Read current publishers and existing host identities through the same signed-in
+administrator, without handling bearer tokens manually:
+
+```sh
+node scripts/admin.mjs publishers --host "$TIMDS_HOST_ORIGIN" --source-id '<source-uuid>'
+node scripts/admin.mjs principals --host "$TIMDS_HOST_ORIGIN" --source-id '<source-uuid>'
+```
+
+Each read returns at most 200 entries. When `nextPublisherCursor` or
+`nextPrincipalCursor` is non-null, pass that exact value as `--cursor` for the
+next page. Only host identity UUID, name, type and status are exposed. No email
+matching creates identities or grants. Revoke a publish grant with the same
+saved `grant.json` shape and `publish:false`, using a new operation UUID for the
+new intent. Keep that UUID and body unchanged through an uncertain retry.
+
+Archive and restore use durable coordinator authority operations:
+
+```sh
+node scripts/admin.mjs archive --host "$TIMDS_HOST_ORIGIN" \
+  --source-id '<source-uuid>' --operation-id '<stable-archive-uuid>'
+node scripts/admin.mjs restore --host "$TIMDS_HOST_ORIGIN" \
+  --source-id '<source-uuid>' --operation-id '<stable-restore-uuid>'
+```
+
+Both require a current active host administrator and an initialized source.
+Archive disables public serving, new authoring and publication authority while
+retaining its repository, grants, release history and session records. Restore
+re-enables the same source identity. Current administrator metadata reads remain
+available for archived sources; ordinary authoring and publisher grants do not
+bypass archive. These operations do not delete cloud resources or change the
+portal's separately owned catalogue metadata. Existing immutable release bytes
+remain protected by their bucket locks even when a source is later deleted.
+
+The portal's connected-source operator UI uses these same source-bound routes
+only after verified transfer. The connected human needs host admin authority;
+being a portal operator does not confer it. Archive/restore and grant controls
+retain operation IDs on failed requests. Source archive and release state come
+from the host, while catalogue edits remain under portal permissions.
+
 ## Verify and operate
 
 Check anonymous responses after deployment:
@@ -346,6 +400,13 @@ not an import or cutover receipt.
 
 ## Pinned cf limitations
 
+The deployed workerd runtime rejects `fetch(..., {redirect:'error'})` with a
+TypeError before network I/O. Worker-side Preview and public-stamp fetches use
+`redirect:'manual'` and reject non-success statuses; they never follow redirects.
+This was reproduced in the local native runtime with the deployed compatibility
+date and flags after live Request/submission diagnostics identified the failing
+Worker-list call. Node container programs retain Node's supported redirect mode.
+
 - Use `cf dev` for the local runtime. The tested Vite path does not support
   `cf dev --local`. Artifacts has no local emulator: the host's REST adapter
   still uses remote disposable resources; the native binding spike uses
@@ -372,3 +433,15 @@ not an import or cutover receipt.
 See [native toolchain evidence](evidence/phase-0.md),
 [Builds evidence](evidence/cf-preview-builds.md), and the
 [Cloudflare configuration documentation](https://developers.cloudflare.com/cf/projects/cloudflare-config/).
+
+
+## Source deletion
+
+The prepared administrator deletion API uses provider-read-only impact review,
+exact typed repository confirmation and a durable source fence before cleanup.
+It retains locked release/media bytes and audit history while removing mutable
+repositories, previews, live work and grants. Imported systems additionally need
+the portal consumer attachment barrier migration and its short-lived server
+proof; a zero-consumer count alone is insufficient. See [the deletion protocol](lifecycle-deletion.md)
+for routes, recovery and retained-byte semantics. No production source deletion
+is part of the current implementation evidence.

@@ -1,23 +1,27 @@
 // v1 publication response/preflight surface, independent of HTTP framework.
+import {requestDiagnostic,finishCleanup} from '../requests/diagnostics.mjs';
 import {timdsSubmissionView} from '../domain/sessions.mjs';
 const fail=(statusCode,message)=>Object.assign(new Error(message),{statusCode});
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export const submissionPublicationView=row=>({id:row.id,sourceId:row.source_id,submissionId:row.submission_id,executionJobId:row.execution_job_id,status:row.status,stage:row.stage,error:row.error_message,result:row.result_json,createdAt:row.created_at,completedAt:row.completed_at,queuePosition:row.queue_position,conflictRate:row.conflict_rate,autoRebaseSuccess:row.auto_rebase_success,submitToPublishMs:row.submit_to_publish_ms});
 export function createPublicationApi({store,repository,metadata,build,authorization,publication,sourceId,authorizePublish=authorization?.authorizePublish,service=publication,now=()=>new Date().toISOString()}){
  const committedReplay=(row,actor)=>row&&row.actor_principal_id===(actor?.principalId||actor?.id||actor?.userId)&&(['closing','published'].includes(row.status)||Boolean(row.checkpoints_json?.pointerEventId));
- async function preflight({source,submission,actor,dryRun=false}){
+ async function preflight(input){let stage='authority';try{return await preflightSteps({...input,stage:value=>{stage=value;}});}catch(error){throw requestDiagnostic(error,stage,'publication-preflight');}}
+ async function preflightSteps({source,submission,actor,dryRun=false,stage}){
   const existing=await store.publicationBySubmission(submission.id);
   if(!committedReplay(existing,actor))await authorizePublish(source,actor);
   if(existing&&(['published','closing'].includes(existing.status)||existing.checkpoints_json?.pointerEventId))return{systemId:source.system_id,submissionId:submission.id,sessionId:submission.session_id,version:existing.result_json?.version,previewUrl:submission.preview_url||'',diffSummary:{alreadyPublished:true},currency:'published',dryRun,buildChecked:true};
   if(submission.target_draft_session_id)throw fail(409,'This submission targets a draft; publish the draft when it is ready');
   if(submission.source_id!==source.id||source.lifecycle_status!=='ready'||source.archived_at||!source.artifacts_namespace)throw fail(409,'Hosted Design System is unavailable for publication');
-  const checkout=await repository.preparePublication(source,submission),publicationId=crypto.randomUUID();
+  stage('merge');
+  const checkout=await repository.preparePublication(source,submission),publicationId=crypto.randomUUID();let primary;
   try{
+   stage('metadata');
    const release=await metadata({operation:'release-metadata',sourceId:source.id,publicationId,source:checkout.files,prior:checkout.priorFiles,preparedAt:now(),note:submission.note});
-   if(dryRun){const committed=await repository.commitSource(source,checkout.checkoutId,{files:release.files});const artifact=await build({sourceId:source.id,publicationId,files:committed.files});await metadata({operation:'stamp',sourceId:source.id,publicationId,source:committed.files,artifact:artifact.files,sourceCommit:committed.headCommit,systemId:source.system_id});}
+   if(dryRun){stage('commit');const committed=await repository.commitSource(source,checkout.checkoutId,{files:release.files});stage('build');const artifact=await build({sourceId:source.id,publicationId,files:committed.files});stage('stamp');await metadata({operation:'stamp',sourceId:source.id,publicationId,source:committed.files,artifact:artifact.files,sourceCommit:committed.headCommit,systemId:source.system_id});}
    const diff=submission.diff_json,diffSummary=typeof diff==='string'?{files:(diff.match(/^diff --git /gm)||[]).length,addedLines:(diff.match(/^\+(?!\+\+)/gm)||[]).length,removedLines:(diff.match(/^-(?!--)/gm)||[]).length}:{files:Array.isArray(diff)?diff.length:0};
    return{systemId:source.system_id,submissionId:submission.id,sessionId:submission.session_id,version:release.version,previewUrl:submission.preview_url||'',diffSummary,currency:'clean',autoRebased:Boolean(checkout.autoRebased),mainRevision:checkout.parentRevision,dryRun,buildChecked:dryRun};
-  }finally{await repository.releaseCheckout(source,checkout.checkoutId);}
+  }catch(error){primary=error;throw error;}finally{await finishCleanup(()=>repository.releaseCheckout(source,checkout.checkoutId),primary);}
  }
  async function request({source,submission,actor}){
   if(!(actor?.principalId||actor?.id||actor?.userId)||!uuid.test(source?.id||'')||!uuid.test(submission?.id||'')||submission.source_id!==source.id)throw fail(400,'An authorized source, submission and publisher principal are required');

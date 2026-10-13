@@ -219,7 +219,7 @@ export function createSandboxRepositoryEngine({ artifacts, ensurePreview = async
     let tokens;
     try { tokens = await artifacts.listTokens(source.artifacts_namespace, repository); }
     catch (error) { if (error.statusCode === 404) return; throw error; }
-    for (const token of tokens) await artifacts.revokeToken(source.artifacts_namespace, token.id);
+    for (const token of tokens) await artifacts.revokeToken(source.artifacts_namespace, token.id, repository);
   }
   async function temporary(fn) { const cwd = await mkdtemp(join(tmpdir(), "timds-session-")); blobCaches.set(cwd, { blobs: new Map(), bytes: 0 }); try { await git(cwd, ["init", "--initial-branch=main"]); return await fn(cwd); } finally { blobCaches.delete(cwd); await rm(cwd, { recursive: true, force: true }); } }
   async function remote(source, repository, permission, fn) {
@@ -228,7 +228,7 @@ export function createSandboxRepositoryEngine({ artifacts, ensurePreview = async
     if (!repo?.remote) throw fail(409, "Artifacts repository is unavailable");
     const token = await artifacts.mintToken(ns, repository, { permission, ttlSeconds: 300 });
     try { return await fn(repo.remote, artifactsGitEnvironment(token.token), token); }
-    finally { await artifacts.revokeToken(ns, token.id); }
+    finally { await artifacts.revokeToken(ns, token.id, repository); }
   }
   async function fetchRef(cwd, source, repository, ref, destination) {
     return remote(source, repository, "read", async (url, env) => {
@@ -467,11 +467,12 @@ export function createSandboxRepositoryEngine({ artifacts, ensurePreview = async
         await temporary(async cwd => { const prior = await currentRef(cwd, source, source.artifacts_repository, branch); if (prior) await push(cwd, source, source.artifacts_repository, "", branch, prior); });
         await deletePreview(source, branch);
       }
-      if (session.token_id) await artifacts.revokeToken(source.artifacts_namespace, session.token_id);
+      if (session.token_id) await artifacts.revokeToken(source.artifacts_namespace, session.token_id, session.fork_repository);
       const fork = session.fork_repository || (/^[a-f0-9-]{36}$/.test(session.id || "") ? `session-${session.id}` : "");
       if (!fork.startsWith("session-") || fork === source.artifacts_repository) throw fail(409, "Session fork identity is unavailable");
       await revokeForkTokens(source, fork);
       await artifacts.deleteRepository(source.artifacts_namespace, fork);
+      return {closed:true};
     },
     async merge(source, session, submission) {
       return temporary(async cwd => {

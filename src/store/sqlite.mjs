@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS publications(id TEXT PRIMARY KEY,row_json TEXT NOT NU
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS lifecycle_operations(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
+CREATE TABLE IF NOT EXISTS session_repositories(session_id TEXT PRIMARY KEY REFERENCES sessions(id),namespace TEXT NOT NULL,repository TEXT NOT NULL,repository_id TEXT NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS preview_builds(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS publication_events(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
@@ -106,6 +107,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     return row;
   };
   const publishAuthority = async publication => {
+    if(meta('deletion_fence'))throw fail(409,'Publication is fenced by source deletion');
     const facts = await catalog.readAuthority(sourceId,publication.actor_principal_id);
     if (facts.principal?.status !== 'active' || facts.organizationStatus !== 'active' || !facts.publisher) throw fail(403, 'Publish rights were revoked');
     if (facts.source?.lifecycle_status !== 'ready' || facts.source.archived_at) throw fail(409, 'Hosted Design System is unavailable for publication');
@@ -122,7 +124,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
   atomic(() => { const saved = meta('source_id'); if (saved && saved !== sourceId) throw fail(409, 'Coordinator source identity mismatch'); setMeta('source_id',sourceId); });
   const store = {
     async source(reference) { const source = await catalog.source(reference); if (!source || source.id !== sourceId || source.archived_at) throw fail(404, 'Active Design System not found uniquely'); return { ...source,...meta('pointer') }; },
-    async getSource(id) { if (id !== sourceId) return null; const source = await catalog.source(id); return source && { ...source,...meta('pointer') }; },
+    async getSource(id) { if (id !== sourceId) return null; const source = await catalog.source(id),deletion=meta('deletion_fence'); return source && { ...source,...meta('pointer'),...(deletion?{lifecycle_status:deletion.completed?'deleted':'deleting'}:{}) }; },
     async eligible(source) { return source?.id === sourceId && source.lifecycle_status === 'ready' && !source.archived_at && Boolean(source.artifacts_namespace && source.artifacts_repository && source.artifacts_repository_id) && (await catalog.organization(source.organization_id))?.status === 'active'; },
     async version(id,label) { own(id); const result = await store.publishedRelease({id},label); return result ? {source_commit:result.sourceCommit} : null; },
     async publishedRelease(source,label) {
@@ -223,6 +225,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     publicationBySubmission: id => list('publications','submission_id=?',[id])[0] || null,
     publicationsForSource(id) { own(id); return list('publications','1',[],undefined,'LIMIT 50'); },
     async reservePublication(id,submissionId,actor) {
+      if(meta('deletion_fence'))throw fail(409,'Publication is fenced by source deletion');
       own(id); const actorId = principalId(actor); let publication = store.publicationBySubmission(submissionId);
       if (publication && publication.actor_principal_id === actorId && (await catalog.principal(actorId))?.status === 'active' &&
           (['closing','published'].includes(publication.status) || publication.checkpoints_json.pointerEventId) && publication.status !== 'superseded') {
@@ -333,6 +336,15 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     },
     deletionInventory(id) { own(id); return {sessions:list('sessions').map(({id,status,expires_at}) => ({id,status,expires_at})),submissions:list('submissions').map(({id,status,review_branch,preview_url}) => ({id,status,review_branch,preview_url}))}; },
     getLifecycleOperation: id => get('lifecycle_operations',id),
+    sessionRepository: id => scalar('SELECT * FROM session_repositories WHERE session_id=?',id),
+    recordSessionRepository: ({sessionId,namespace,repository,repositoryId}) => atomic(()=>{
+      const row=session(sessionId);
+      if(row.source_id!==sourceId||repository!==`session-${sessionId}`||typeof namespace!=='string'||!namespace||typeof repositoryId!=='string'||!repositoryId||repositoryId.length>200||/[\x00-\x20\x7f]/.test(repositoryId))throw fail(409,'Fork creation receipt does not match this session');
+      const prior=store.sessionRepository(sessionId);
+      if(prior&&(prior.namespace!==namespace||prior.repository!==repository||prior.repository_id!==repositoryId))throw fail(409,'Immutable fork creation receipt changed');
+      if(!prior)sql.exec('INSERT INTO session_repositories(session_id,namespace,repository,repository_id,created_at) VALUES(?,?,?,?,?)',sessionId,namespace,repository,repositoryId,timestamp());
+      return store.sessionRepository(sessionId);
+    }),
     getExecutionJob: id => get('jobs',id),
 
     // Internal coordinator functions below are not part of CollaborationStore v1.
@@ -370,13 +382,16 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       atomic(() => { setMeta('authority_version',receipt.confirmed_version); setMeta('authority_pending',null);
         enqueue('authority',{id:receipt.id,source_id:sourceId,event_type:'authority_changed',actor_principal_id:receipt.actor_id,details_json:receipt.command,created_at:receipt.created_at}); });
     },
-    async mutateAuthority({operationId,actor,command}) {
+    async mutateAuthority({operationId,actor,command,deletionOperationId}) {
       await store.reconcileAuthority();
       const facts = await catalog.readAuthority(sourceId,principalId(actor));
       if (facts.principal?.status !== 'active' || !facts.principal.admin) throw fail(403, 'An active administrator is required');
+      const deletion=meta('deletion_fence'),internalDelete=deletionOperationId&&deletion?.operationId===deletionOperationId&&get('lifecycle_operations',deletionOperationId)?.kind==='delete';
+      if ((deletion || ['deleting','deleted'].includes(facts.source?.lifecycle_status)) && !internalDelete) throw fail(409, 'Source authority is permanently fenced by deletion');
+      if(internalDelete&&(['read','write','publish'].some(key=>command[key]===true)||command.lifecycleStatus&&!['deleting','deleted'].includes(command.lifecycleStatus)))throw fail(409,'Deletion cannot restore source authority');
       const prior = await catalog.authorityOperation(operationId);
       if (prior) { if (prior.source_id !== sourceId || prior.actor_id !== facts.principal.id || json(prior.command) !== json(command)) throw fail(409, 'Authority operation receipt does not match'); return prior; }
-      if (command.lifecycleStatus === 'deleting' && (store.sessions(sourceId).length || list('publications').some(blockingPublication))) throw fail(409, 'Close sessions and finish publications before deleting this Design System');
+      if (command.lifecycleStatus === 'deleting' && ((!internalDelete&&store.sessions(sourceId).length) || list('publications').some(blockingPublication))) throw fail(409, 'Finish publications before deleting this Design System');
       const pending = {operationId,sourceId,actorId:facts.principal.id,expectedVersion:facts.authorityVersion,command};
       atomic(() => setMeta('authority_pending',pending));
       await store.reconcileAuthority();
@@ -396,6 +411,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     recordPreviewBuild: input => atomic(() => {
       const {submissionId,sourceId:id,branch,headCommit,buildId,url,workerTag} = input;
       own(id);
+      if(meta('deletion_fence'))return {applied:false,reason:'source_deleted'};
       if (typeof buildId !== 'string' || !buildId || typeof workerTag !== 'string' || !workerTag || !/^https:\/\//.test(url || '')) throw fail(400, 'Invalid Preview build receipt');
       const prior = get('preview_builds',buildId);
       if (prior) { if (json(prior.input) !== json(input)) throw fail(409, 'Preview build receipt changed'); return prior.result; }
@@ -436,6 +452,48 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     pendingPublications: () => list('publications','1',[],'queue_position').filter(row => ['queued','running','closing'].includes(row.status) || row.status === 'failed' && blockingPublication(row)),
     enqueueResource: (kind,id,tombstone = false) => locate(kind,id,tombstone),
     saveLifecycle: row => atomic(() => put('lifecycle_operations',row)),
+    deletionFence: () => meta('deletion_fence'),
+    activeDeletion: () => {const fence=meta('deletion_fence');return fence&&get('lifecycle_operations',fence.operationId);},
+    async beginDeletion({operationId,actor,confirmedOperation}) {
+      const operation=confirmedOperation||get('lifecycle_operations',operationId),prior=meta('deletion_fence');
+      if(!operation||operation.kind!=='delete'||operation.source_id!==sourceId||!operation.confirmed_at||operation.confirmed_by!==principalId(actor))throw fail(409,'Confirmed deletion intent is required');
+      if(prior&&prior.operationId!==operationId)throw fail(409,'Another deletion owns this source');
+      const principal=await catalog.principal(principalId(actor));
+      if(principal?.status!=='active'||!principal.admin)throw fail(403,'An active administrator is required');
+      if(list('publications').some(blockingPublication))throw fail(409,'Finish publications before deleting this Design System');
+      atomic(()=>{
+        if(confirmedOperation)put('lifecycle_operations',confirmedOperation);
+        if(!prior){
+          setMeta('deletion_fence',{operationId,at:operation.confirmed_at,completed:false});
+          audit({event_type:'source_deletion_fenced',actor_principal_id:principalId(actor),details_json:{operationId,impactHash:operation.impact_hash}});
+        }
+        for(const row of list('sessions'))if(!['closed','expired'].includes(row.status))saveSession({...row,status:'closing',lease_token:null,lease_expires_at:null,updated_at:timestamp()});
+        for(const table of ['requests','request_jobs']){
+          if(!scalar("SELECT 1 AS n FROM sqlite_master WHERE type='table' AND name=?",table))continue;
+          for(const row of list(table))if(table==='request_jobs'?['queued','leased','running'].includes(row.status):row.status==='new')put(table,{...row,status:'cancelled',lease_token:null,lease_owner:null,lease_expires_at:null,updated_at:timestamp()});
+        }
+      });
+      return store.deletionAuthority({operationId,actor,suffix:'fence',command:{lifecycleStatus:'deleting',sourcePatch:{deletion_operation_id:operationId,deletion_confirmed_at:operation.confirmed_at}}});
+    },
+    async deletionAuthority({operationId,actor,suffix,command}) {
+      if(meta('deletion_fence')?.operationId!==operationId)throw fail(409,'Deletion fence changed');
+      const principal=await catalog.principal(principalId(actor));
+      if(principal?.status!=='active'||!principal.admin)throw fail(403,'An active administrator is required');
+      const id=`${operationId}:${suffix}`,prior=await catalog.authorityOperation(id);
+      // Another current admin may resume a confirmed deletion after the original
+      // administrator is revoked. Immutable completed authority steps remain so.
+      if(prior){if(prior.source_id!==sourceId||json(prior.command)!==json(command))throw fail(409,'Deletion authority receipt changed');return prior;}
+      return store.mutateAuthority({operationId:id,actor,command,deletionOperationId:operationId});
+    },
+    finishDeletionSessions: operationId => atomic(()=>{
+      if(meta('deletion_fence')?.operationId!==operationId)throw fail(409,'Deletion fence changed');
+      for(const row of list('sessions'))if(!['closed','expired'].includes(row.status))saveSession({...row,status:'closed',lease_token:null,lease_expires_at:null,live_state:'closed',live_url:'',sandbox_id:'',updated_at:timestamp()});
+      for(const row of list('submissions'))if(row.status!=='published')put('submissions',{...row,status:'closed',preview_url:'',updated_at:timestamp()});
+    }),
+    completeDeletion: (operationId,actorId) => atomic(()=>{
+      const fence=meta('deletion_fence');if(fence?.operationId!==operationId)throw fail(409,'Deletion fence changed');
+      if(!fence.completed){setMeta('deletion_fence',{...fence,completed:true});audit({event_type:'source_deleted',actor_principal_id:actorId,details_json:{operationId,immutableHistoryRetained:true}});}
+    }),
     authorityPending: () => meta('authority_pending'),
   };
   function pointerReceipt(event) {
