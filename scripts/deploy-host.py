@@ -7,7 +7,7 @@ Usage, from any checkout or worktree of this repository:
 Nothing installation-specific lives in this file. The checkout's private,
 gitignored, owner-only `.env` holds both the nonsecret installation record
 (account, Worker name, origins, Access audience, designer principal, Artifacts
-bindings) and the runtime secrets; `scripts/deploy-host.example.env` lists the
+bindings) and the runtime secrets; `.env.example` lists the
 keys. Created resource ids go to `.env.deploy-state.json` (also gitignored).
 Every Cloudflare API call runs under the cf CLI's own sign-in (`cf auth login`);
 its OAuth token is read from the cloudflare CLI config file only to be redacted
@@ -22,7 +22,7 @@ ROOT=Path(__file__).resolve().parents[1];ENV=ROOT/'.env'
 INSTALLATION=['CLOUDFLARE_ACCOUNT_ID','TIMDS_WORKER_NAME','TIMDS_HOST_ORIGIN','TIMDS_STUDIO_ORIGIN','TIMDS_PUBLIC_ORIGIN','TIMDS_PORTAL_ORIGIN','TIMDS_AGENT_PUSH_QUEUE_ID','TIMDS_ACCESS_TEAM_DOMAIN','TIMDS_ACCESS_AUD','TIMDS_DESIGNER_PRINCIPAL_ID','TIMDS_DESIGNER_MODEL','TIMDS_ARTIFACTS_BINDINGS','TIMDS_ARTIFACTS_REST_FALLBACK','TIMDS_WORKERS_SUBDOMAIN_ALIASES','TIMDS_MEDIA_LEGACY_BINDINGS','TIMDS_MEDIA_ALLOWED_ORIGINS','TIMDS_LEGACY_PUBLIC_HOSTS','TIMDS_STUDIO_FRAME_ORIGINS','TIMDS_ACCESS_INVITATIONS_ENABLED']
 RUNTIME_KEYS=['CLOUDFLARE_API_TOKEN','TIMDS_BUILDS_API_TOKEN','OPENAI_API_KEY','TIMDS_BOOTSTRAP_SECRET','TIMDS_PORTAL_TRANSFER_SECRET']
 def read_env():
- if not ENV.is_file() or ENV.is_symlink() or ENV.stat().st_mode&0o077:raise RuntimeError('Private .env unavailable: copy scripts/deploy-host.example.env to .env, chmod 600, fill it in')
+ if not ENV.is_file() or ENV.is_symlink() or ENV.stat().st_mode&0o077:raise RuntimeError('Private .env unavailable: copy .env.example to .env, chmod 600, fill it in')
  values={}
  for line in ENV.read_text().splitlines():
   line=line.strip()

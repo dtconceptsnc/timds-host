@@ -168,7 +168,7 @@ installation records into issues, pull requests or commit messages.
 | How does publication work and recover? | `src/publication/`, `docs/architecture.md` "Publication Workflow and failure recovery", `docs/publication-queue-recovery.md` |
 | How do Requests reach a model? | `src/requests/README.md`, `runtime/agent.mjs`, `runtime/live-session.mjs` |
 | How are Previews deployed? | `src/preview/README.md`, `src/preview/source.mjs` |
-| How is the host deployed and configured? | `docs/operations.md`, `cloudflare.config.ts`, `scripts/deploy-host.example.env` |
+| How is the host deployed and configured? | `docs/operations.md`, `cloudflare.config.ts`, `.env.example` |
 | What is the API contract? | `docs/api/timds-host.openapi.json`, `conformance/README.md` |
 | What does Studio do and refuse to do? | `studio/README.md`, `src/studio.mjs` |
 | What is public without credentials? | `src/public/`, `public-worker/src/index.ts`, `docs/migration/legacy-public-roots.md` |
