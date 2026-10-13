@@ -199,10 +199,10 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
       if (!submission) {
         if (changes.baseRevision !== session.base_revision || (changes.lastUpdateHash !== undefined && changes.lastUpdateHash !== (session.last_update_hash || ''))) return staleResult(actor, source, session, changes, checkpoint);
         const submissionId = randomUUID();
-        submission = await store.reserveSubmission({ id: submissionId, source_id: source.id, session_id: id, request_hash: hash, base_revision: changes.baseRevision, review_branch: `review-${submissionId.replaceAll('-', '').slice(0, 16)}`, note: changes.note, target_draft_session_id: session.draft_session_id || null });
+        submission = await store.reserveSubmission({ id: submissionId, source_id: source.id, session_id: id, request_hash: hash, repository_receipt_version: 1, base_revision: changes.baseRevision, review_branch: `review-${submissionId.replaceAll('-', '').slice(0, 16)}`, note: changes.note, target_draft_session_id: session.draft_session_id || null });
       }
       const target = session.draft_session_id ? (await owned(session.draft_session_id, actor)).session : null;
-      const result = await repository.submit(source, session, changes, { submissionId: submission.id, reviewBranch: submission.review_branch, targetRepository: target?.fork_repository || source.artifacts_repository });
+      const result = await repository.submit(source, session, changes, { submissionId: submission.id, reviewBranch: submission.review_branch, targetRepository: target?.fork_repository || source.artifacts_repository, requestHash: submission.request_hash, receiptVersion: submission.repository_receipt_version || 0, createdAt: submission.created_at });
       if (result.stale || result.conflicts?.length) return conflictResult(actor, source, session, changes, result, checkpoint);
       if (target) {
         const integrated = await leased(target.id, async (draft, saveDraft) => { const merged = await repository.mergeIntoDraft(source, draft, { ...submission, head_commit: result.headCommit }); if (!merged.conflicts?.length) await saveDraft({ base_revision: merged.headCommit }, null, event(actor, 'updated', { note: changes.note, merged_keys: merged.mergedKeys || [], details_json: { integratedSubmissionId: submission.id } })); return merged; });

@@ -390,35 +390,69 @@ export function createSandboxRepositoryEngine({ artifacts, ensurePreview = async
         return { baseRevision: head, mainRevision: head, files: await files(cwd, head), conflicts: merged.conflicts, mergedKeys: merged.mergedKeys, stale: true, ...(!merged.conflicts.length ? { rebasedChanges: await rebasedChangeSet(cwd, head, merged.tree, changes.note) } : {}) };
       });
     },
-    async submit(source, session, changes, { submissionId, reviewBranch, targetRepository = source.artifacts_repository }) {
+    async submit(source, session, changes, { submissionId, reviewBranch, targetRepository = source.artifacts_repository, requestHash, receiptVersion = 0, createdAt }) {
       if (!/^review-[a-z0-9-]{1,45}$/.test(reviewBranch) || !/^[a-f0-9-]{36}$/.test(submissionId)) throw fail(400, 'Invalid submission identity');
+      const hash = createHash('sha256').update(JSON.stringify(changes)).digest('hex');
+      if (requestHash !== undefined && requestHash !== hash || ![0, 1].includes(receiptVersion) || receiptVersion === 1 && (!requestHash || !Number.isFinite(Date.parse(createdAt)))) throw fail(409, 'Submission request identity changed');
       return temporary(async cwd => {
         const head = await sessionTree(cwd, source, session), base = changes.baseRevision;
         if (!revision(base)) throw fail(400, 'Invalid base revision');
         if ((await git(cwd, ['merge-base', '--is-ancestor', base, head], { allowFailure: true })).code) throw fail(409, 'Session base changed; pull before submitting');
-        const desired = await changedTree(cwd, base, changes);
-        const currentTree = (await git(cwd, ['rev-parse', `${head}^{tree}`])).text;
         const message = `TimDS submission ${submissionId}`;
-        if (head !== base && (await git(cwd, ['log', '-1', '--format=%s', head])).text !== message) {
+        const main = await fetchRef(cwd, source, targetRepository, 'refs/heads/main', 'refs/upstream/main');
+        const receiptMessage = reviewBase => `${message}\n\nTimDS-Request-Hash: ${hash}\nTimDS-Review-Base: ${reviewBase}`;
+        async function readReceipt(headCommit) {
+          if ((await git(cwd, ['merge-base', '--is-ancestor', base, headCommit], { allowFailure: true })).code || (await git(cwd, ['merge-base', '--is-ancestor', headCommit, head], { allowFailure: true })).code) throw fail(409, 'Submission review branch no longer belongs to this session');
+          if (receiptVersion === 0) return (await git(cwd, ['merge-base', headCommit, main])).text;
+          const body = (await git(cwd, ['log', '-1', '--format=%B', headCommit])).text;
+          const reviewBase = /\nTimDS-Review-Base: ([a-f0-9]{40})$/.exec(body)?.[1];
+          const parents = (await git(cwd, ['log', '-1', '--format=%P', headCommit])).text.split(' ');
+          if (!reviewBase || body !== receiptMessage(reviewBase) || !parents.includes(reviewBase)) throw fail(409, 'Submission review receipt changed');
+          return reviewBase;
+        }
+        async function completed(headCommit, reviewBase, merge = {}) {
+          let manifest;
+          try { manifest = JSON.parse((await git(cwd, ['show', `${headCommit}:timds.json`])).text); } catch { throw fail(400, 'A submission requires a valid timds.json manifest'); }
+          const url = await previewUrl({ ...source, manifest_json: manifest }, reviewBranch);
+          await ensurePreview(source);
+          const diff = (await git(cwd, ['diff', '--no-ext-diff', '--no-textconv', reviewBase, headCommit])).text;
+          // An older failed retry may already have advanced the fork. Recover
+          // the frozen submission without discarding that later saved work.
+          const sessionHead = (await git(cwd, ['merge-base', '--is-ancestor', headCommit, head], { allowFailure: true })).code === 0 ? head : headCommit;
+          return { baseRevision: sessionHead, headCommit, files: await files(cwd, sessionHead), diff, previewUrl: url, mergedKeys: merge.mergedKeys || [], conflictedKeys: merge.conflictedKeys || [] };
+        }
+        const prior = await currentRef(cwd, source, source.artifacts_repository, reviewBranch);
+        if (prior) {
+          const recorded = await fetchRef(cwd, source, source.artifacts_repository, `refs/heads/${reviewBranch}`, 'refs/submission/review');
+          if (recorded !== prior) throw fail(409, 'Submission review branch changed during recovery');
+          return completed(prior, await readReceipt(prior));
+        }
+        // The fork push can succeed before its response or the review push is
+        // recorded. Its submission-marked commit is the receipt: never merge
+        // newer main into that same submission on replay.
+        if (head !== base && (await git(cwd, ['log', '-1', '--format=%s', head])).text === message) {
+          const reviewBase = await readReceipt(head);
+          await push(cwd, source, source.artifacts_repository, head, reviewBranch, '');
+          return completed(head, reviewBase);
+        }
+        const desired = await changedTree(cwd, base, changes);
+        if (head !== base) {
           const stale = await mergeFiles(cwd, base, desired, head);
           return { baseRevision: head, mainRevision: head, files: await files(cwd, head), conflicts: stale.conflicts, stale: true, ...(!stale.conflicts.length ? { rebasedChanges: await rebasedChangeSet(cwd, head, stale.tree, changes.note) } : {}) };
         }
-        const main = await fetchRef(cwd, source, targetRepository, 'refs/heads/main', 'refs/upstream/main');
         const common = (await git(cwd, ['merge-base', head, main])).text;
         if (changes.resolvedPaths?.length && changes.mainRevision !== main) throw fail(409, 'Main changed since the conflict; update again');
-        const merged = await mergeFiles(cwd, common, head !== base ? head : desired, main, changes.resolvedPaths || []);
+        const merged = await mergeFiles(cwd, common, desired, main, changes.resolvedPaths || []);
         if (merged.conflicts.length) return { baseRevision: head, mainRevision: main, files: await files(cwd, head), ...merged };
-        const headCommit = currentTree === merged.tree ? head : await commit(cwd, merged.tree, [head, main], message);
-        let manifest;
-        try { manifest = JSON.parse((await git(cwd, ['show', `${headCommit}:timds.json`])).text); } catch { throw fail(400, 'A submission requires a valid timds.json manifest'); }
-        const url = await previewUrl({ ...source, manifest_json: manifest }, reviewBranch);
+        // Always mark new-format submissions, including an unchanged tree, so
+        // a successful fork push has an unambiguous replay identity and base.
+        const currentTree = (await git(cwd, ['rev-parse', `${head}^{tree}`])).text;
+        const headCommit = receiptVersion === 0 && currentTree === merged.tree ? head : await commit(cwd, merged.tree, [head, main], receiptVersion === 1 ? receiptMessage(main) : message, createdAt);
+        // Validate the manifest before either externally visible Git write.
+        try { JSON.parse((await git(cwd, ['show', `${headCommit}:timds.json`])).text); } catch { throw fail(400, 'A submission requires a valid timds.json manifest'); }
         if (headCommit !== head) await push(cwd, source, session.fork_repository, headCommit, 'main', head);
-        const prior = await currentRef(cwd, source, source.artifacts_repository, reviewBranch);
-        if (prior && prior !== headCommit) throw fail(409, 'Submission changed; retry with a new submission');
-        await ensurePreview(source);
-        if (!prior) await push(cwd, source, source.artifacts_repository, headCommit, reviewBranch, '');
-        const diff = (await git(cwd, ['diff', '--no-ext-diff', '--no-textconv', main, headCommit])).text;
-        return { baseRevision: headCommit, headCommit, files: await files(cwd, headCommit), diff, previewUrl: url, mergedKeys: merged.mergedKeys, conflictedKeys: merged.conflictedKeys };
+        await push(cwd, source, source.artifacts_repository, headCommit, reviewBranch, '');
+        return completed(headCommit, main, merged);
       });
     },
     async update(source, session, changes, { targetRepository = source.artifacts_repository } = {}) {

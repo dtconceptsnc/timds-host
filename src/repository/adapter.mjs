@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {isFileTree,treeFiles} from './file-trees.mjs';
 import {safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -80,7 +80,14 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
         branches=(await store.submissions(args[0].id)).map(row=>row.review_branch).filter(Boolean);args[1]={reviewBranches:branches};add(main,'write');
       }
       else {add(fork,['submit','update'].includes(input.method)?'write':'read');if(['submit','update'].includes(input.method)) {const target=args[0].draft_session_id?await session(args[0].draft_session_id):null;args[2]={...args[2],targetRepository:target?.fork_repository||main};add(args[2].targetRepository);}
-        if(input.method==='submit') {const saved=await submission({id:args[2]?.submissionId});if(saved.session_id!==args[0].id||saved.review_branch!==args[2].reviewBranch)throw fail(409,'Submission identity changed');add(main,'write');if(input.phase==='prepare'){await ensurePreview(source);origin=new URL(await previewUrl(source,saved.review_branch)).origin;}}
+        if(input.method==='submit') {
+          const saved=await submission({id:args[2]?.submissionId});
+          if(saved.session_id!==args[0].id||saved.review_branch!==args[2].reviewBranch||saved.base_revision!==args[1]?.baseRevision||saved.request_hash!==createHash('sha256').update(JSON.stringify(args[1])).digest('hex'))throw fail(409,'Submission identity changed');
+          // Only the durable reservation chooses receipt metadata. A retry must
+          // retain the exact request and immutable review branch it reserved.
+          args[2]={...args[2],requestHash:saved.request_hash,receiptVersion:saved.repository_receipt_version||0,createdAt:saved.created_at};
+          add(main,'write');if(input.phase==='prepare'){await ensurePreview(source);origin=new URL(await previewUrl(source,saved.review_branch)).origin;}
+        }
         if(input.method==='merge'){args[1]=await submission(args[1]);add(main,'write');}
       }
     } else if(input.method==='mergeIntoDraft') {args[0]=await session(args[0]);if(args[0].kind!=='draft')throw fail(409,'Draft required');const candidate=args[1];args[1]=await submission(candidate);const child=await session(args[1].session_id);if(child.draft_session_id!==args[0].id)throw fail(409,'Submission does not target this draft');if(!args[1].head_commit&&args[1].status==='preparing'&&/^[a-f0-9]{40}$/.test(candidate.head_commit||''))args[1].head_commit=candidate.head_commit;add(args[0].fork_repository,'write');add(main);}

@@ -306,6 +306,12 @@ Preview creation is its own idempotent operation: copy the submitted head to
 `review-<id>`, trigger Workers Builds and accept success only for that exact
 commit/submission. Events cannot mark a superseded head previewable.
 
+Submission retries recover the original immutable review branch before merging
+against current main. New reservations bind their Git receipt to the request
+hash and original review base, including submissions whose tree is unchanged.
+Recovery preserves a later session fork head instead of resetting saved work.
+See [submission recovery](submission-recovery.md) for the replay boundaries.
+
 The designer callback origin is already configurable through
 `TIMDS_HOST_ORIGIN || PORTAL_ORIGIN`. Existing code uses more than the issue's
 two example routes: complete, pushed, live credentials, live state,
