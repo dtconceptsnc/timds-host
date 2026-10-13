@@ -1,6 +1,7 @@
 {
   "name": "timds-host-cf-toolchain-spike",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "cf dev",

@@ -1,7 +1,8 @@
 # TimDS Host
 
 An Apache-2.0 Cloudflare host for TimDS sessions, collaboration, previews,
-publication and Studio. The toolkit remains `@dtconcepts/timds` (MIT).
+publication and Studio. The Apache-2.0 toolkit is maintained separately as
+`@dtconcepts/timds`.
 
 **Implemented and deployed to an isolated host; acceptance is in progress.**
 The production portal conformance baseline passed before extraction. The new
@@ -77,5 +78,7 @@ The extraction and remaining acceptance work are tracked in
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE). The TimDS toolkit is a separate MIT
-dependency; its license is unchanged.
+Original host code is licensed under the Apache License 2.0. See
+[LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party dependencies retain their
+respective licenses. The toolkit source is Apache-2.0; the already published
+`@dtconcepts/timds@0.1.471` package still declares MIT until a new toolkit release.

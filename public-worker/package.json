@@ -1,6 +1,7 @@
 {
   "name": "timds-host-public",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {"build":"cf build","deploy":"cf deploy","dev":"cf dev"},
   "devDependencies": {
