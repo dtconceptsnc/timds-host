@@ -122,9 +122,9 @@ areas (claims) are shown read-only; agents declare them as they edit.
   `npx --yes --package @dtconcepts/timds timds join "<studio link>"`: the
   command signs in through the link's host origin if needed, calls the same
   join route as itself, and pulls the session into a new `./session-<id
-  prefix>` folder. `timds join` takes a session id in every release; it takes
-  the link only in toolkit releases after `0.1.472`, so this row works once
-  `TOOLKIT` names such a release. Membership grants session access, not
+  prefix>` folder. `timds join` takes a session id in every release and the
+  link from toolkit `0.1.473`, the release `TOOLKIT` names; an older pin
+  would break this row. Membership grants session access, not
   publication. There is no principal picker; owners and publishers can still
   close sessions.
 

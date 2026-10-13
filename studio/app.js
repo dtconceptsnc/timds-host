@@ -8,7 +8,7 @@ const save=(key,value)=>sessionStorage.setItem(prefix+key,JSON.stringify(value))
 const state={token:read('token'),principal:null,systems:[],source:null,view:'overview',work:null,submissions:[],session:null,composer:{prompt:'',target:'',here:''},requestRows:[],generation:0,polling:false,requestPolling:false,polledAt:0,presence:[],routeHash:location.hash,waking:new Map(),conflicts:new Map(),resolving:new Set(),previews:new Set(),directory:null,inviteChoice:'',studio:{filter:'all',width:'desktop'}};
 const enc=value=>encodeURIComponent(value);
 // The toolkit the Overview tells people to install; keep in step with package.json.
-const TOOLKIT='@dtconcepts/timds@0.1.472';
+const TOOLKIT='@dtconcepts/timds@0.1.473';
 const sourcePath=()=>`/api/timds/design-systems/${enc(state.source.id)}`;
 const sessionPath=()=>`/api/timds/sessions/${enc(state.session.session.id)}`;
 const short=value=>String(value||'').slice(0,8);
