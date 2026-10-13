@@ -637,17 +637,14 @@ Studio's CSP `frame-src` comes only from `TIMDS_STUDIO_FRAME_ORIGINS` (validated
 keeps `frame-ancestors 'none'` for itself. Frames reload in place on `updated`,
 `request_submitted` and `live_state: ready` feed events for their session.
 
-<!-- TODO(phase-4, orchestrator): the framed responses must allow Studio as an
-ancestor. In runtime/index.mjs `LivePreview.fetch`, wrap the LiveSession
-response: for non-101/non-WebSocket responses, copy the headers, delete
-`X-Frame-Options`, and set `Content-Security-Policy` so that its
-`frame-ancestors` directive is exactly the Studio origin (env.TIMDS_STUDIO_ORIGIN
-when set, else env.HOST_ORIGIN; e.g. `frame-ancestors https://studio.timds.com`),
-replacing any `frame-ancestors` the dev server sent and keeping its other
-directives. Preview assets are served by Workers Builds preview Workers from
-the Design System's own build output; host code cannot set their headers, so
-verify in a browser that they send no `X-Frame-Options`/`frame-ancestors` that
-excludes Studio. -->
+Live Workers answer through `LivePreview` in `runtime/index.mjs`, which strips
+any `X-Frame-Options` from the container's response and sets the response's
+`frame-ancestors` directive to exactly the Studio origin (`TIMDS_STUDIO_ORIGIN`
+when set, else `HOST_ORIGIN`), keeping the dev server's other directives.
+Preview assets are served by Workers Builds preview Workers from the Design
+System's own build output; host code cannot set their headers, so a browser
+check that they send no `X-Frame-Options` or `frame-ancestors` excluding Studio
+is part of the acceptance receipt.
 
 ## Per-system portal cutover
 
