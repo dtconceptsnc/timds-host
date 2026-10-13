@@ -17,3 +17,4 @@ dist/
 *.pfx
 worker-configuration.d.ts
 .DS_Store
+__pycache__/
