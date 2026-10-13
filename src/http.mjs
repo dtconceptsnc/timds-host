@@ -4,7 +4,8 @@ export const apiHeaders = { 'X-TimDS-API-Version': '1', 'Cache-Control': 'no-sto
 export function jsonResponse(value, status = 200) { return Response.json({ apiVersion: 1, ...value }, { status, headers: apiHeaders }); }
 export function errorResponse(error) {
   const status = Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599 ? error.statusCode : 500;
-  return jsonResponse({ error: status >= 500 ? 'The TimDS host could not complete this operation' : error.message }, status);
+  return jsonResponse({ error: status >= 500 ? 'The TimDS host could not complete this operation' : error.message,
+    ...(status<500&&Array.isArray(error?.conflicts)?{conflicts:error.conflicts,...(/^[a-f0-9]{40}$/.test(error.mainRevision||'')?{mainRevision:error.mainRevision}:{})}:{}) }, status);
 }
 export async function readJson(request, limit = 16 * 1024 * 1024) {
   if (!request.body) return {};

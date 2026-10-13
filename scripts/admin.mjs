@@ -48,7 +48,7 @@ async function main() {
   if (input) headers['Content-Type'] = 'application/json';
   const response = await fetch(new URL(path, origin), { method: input ? 'POST' : 'GET', headers, body: input ? JSON.stringify(input) : undefined, redirect: 'error', signal: AbortSignal.timeout(command === 'provision' ? 15 * 60_000 : 60_000) });
   const result = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(`Host returned HTTP ${response.status}: ${result?.error?.message || 'operation unavailable'}`);
+  if (!response.ok) throw new Error(`Host returned HTTP ${response.status}: ${typeof result?.error==='string'?result.error:result?.error?.message || 'operation unavailable'}`);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 main().catch(error => { process.stderr.write(`TimDS host: ${error.message}\n`); process.exitCode = 1; });
