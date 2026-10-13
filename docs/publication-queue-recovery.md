@@ -31,10 +31,9 @@ The host's publication rows, immutable artifact receipts, source commit receipts
 and pointer event IDs remain independently durable in the coordinator and R2.
 
 A read-only production observation on 2026-10-13 supports adoption of the new
-version for one actual restart: original instance
-`f38e6324-030a-4d02-aa26-6c24e0104fc6` reported Workflow version
-`7ee73329-77b0-472d-a77a-c66cecc7e946`, created at `14:07:41Z` alongside Worker
-deployment `04d8b165-67ab-463b-bac8-3b2739ec7471`. The instance was queued again
+version for one actual restart: the original instance reported a Workflow
+version created at `14:07:41Z` alongside the Worker deployment that introduced
+it. The instance was queued again
 at `14:09:06Z`, started at `14:09:08Z`, and completed at `14:13:03Z`. Its original
 publication had begun before that deployment. This proves the observed restart
 used the newer Workflow version; it is not a general provider versioning

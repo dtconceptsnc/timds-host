@@ -68,9 +68,9 @@ wall-clock time is not tested. The protected probe changes no domain data.
 
 ## Receipt
 
-On 2026-10-13, all eight checks passed using toolkit **0.1.470**, commit
-`fa9d38678cf4a6ed4920da7cd78347c9d782a71a`, provider **1.2.3**, and cf
-**1.0.0-beta.14**. `npm run typecheck` and `npm run build` also passed.
+On 2026-10-13, all eight checks passed using toolkit **0.1.470**, provider
+**1.2.3**, and cf **1.0.0-beta.14**. `npm run typecheck` and `npm run build`
+also passed.
 The runner emits the exact commit and timestamp for subsequent runs.
 
 This is a Phase 1 client/toolchain compatibility result only. It does not

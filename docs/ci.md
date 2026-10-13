@@ -10,11 +10,14 @@ surface; a green build does not mean a live host has passed conformance.
 `.github/workflows/foundation.yml` runs for pull requests, pushes to `master`
 or `main`, and manual dispatch. It uses Node.js 22.18.0, the supported minimum.
 
-The Worker job runs `npm ci`, `npm run typecheck`, `npm run build` and
-`npm test` (the plain-Node smoke suite under `test/`) in the repository root.
-A separate harness job runs `npm ci --ignore-scripts` and
-`npm test` in `conformance/`. Neither job receives application credentials or
-provisions/deploys cloud resources. Building the native Container images requires
+The Worker job runs `npm ci`, `npm run typecheck`, `npm run build`, `npm test`
+(the plain-Node smoke suite under `test/`), `npm run check:docs` (Markdown
+links, anchors and the `docs/README.md` index) and `npm run check:boundary` (a
+scan of the lines the branch adds for installation and customer records,
+relative to the merge base with `master`) in the repository root. A separate
+harness job runs `npm ci --ignore-scripts` and `npm test` in `conformance/`.
+Neither job receives application credentials or provisions/deploys cloud
+resources. Building the native Container images requires
 a running Docker engine on the build runner. These are local image builds;
 the workflow does not authenticate the configured remote runtime bindings.
 

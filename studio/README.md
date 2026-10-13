@@ -29,16 +29,40 @@ areas (claims) are shown read-only; agents declare them as they edit.
   submitting, submitted) and `queued, N ahead`. While it is queued or running,
   Studio reads it every 3 seconds until it is terminal or the live feed starts
   reporting it.
-- **The live view is the interface.** Session and draft pages embed the live
-  URL in a sandboxed iframe (`allow-scripts allow-same-origin allow-forms`,
-  `referrerpolicy="no-referrer"`) under a state strip: starting, waking, ready,
-  running, sleeping. Opening a sleeping session or sending it a Request shows
-  `waking` until the runtime reports ready. The frame reloads in place on
+- **The Studio is the session.** "Open Studio" on any session, draft, Request
+  or activity row (`#source=…&view=studio&session=…`; the older
+  `view=sessions&session=…` hash lands in the same place) opens a full-height
+  workspace with three columns. The middle column is the live view: the session's
+  live URL in a sandboxed iframe (`allow-scripts allow-same-origin allow-forms`,
+  `referrerpolicy="no-referrer"`) under a chrome bar with the state strip
+  (starting, waking, ready, running, sleeping), the URL, a desktop/phone width
+  toggle and open-in-new-tab. Opening a sleeping session or sending it a Request
+  shows `waking` until the runtime reports ready. The frame reloads in place on
   `updated`, `request_submitted` and `live_state: ready` feed events for that
-  session; refreshes patch the page around it and never rebuild it. Review
-  embeds each submission's Preview with the same component. A frame that fails
-  (an error, a CSP refusal, or no load within 20 seconds) shows a card with the
-  URL and an open-in-new-tab button. There is no file viewer and no editor.
+  session; refreshes patch the columns around it and never rebuild it. A frame
+  that fails (an error, a CSP refusal, or no load within 20 seconds) shows a
+  card with the URL and an open-in-new-tab button. There is no file viewer and
+  no editor.
+- **The stream (left column).** This session's feed events and the source's
+  release events, oldest first, with All / Chat / Events filters. Every Request
+  in the session is a chat thread: the prompt as the requester's message (from
+  `request_received`, or this tab's own tracked Request before the feed echoes
+  it) and the designer's progress as steps beneath it (`request_started`,
+  `claimed`, `live_state`, `updated`, `submitted`, `request_submitted`,
+  `request_failed`), with the current runner state as the live step. Other
+  events are single rows; releases are highlighted. The composer at the bottom
+  sends a Request to this session (Cmd/Ctrl+Enter sends). Conflicts for the
+  session appear above the composer with the usual read-only receipt and
+  **Ask the agent to resolve**.
+- **The rail (right column) stays basic.** The current published version,
+  this session's submissions with the stage strip, **Publish…** (publishers
+  only) and **Preview ↗**, the session's people (members only, no invite
+  form), the session's state (status, live view, designer, queue, expiry) and
+  close. Invitations, working areas, other sessions and the release history
+  stay on the dashboard pages. The top bar carries the
+  dashboard breadcrumb, the current release label, the presence avatars and
+  the feed indicator. Review still embeds each submission's Preview with the
+  same frame component.
 - **Publication.** Preflight, optional build-only check, explicit publish and a
   stage strip (preflight, merge, build, prepare, release, flip, close) driven by
   the publication status and by `publication_stage`, `publication_failed` and
@@ -97,7 +121,9 @@ styles are needed.
 At phone width (390 px) every screen is one column with 44 px tap targets and no
 horizontal scroll; frames are about 55% of the viewport height, the activity
 rail stacks below, and text fields use 16 px type so the browser does not zoom.
-The two-row phone header is unchanged.
+The two-row phone header is unchanged. The Studio stacks the live view first
+(70% of the viewport), then the stream with its own scrolling list, then the
+rail; below 960 px the three columns become one.
 
 No tests were added per the user's instruction. Syntax was checked. Browser
 acceptance must use the real deployed host and a disposable source; this file

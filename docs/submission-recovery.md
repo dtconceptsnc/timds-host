@@ -30,17 +30,14 @@ review push without merging newer main into the same submission.
 
 ## October 13, 2026 manual Studio diagnosis
 
-Read-only durable and provider inspection established this sequence for
-submission `0c81d4e0-afd8-4032-b07b-03ba7e227143`:
+Read-only durable and provider inspection established this sequence for one
+submission (identifiers and commits are kept in the private operational record):
 
 - The reservation remains `preparing` with no checkpointed `head_commit`.
-- Its review branch points to `8aa175f2e3dba0c14051faf858ee71dffcb38cbd`, whose
-  parents include the saved manual-edit base
-  `375e1ee00e5af53c925b0585f48f5d396ccd9e8a` and then-current main
-  `0c1a05238acf4a91667c1460606eef0890031c98`.
-- The fork later advanced to `560c366a949084e2647ac8bdf2c55659d502c18e`, with
-  the review commit and newer main `840e8e50e8672075a385a2da2a996a32e0dba9f7`
-  as parents, using the same submission message.
+- Its review branch points to a review commit whose parents include the saved
+  manual-edit base and then-current main.
+- The fork later advanced to a second commit, with the review commit and newer
+  main as parents, using the same submission message.
 
 The former implementation merged new main and pushed the fork before checking
 whether its already-created review branch had a different head. This explains

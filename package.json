@@ -11,8 +11,11 @@
     "dev": "cf dev",
     "build": "cf build",
     "deploy": "cf deploy",
+    "typecheck": "cf workers types && tsc --noEmit",
     "test": "node --test test/*.test.mjs",
-    "typecheck": "cf workers types && tsc --noEmit"
+    "check": "npm run typecheck && npm test && npm run check:docs && npm run check:boundary",
+    "check:docs": "node scripts/check-docs.mjs",
+    "check:boundary": "node scripts/check-public-boundary.mjs"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "2.0.0-beta.sha-91c870c02",
