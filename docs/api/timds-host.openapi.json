@@ -543,7 +543,7 @@
       "post": {
         "operationId": "joinSession",
         "summary": "Join an invited session or invite another principal",
-        "description": "Omit principalId to join as the authenticated, already invited member. Only owner or publisher can invite another principal. Membership grants session access, not publication.",
+        "description": "Omit principalId to join as the authenticated identity: any identity the Design System already authorizes (a direct grant, publisher, administrator or existing member) may join an open session, which is how a Studio invite link works. Only owner or publisher can invite another principal. Membership grants session access, not publication.",
         "tags": [
           "Sessions"
         ],

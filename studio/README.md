@@ -84,11 +84,11 @@ areas (claims) are shown read-only; agents declare them as they edit.
   **Ask the agent to resolve**.
 - **The rail (right column) stays basic.** The current published version,
   this session's submissions with the stage strip, **Publish…** (publishers
-  only) and **Preview ↗**, the session's people (members only, no invite
-  form), the session's state (status, live view, designer, queue, expiry) and
-  close. Invitations, working areas, other sessions and the release history
-  stay on the dashboard pages. The top bar carries the
-  dashboard breadcrumb, the current release label, the presence avatars and
+  only) and **Preview ↗**, the session's people (the member list, plus
+  **Invite…** for the owner and publishers while the session is open), the
+  session's state (status, live view, designer, queue, expiry) and close.
+  Working areas, other sessions and the release history stay on the dashboard
+  pages. The top bar carries the dashboard breadcrumb, the current release label, the presence avatars and
   the feed indicator. Review still embeds each submission's Preview with the
   same frame component.
 - **Publication.** Preflight, optional build-only check, explicit publish and a
@@ -105,8 +105,22 @@ areas (claims) are shown read-only; agents declare them as they edit.
   (base #375638). Keep the intent of the latest Request and prefer the value
   that satisfies it; update related tokens for consistency.` There is no
   mine-or-theirs chooser.
-- **People.** Owners and publishers invite people and agents from the source's
-  principal directory into sessions and drafts, and can close them.
+- **People.** **Invite…** in the rail opens the Join Session widget: two
+  copyable rows, each with a **Copy** button that falls back to selecting the
+  text when the clipboard is unavailable. **Studio link** is
+  `/studio/#source=…&view=studio&session=…&join=1`; anyone the Design System
+  already authorizes who opens it is joined through
+  `POST /api/timds/sessions/:id/join` with no `principalId`, sees a notice,
+  and lands in that session's Studio. The `join` flag is removed from the hash
+  before the join so a reload does not repeat it, and the hash survives the
+  sign-in round trip; a failed join shows the host's error and the page then
+  opens as usual. **Terminal** is the same invitation in the toolkit's words,
+  `npx --yes --package @dtconcepts/timds timds join "<studio link>"`: the
+  command signs in through the link's host origin if needed and calls the same
+  join route as itself. The toolkit does not ship `timds join` yet; this is
+  the shape it is expected to take. Membership grants session access, not
+  publication. There is no principal picker; owners and publishers can still
+  close sessions.
 
 ## Loading and busy states
 
