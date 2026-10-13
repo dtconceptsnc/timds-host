@@ -1,8 +1,10 @@
 # Source deletion
 
-Implementation is prepared for #69. It has passed JavaScript syntax, typecheck
-and a real `cf build`. No deletion has been exercised against the acceptance
-fixture or production sources. No new tests were added or run, as requested.
+Implementation has passed JavaScript syntax, typecheck and a real `cf build`.
+[Actual lifecycle verification](evidence/native-collaboration-acceptance.md#coordinated-source-lifecycle-verification)
+completed on the separate disposable collaboration source, including archive,
+restore, exact reviewed deletion, retained audit and rejected identity reuse.
+No production source was deleted. No new tests were added or run, as requested.
 
 Deletion permanently retires the source UUID and public serving authority. It
 removes mutable session forks, the exact source repository, its owned Preview

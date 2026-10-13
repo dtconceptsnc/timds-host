@@ -1,0 +1,113 @@
+{
+  "host": "https://timds-host-69.ratebucket.workers.dev",
+  "toolkitCommit": "4fbdf79980ec96bac61dad129cf1866d17d3c92e",
+  "method": "Actual toolkit runHostedCommand entry point and host API; no test files or harness",
+  "identity": {
+    "sourceId": "d627d943-8c0c-4aa8-bbad-67dbc6bae37e",
+    "systemId": "timds/collaboration-proof-69",
+    "operationId": "18bcfc1d-cdb3-49f0-8bf5-052d62483878",
+    "organizationId": "eef9a5e7-a2a9-4c7d-be25-b6012d7f151e",
+    "namespace": "timds-host-69",
+    "repository": "collaboration-proof-69"
+  },
+  "sessionId": "2c90af71-2734-4da8-b52e-8bfd5d76afe5",
+  "provision": {
+    "fileCount": 68,
+    "publisherGrantCreated": false
+  },
+  "join": {
+    "sameSession": true,
+    "fileCount": 68,
+    "principalCount": 1,
+    "identityScope": "Two workspaces using the existing human owner; no cross-principal authorization claim"
+  },
+  "claim": {
+    "id": "c8aa8fbd-5468-448d-8f3d-4d1c55b0f172",
+    "patterns": [
+      "tokens/color.json",
+      "tokens/motion.json"
+    ],
+    "kind": "advisory"
+  },
+  "differentKeyMerge": {
+    "startedAt": "2026-10-13T14:32:10.396Z",
+    "finishedAt": "2026-10-13T14:33:19.871Z",
+    "requests": [
+      {
+        "path": "/api/timds/sessions/2c90af71-2734-4da8-b52e-8bfd5d76afe5/update",
+        "status": 200
+      },
+      {
+        "path": "/api/timds/sessions/2c90af71-2734-4da8-b52e-8bfd5d76afe5/update",
+        "status": 200
+      }
+    ],
+    "applied": true,
+    "conflicts": [],
+    "values": {
+      "accent": "#3157d6",
+      "muted": "#536876"
+    },
+    "revision": "d75f2faad175487fb2357f8d62d865149442ca9b"
+  },
+  "sameKeyConflict": {
+    "startedAt": "2026-10-13T14:35:36.401Z",
+    "finishedAt": "2026-10-13T14:36:17.155Z",
+    "requests": [
+      {
+        "path": "/api/timds/sessions/2c90af71-2734-4da8-b52e-8bfd5d76afe5/update",
+        "status": 200
+      }
+    ],
+    "applied": false,
+    "stale": true,
+    "conflicts": [
+      {
+        "path": "tokens/color.json",
+        "key": "accent.value",
+        "base": "#3157d6",
+        "mine": "#4057d6",
+        "theirs": "#3657d6"
+      }
+    ],
+    "localAccent": "#4057d6",
+    "revision": "9d20318bba81c21bcab4ee569e87687873e4ee6b"
+  },
+  "obsoleteResolution": {
+    "observedAt": "2026-10-13T14:36:54.568Z",
+    "result": {
+      "status": 409,
+      "diagnostic": {
+        "operation": "host-boundary",
+        "stage": "mutation-prepare",
+        "errorClass": "Error",
+        "fault": "unclassified",
+        "statusCode": 409
+      },
+      "error": "TimDS host returned 409: Session changed since the conflict; pull before resolving"
+    },
+    "beforeRevision": "9d20318bba81c21bcab4ee569e87687873e4ee6b",
+    "afterRevision": "9d20318bba81c21bcab4ee569e87687873e4ee6b"
+  },
+  "resolution": {
+    "applied": true,
+    "conflicts": [],
+    "values": {
+      "accent": "#3657d6",
+      "muted": "#536876"
+    },
+    "revision": "d391c8544357c5a833459f44a22f2fe57b60d616"
+  },
+  "final": {
+    "observedAt": "2026-10-13T14:40:55.917Z",
+    "session": {
+      "id": "2c90af71-2734-4da8-b52e-8bfd5d76afe5",
+      "status": "closed",
+      "liveState": "closed",
+      "baseRevision": "d391c8544357c5a833459f44a22f2fe57b60d616"
+    },
+    "closedJoinStatus": 410,
+    "publicationEvents": 0,
+    "sessions": []
+  }
+}

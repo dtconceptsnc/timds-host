@@ -99,6 +99,16 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
   };
   const validLease = (id,lease) => { const row = session(id); if (!lease || row.lease_token !== lease || !row.lease_expires_at || Date.parse(row.lease_expires_at) <= clock()) throw fail(409, 'Session lease expired; retry the operation'); return row; };
   const queuedBefore = publication => list('publications').some(row => row.queue_position < publication.queue_position && blockingPublication(row));
+  const publicationQueueState = jobId => {
+    const publication = list('publications',"json_extract(row_json,'$.execution_job_id')=?",[jobId])[0], job = get('jobs',jobId);
+    if (!publication || !job || job.job_type !== 'publish_design_system_submission' || job.payload_json.publicationId !== publication.id) return {publication,job,reason:'identity'};
+    let reason = null;
+    if (publication.status === 'superseded') reason = 'superseded';
+    else if (queuedBefore(publication)) reason = 'fifo';
+    else if (job.lease_token && Date.parse(job.lease_expires_at)>clock() || list('publications').some(prior => prior.id !== publication.id && get('jobs',prior.execution_job_id)?.lease_expires_at > timestamp())) reason = 'lease';
+    else if (job.available_at>timestamp() || job.scheduled_at>timestamp()) reason = 'scheduled';
+    return {publication,job,reason};
+  };
   const publicationLease = (id,lease) => {
     const row = get('publications',id), job = get('jobs',lease?.jobId);
     if (!row || !job || row.execution_job_id !== job.id || !lease?.leaseToken || job.lease_token !== lease.leaseToken ||
@@ -265,11 +275,14 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       if (!job) put('jobs',{id:jobId,job_type:'publish_design_system_submission',payload_json:{publicationId:id},status:'queued',attempt_count:0,lease_token:null,lease_owner:null,lease_expires_at:null,available_at:timestamp(),scheduled_at:timestamp(),created_at:timestamp(),updated_at:timestamp()});
       return put('publications',{...row,execution_job_id:jobId});
     }),
+    publicationReadiness: ({publicationId,jobId}) => {
+      const {publication,reason} = publicationQueueState(jobId);
+      if (reason === 'identity' || publication.id !== publicationId) throw fail(409, 'Publication workflow identity changed');
+      return {ready:!reason,status:publication.status,reason};
+    },
     claimPublicationJob: ({jobId,leaseToken,leaseOwner,leaseSeconds = 300}) => atomic(() => {
-      const publication = list('publications',"json_extract(row_json,'$.execution_job_id')=?",[jobId])[0], job = get('jobs',jobId);
-      if (!publication || !job || queuedBefore(publication) || (job.lease_token && Date.parse(job.lease_expires_at)>clock())) return null;
-      if (list('publications').some(prior => prior.id !== publication.id && get('jobs',prior.execution_job_id)?.lease_expires_at > timestamp())) return null;
-      if (job.available_at>timestamp() || job.scheduled_at>timestamp() || publication.status === 'superseded') return null;
+      const {job,reason} = publicationQueueState(jobId);
+      if (reason) return null;
       return put('jobs',{...job,status:'leased',attempt_count:job.attempt_count+1,lease_token:leaseToken,lease_owner:leaseOwner,lease_expires_at:new Date(clock()+Math.max(30,Math.min(leaseSeconds,3600))*1000).toISOString(),updated_at:timestamp()});
     }),
     renewPublicationLease: ({publicationId,jobId,leaseToken,leaseSeconds = 3600}) => atomic(() => {

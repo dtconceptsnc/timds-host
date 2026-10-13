@@ -8,6 +8,9 @@ import {publicUrls} from './urls.mjs';
 import {verifyPublishedRead} from './public-read.mjs';
 import {unwrapNativeBuildResult,finishCleanup,safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+// Ordinary FIFO/lease waits do not spend the retry budget for a publication
+// stage. A bounded six hours of durable sleeps leaves the same row recoverable.
+const QUEUE_WAIT_LIMIT=720;
 export function publicationStoreProxy(coordinator){return new Proxy({}, {get:(_target,name)=>(...args)=>coordinator.publicationStore(name,args)});}
 export function publicationServices(ctx,env,coordinator,lease){
  const store=publicationStoreProxy(coordinator),repository=createRepositoryAdapter({store,getSandbox:id=>ctx.exports.RepositorySandbox.getByName(id),snapshotBucket:env.SNAPSHOTS});
@@ -18,16 +21,23 @@ export class PublicationWorkflow extends WorkflowEntrypoint {
   const {sourceId,publicationId}=event.payload||{};
   if(!uuid.test(sourceId||'')||!uuid.test(publicationId||'')||event.instanceId!==publicationId)throw new NonRetryableError('Invalid publication workflow identity');
   const coordinator=this.ctx.exports.SystemCoordinator.getByName(sourceId),store=publicationStoreProxy(coordinator);
-  let receipt={publicationId};
+  let receipt={publicationId},queueWaits=0;
   for(const name of PUBLICATION_STAGES){
    const input=receipt;
-   const result=await step.do(name,{retries:{limit:8,delay:'1 minute',backoff:'exponential'},timeout:'55 minutes'},async()=>{
+   let attempt=0;
+   for(;;){
+    const readiness=await step.do(`${name}:queue:${attempt}`,{retries:{limit:3,delay:'5 seconds',backoff:'constant'}},()=>store.publicationReadiness({publicationId,jobId:publicationId}));
+    if(readiness.status==='superseded')throw new NonRetryableError('Publication was superseded');
+    let result;
+    if(readiness.ready||readiness.status==='published')result=await step.do(attempt===0?name:`${name}:attempt:${attempt}`,{retries:{limit:8,delay:'1 minute',backoff:'exponential'},timeout:'55 minutes'},async()=>{
     const row=await store.publication(publicationId);
     if(!row||row.source_id!==sourceId||row.execution_job_id!==publicationId)throw new NonRetryableError('Publication workflow authority changed');
     if(row.status==='published')return{publicationId,status:'published',publication:row};
     const lease={jobId:publicationId,leaseToken:crypto.randomUUID()};
     const claim=await store.claimPublicationJob({...lease,leaseOwner:`workflow:${publicationId}:${name}`,leaseSeconds:3600});
-    if(!claim)throw new Error('Publication is waiting for its source queue or expired attempt lease');
+    // Another attempt can acquire the lease after the read-only readiness
+    // check. Persist this as queue state, then wait outside the stage retry.
+    if(!claim)return{queuePending:true};
     let primary;try{return await publicationServices(this.ctx,this.env,coordinator,lease)[name](input);}
     catch(error){
      const message=/^Isolated publication (?:workspace|token_reference|token_cycle|media_reference|artifact_reference) check failed$/.test(error?.message||'')?error.message:`Publication ${name} failed`;
@@ -39,8 +49,12 @@ export class PublicationWorkflow extends WorkflowEntrypoint {
      if(cleanupDiagnostic)primary.cleanupDiagnostic=cleanupDiagnostic;
      throw primary;
     }finally{await finishCleanup(()=>store.yieldPublicationLease({publicationId,...lease}),primary,'lease-yield');}
-   });
-   receipt={...receipt,...result};
+    });
+    if(result&&!result.queuePending){receipt={...receipt,...result};break;}
+    if(queueWaits>=QUEUE_WAIT_LIMIT)throw new NonRetryableError('Publication queue wait expired; resume the same publication after its source is available');
+    await step.sleep(`${name}:wait:${attempt}`,'30 seconds');
+    queueWaits++;attempt++;
+   }
   }
   return receipt;
  }

@@ -9,7 +9,7 @@ const domainOperations = new Set(['activeWork','join','claim','createDraft','lis
 // These domain methods read committed rows and current D1 authority only.
 // Git snapshots/history can acquire repository capabilities and stay serialized.
 const metadataOperations = new Set(['activeWork','listDrafts','status']);
-const publicationOperations = new Set(['getSource','get','getSubmission','submissions','submissionsForSource','publicationsForSource','publication','publicationBySubmission','reservePublication','attachPublicationJob','claimPublicationJob','renewPublicationLease','yieldPublicationLease','authorizePublication','checkpointPublication','releasePublicationVersion','getExecutionJob','getLifecycleOperation','resolveRollbackVersion','publishedRelease','publicationEventsForSources']);
+const publicationOperations = new Set(['getSource','get','getSubmission','submissions','submissionsForSource','publicationsForSource','publication','publicationBySubmission','reservePublication','attachPublicationJob','publicationReadiness','claimPublicationJob','renewPublicationLease','yieldPublicationLease','authorizePublication','checkpointPublication','releasePublicationVersion','getExecutionJob','getLifecycleOperation','resolveRollbackVersion','publishedRelease','publicationEventsForSources']);
 const sameProvisionInput = (left, right) => left == null && right == null ||
   left != null && right != null && left.fileTreeDigest === right.fileTreeDigest && left.grantPublisher === right.grantPublisher;
 
@@ -124,11 +124,16 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
       if (!['complete','expired','pushed'].includes(operation)) throw fail(404, 'Unknown live callback');
       return serialized(async () => {const result = await requestService.callback(operation,body); await store.flushOutbox(); return result;});
     },
-    publicationStore: (operation,args = []) => serialized(async () => {
+    publicationStore: (operation,args = []) => {
       if (!publicationOperations.has(operation)) throw fail(404, 'Unknown publication store operation');
-      const result = await store[operation](...args);
-      await store.flushOutbox(); return result;
-    }),
+      // Queue polling reads committed SQLite rows without entering the mutation
+      // queue, reconciling authority, or scheduling/flushing outbox work.
+      if (operation === 'publicationReadiness') return store[operation](...args);
+      return serialized(async () => {
+        const result = await store[operation](...args);
+        await store.flushOutbox(); return result;
+      });
+    },
     stageVersion: input => serialized(async () => { const result = store.stageVersion(input); await store.flushOutbox(); return result; }),
     recordPreviewBuild: input => serialized(() => store.recordPreviewBuild(input)),
     closeForPublication: (sessionId,publicationId) => serialized(async () => { const result = await sessions.closeForPublication(sessionId,publicationId); await store.flushOutbox(); return result; }),
