@@ -27,11 +27,12 @@ test('Ajv validates nested OpenAPI refs, formats, conflicts, API versions and fo
 test('OpenAPI public preview validates CSS headers and bodyless HEAD', async () => {
   const validate = createContractValidator();
   const url = `https://host.example/api/public/design-system-previews/${sourceId}/${sessionId}/tokens.css`;
-  const headers = { 'Content-Type': 'text/css', 'Cache-Control': 'public, max-age=5, must-revalidate', 'X-Robots-Tag': 'noindex, nofollow', 'Access-Control-Allow-Origin': '*' };
+  const headers = { 'Content-Type': 'text/css', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow', 'Access-Control-Allow-Origin': '*' };
   await validate(url, {}, new Response(':root { --color: red; }', { headers }));
   await validate(url, { method: 'HEAD' }, new Response(null, { headers }));
   await assert.rejects(validate(url, { method: 'HEAD' }, new Response(null, { headers: { ...headers, 'Content-Type': 'text/html' } })), /Content-Type/);
   await assert.rejects(validate(url, {}, new Response(':root {}', { headers: { ...headers, 'Cache-Control': 'private' } })), /Cache-Control/);
+  for (const method of ['GET', 'HEAD']) await assert.rejects(validate(url, { method }, new Response(method === 'HEAD' ? null : ':root {}', { headers: { ...headers, 'Cache-Control': 'public, max-age=5, must-revalidate' } })), /Cache-Control/, 'stale public caching must not satisfy the current contract');
   await assert.rejects(validate(url, { method: 'HEAD' }, new Response('unexpected body', { headers })), /empty body/);
 });
 
@@ -68,7 +69,7 @@ test('public fetch extension sends no credential and Request extension keeps ver
   const calls = [];
   const client = createConformanceClient({ url: 'https://host.example', token: 'test-only', fetchImpl: async (url, init) => {
     calls.push({ url, init });
-    if (url.endsWith('.css')) return new Response(':root {}', { headers: { 'Content-Type': 'text/css', 'Cache-Control': 'public, max-age=5, must-revalidate', 'X-Robots-Tag': 'noindex, nofollow', 'Access-Control-Allow-Origin': '*' } });
+    if (url.endsWith('.css')) return new Response(':root {}', { headers: { 'Content-Type': 'text/css', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow', 'Access-Control-Allow-Origin': '*' } });
     return json({ apiVersion: 1, requestId: sessionId }, 202);
   } });
   await client.previewTokens(sourceId, sessionId);

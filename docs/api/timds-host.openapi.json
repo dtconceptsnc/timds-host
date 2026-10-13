@@ -1564,7 +1564,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "public, max-age=5, must-revalidate"
+                  "const": "no-store"
                 }
               },
               "X-Robots-Tag": {
@@ -1630,7 +1630,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "public, max-age=5, must-revalidate"
+                  "const": "no-store"
                 }
               },
               "X-Robots-Tag": {

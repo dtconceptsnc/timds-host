@@ -45,7 +45,7 @@ the verified Cloudflare API. No Wrangler command was required.
 ## Contract
 
 [`docs/api/timds-host.openapi.json`](docs/api/timds-host.openapi.json) is vendored
-from portal commit `89b1b72`. API v1 uses `X-TimDS-API-Version: 1` and
+from portal commit `2b0148c`. API v1 uses `X-TimDS-API-Version: 1` and
 `apiVersion: 1`. The toolkit chooses a host with `provider: { kind: 'hosted', url }`.
 The contract must pass a black-box suite against the production portal before
 the host's replacement domain services are implemented.

@@ -5,7 +5,9 @@ published **`@dtconcepts/timds@0.1.464`** client. It lives in the host repositor
 at `conformance/`. It neither imports portal implementation code nor substitutes a
 fake host for deployed acceptance.
 
-The exact OpenAPI 3.1 contract from portal PR #70 is vendored at the repository's
+The exact OpenAPI 3.1 contract from portal
+[commit `2b0148c`](https://github.com/dtconceptsnc/toperator/commit/2b0148c70b363967ad0ea2eda092f7d0b442b93b)
+is vendored at the repository's
 [`docs/api/timds-host.openapi.json`](../docs/api/timds-host.openapi.json), the
 single authoritative spec used by this harness. Ajv's JSON Schema 2020-12 validator checks
 response status, media type, required response headers, nested schemas,
@@ -14,6 +16,11 @@ as required by the v1 contract. Requests, submission listing, and public CSS
 use the same validating transport because toolkit 0.1.464 does not expose
 client methods for those operations. All other operations call
 `createHostProvider` from `@dtconcepts/timds/hosted`.
+
+This pin includes the public preview CSS GET/HEAD `Cache-Control: no-store`
+contract correction from [portal PR #89](https://github.com/dtconceptsnc/toperator/pull/89).
+The sync changes only those two header constants; API v1, paths, operations and
+response schemas are unchanged.
 
 ## Install and validate the harness
 
