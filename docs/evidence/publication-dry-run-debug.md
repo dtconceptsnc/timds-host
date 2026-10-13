@@ -74,5 +74,18 @@ repository provider IDs, token IDs, and expiry bounds in the native object's
 durable storage. Alarms retry exact-capability revocation; receipts distinguish
 confirmed revocation from elapsed capability expiry. Uncertain revocation does
 not produce a clean successful response. It never stores token values or source
-files. These follow-up changes await the next coordinated deployment and exact
-publication recovery; this section is not a successful-cleanup receipt.
+files. Typecheck and the complete cf build passed without adding or running
+tests. These changes were committed in `8180473` and deployed successfully as
+Worker version `04d8b165-67ab-463b-bac8-3b2739ec7471`. The existing managed
+deployment grant was refreshed without creating credentials or changing scopes;
+runtime repository access continues to use the native Artifacts binding.
+The operator's first same-publication retry still returned a close failure to
+the CLI. Normal Workflow retry subsequently completed: authenticated read-only
+GETs returned publication `published` at stage `close` and its original session
+`closed`, with live state `closed`. The original pointer event
+`2eecca16-1757-4e6a-b013-5f5c48fffbb5`, publication time
+`2026-10-13T13:48:57.811Z`, and version `2026.10.13-2` were unchanged. The
+sanitized [cleanup receipt](publication-cleanup-receipt.json) records these
+reads. No additional publication, raw state repair, or repeated pointer flip
+was needed. This confirms completed cleanup through the normal retry path;
+the CLI's earlier failure was not its eventual Workflow outcome.

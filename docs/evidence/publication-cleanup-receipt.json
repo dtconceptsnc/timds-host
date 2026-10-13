@@ -1,0 +1,39 @@
+{
+  "observedAt": "2026-10-13T14:18:42.260Z",
+  "deploymentVersion": "04d8b165-67ab-463b-bac8-3b2739ec7471",
+  "method": "authenticated read-only GET after normal Workflow retry",
+  "publication": {
+    "id": "f38e6324-030a-4d02-aa26-6c24e0104fc6",
+    "status": "published",
+    "stage": "close",
+    "result": {
+      "status": "published",
+      "version": "2026.10.13-2",
+      "systemId": "timds/cf-preview-source-proof",
+      "sourceId": "6ffb48ea-862e-42de-9303-5edcbe8829d5",
+      "publication": {
+        "event_id": "2eecca16-1757-4e6a-b013-5f5c48fffbb5",
+        "source_id": "6ffb48ea-862e-42de-9303-5edcbe8829d5",
+        "version_id": "f38e6324-030a-4d02-aa26-6c24e0104fc6",
+        "content_digest": "804731bc26f0b4044fc4f02c88336890b3a93182d0b53566551aa6955fadf0a0",
+        "version_label": "2026.10.13-2",
+        "published_at": "2026-10-13T13:48:57.811Z",
+        "pointerEventId": "2eecca16-1757-4e6a-b013-5f5c48fffbb5",
+        "pointerVersionId": "f38e6324-030a-4d02-aa26-6c24e0104fc6"
+      },
+      "publicRoot": "https://timds-host-69-public.ratebucket.workers.dev/systems/timds%2Fcf-preview-source-proof/",
+      "versionedUrls": {
+        "root": "https://timds-host-69-public.ratebucket.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-2/",
+        "llmsTxt": "https://timds-host-69-public.ratebucket.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-2/llms.txt",
+        "bundleJson": "https://timds-host-69-public.ratebucket.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-2/bundle.json",
+        "artifact": "https://timds-host-69-public.ratebucket.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-2/.timds-artifact.json"
+      }
+    }
+  },
+  "session": {
+    "id": "e0dc69fe-cd08-4cd2-90b2-73096ed4a1ea",
+    "status": "closed",
+    "liveState": "closed",
+    "baseRevision": "8c61cf9e20520812bb9aa83eebd49b4d7cac7913"
+  }
+}
