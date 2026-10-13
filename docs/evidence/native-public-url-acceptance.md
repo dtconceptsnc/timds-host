@@ -48,3 +48,14 @@ The actual `index.json` page directory uses extensionless URLs such as
 release: a directory index redirects to its scoped trailing-slash URL; an
 existing `.html` page is served with HTML MIME. No cross-source fallback or
 second pointer resolution is introduced.
+
+## Deployed readback
+
+Host commit `f655a24` was deployed as Worker
+`1d21ec4a-2c0b-498a-9c0a-ec24ad6d34e5`. A real anonymous MCP client then called
+`read_derived_layer` successfully and received the exact source/version/pointer
+receipt for `2026.10.13-2`, including scoped pinned bundle URLs. Fetching both
+returned URLs produced HTTP 200, one-year immutable cache headers, and matching
+SHA-256 values: system CSS was 4,103 bytes and tokens CSS was 940 bytes.
+Host D1 migrations 0002–0004 were applied separately; source transfer remained
+inactive and invitations remained disabled.

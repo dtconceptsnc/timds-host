@@ -23,18 +23,25 @@ No new automated tests were written or run for this work.
   slash URL `/web/spacing/` instead of the listed page ID returned a page-not-found
   error; the explicit page ID succeeded.
 
-The operation is **not yet accepted as complete**. Its close stage failed:
+Its first close attempt failed:
 the Git close operation returned `undefined`, and reference serialization threw
 before completing fork and Preview cleanup. The pointer is already committed;
 recovery must resume this exact publication, never create another release.
-The recovery fix is prepared for deployment, with post-pointer failures retained
-as `closing` and exact session/submission/publication identity checks.
+The recovery fix was deployed in `04d8b165`. Automatic retry completed at
+14:13:02.920 UTC: the same publication is `published`, its session is `closed`,
+and the API error is null. The original pointer event and published timestamp
+were preserved. See [the cleanup receipt](publication-cleanup-receipt.json).
 
 Browser use also found root-relative navigation and stylesheet URLs escaping
-the `/systems/<system>/` prefix. A serving fix is prepared that rebases browser
+the `/systems/<system>/` prefix. The deployed serving fix rebases browser
 HTML/CSS while leaving immutable stored bytes and `/bundle/` consumer bytes
-untouched. A new browser pass is required after deployment.
+untouched. Actual browser navigation from Spacing to Components and back passed,
+and the styled spacing page displayed the published `170ms` value.
 
-Rollback, independent concurrent authoring, conflict handling, all ten Request
-publications, and source cutover remain outstanding. Production portal sources
-and domains were unchanged by this disposable publication.
+All ten concurrent designer Requests returned submitted changes with independent
+spacing keys. Their actual diffs were reviewed before queueing publications;
+each contains its requested key plus the generated combined-token mirror, with
+no removed values. Publication completion and rollback remain outstanding.
+Separate live collaboration verification also exercised different-key merge and
+same-key conflict handling. Source cutover remains outstanding; production
+traffic and source ownership were unchanged by this disposable publication.

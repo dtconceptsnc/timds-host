@@ -1,8 +1,10 @@
 # Explicit source access invitations
 
-Prepared implementation; migration `0004_access_invitations.sql` has not been
-applied and no invitation has been reserved or claimed as part of this change.
-Set `TIMDS_ACCESS_INVITATIONS_ENABLED=true` only after deploying that migration.
+The acceptance host deployment `f655a24` includes this implementation, and
+migration `0004_access_invitations.sql` was applied on 2026-10-13.
+`TIMDS_ACCESS_INVITATIONS_ENABLED` remains false; no invitation has been reserved
+or claimed and no invitation grants have been applied. Enable it only at the
+reviewed source-access boundary after checking the deployed schema and policy.
 The default is false: ordinary OAuth keeps working without querying invitation
 tables. The Access application must independently permit the invited person's
 own authentication; creating an invitation does not edit an Access policy.
@@ -94,5 +96,6 @@ only transitions. Global principal deactivation, source archive/deletion and
 publisher permission checks continue to use the current D1 authority.
 
 Validation is syntax/typecheck/build and manual SQL review only. No tests were
-added/run, no migration/configuration applied, and no other person's sign-in was
-attempted. Real invited-user claim requires that person to authenticate themselves.
+added/run and no other person's sign-in was attempted. The schema application
+above does not prove an invited-user claim; that requires the person to
+authenticate themselves.

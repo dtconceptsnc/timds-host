@@ -1,8 +1,10 @@
 # Inactive portal imports and ownership activation
 
-Implementation is prepared; migrations `0002_imports.sql` and
-`0003_deleted_imports.sql` have **not** been applied
-and no production import or activation has run. The cutover operator must still
+The acceptance host deployment `f655a24` includes this implementation, and D1
+migrations `0002_imports.sql` and `0003_deleted_imports.sql` were applied on
+2026-10-13. The portal-origin binding remains blank, so signed transfer routes
+remain closed. No production import, tombstone transfer or activation has run.
+The cutover operator must still
 read the actual portal freeze/quiescence journal and perform source-by-source
 acceptance. This API never infers identity from email, adopts an existing
 repository by name alone, or creates provider write credentials.
