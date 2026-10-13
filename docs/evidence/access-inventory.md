@@ -1,5 +1,9 @@
 # Cloudflare Access inventory — 13 October 2026
 
+This is the historical setup inventory. The team was subsequently renamed to
+`timds.cloudflareaccess.com`; see the [migration report](access-team-migration/README.md)
+for the current state and verification.
+
 Inventory and approved setup in account `e25df25724ba27024ad08e3096b5bd37`
 (DT Concepts LLC). The original inventory was read-only. The new host application
 and human policy below were subsequently created with explicit human approval;

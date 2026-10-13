@@ -92,7 +92,11 @@ export function createHostMcp({resolvePublished,bucket,readFile,createRequest,ho
   const {host,published}=publicOrigins({hostOrigin,publicOrigin});
   return async(request,env,context,actor)=>{
     const url=new URL(request.url),authenticated=Boolean(actor);
-    const expected=authenticated?host:published,path=authenticated?'/api/timds/mcp':'/mcp';
+    // Use only the explicitly configured Studio origin already authenticated by
+    // the OAuth boundary; never infer trusted origins from caller headers.
+    const authenticatedOrigin=env.TIMDS_STUDIO_ORIGIN===url.origin
+      ?publicOrigins({hostOrigin:env.TIMDS_STUDIO_ORIGIN,publicOrigin:published}).host:host;
+    const expected=authenticated?authenticatedOrigin:published,path=authenticated?'/api/timds/mcp':'/mcp';
     if(url.origin!==expected||url.pathname!==path)return new Response('Not found',{status:404,headers:{'Cache-Control':'no-store'}});
     // Exact Origin validation includes scheme and port; SDK host validation is
     // an additional DNS-rebinding guard. Bearer-only CLI clients omit Origin.

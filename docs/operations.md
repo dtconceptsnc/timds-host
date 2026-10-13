@@ -38,6 +38,7 @@ Set and preserve this **nonsecret** environment for every API deployment:
 export TIMDS_WORKER_NAME='timds-example'
 export CLOUDFLARE_ACCOUNT_ID='<account-id>'
 export TIMDS_HOST_ORIGIN='https://timds-example.<workers-subdomain>.workers.dev'
+export TIMDS_STUDIO_ORIGIN='' # optional additional exact HTTPS origin for Studio
 export TIMDS_PUBLIC_ORIGIN='https://timds-example-public.<workers-subdomain>.workers.dev'
 export TIMDS_AGENT_PUSH_QUEUE_ID='<queue-id-from-next-step>'
 export TIMDS_ARTIFACTS_BINDINGS='{"example":"ARTIFACTS_EXAMPLE"}'
@@ -169,6 +170,15 @@ human identity provider and explicit allowed humans, plus a dedicated host
 service token only if machine identities are needed. Keep discovery, `/register`,
 `/token` and `/api/timds` reachable: OAuth protects the API itself. Applying an
 Access policy to the entire host blocks OAuth clients.
+
+An optional `TIMDS_STUDIO_ORIGIN` adds one exact HTTPS origin for Studio without
+changing `HOST_ORIGIN` or existing CLI/portal connections. Attach that hostname
+as a custom domain on the API Worker, and add its `/authorize`, `/bootstrap`,
+and `/service-auth` destinations to the same Access application, preserving its
+audience and policies. Keep this variable in the installation's deployment
+environment. OAuth discovery, consent and token resources remain bound to the
+origin used for that connection; users sign in again on the new address. Other
+origins remain rejected. The Studio origin is also allowed for public media CORS.
 
 The following emits a reviewable application/policy JSON plan; it does not
 create an Access application or credentials. Replace the example email/IDs with

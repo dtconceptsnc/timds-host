@@ -8,3 +8,19 @@ test('reference transport preserves binary and empty files across arbitrary stre
 test('immutable retries reuse exact objects and never fetch already committed bytes',async()=>{const f=await fixture(),count=f.storage.rows.size;const second=await persistContainerTree(f.storage,{...f.input,readFile:()=>{throw new Error('must reuse');}});assert.deepEqual(second,f.tree);assert.equal(f.storage.rows.size,count);assert.deepEqual(await readTreeManifest(f.storage,f.tree),f.manifest);});
 test('manifest/path/count/digest identity fail closed before a reference is used',async()=>{const f=await fixture();for(const tree of [{...f.tree,ref:'../private'},{...f.tree,digest:'f'.repeat(64)},{...f.tree,totalBytes:9}])await assert.rejects(readTreeManifest(f.storage,tree));await assert.rejects(persistContainerTree(f.storage,{...f.input,manifest:{...f.manifest,files:[{...f.manifest.files[0],path:'../escape'}]}}));await assert.rejects(persistContainerTree(f.storage,{...f.input,operationId:randomUUID(),readFile:async()=>new Response('wrong length')}));});
 test('reading selected token files verifies individual immutable body digest',async()=>{const f=await fixture();let got=[];for await(const file of treeFiles(f.storage,f.tree,{filter:file=>file.path==='empty.txt'}))got.push(file);assert.equal(got.length,1);assert.equal(got[0].content,'');const blob=[...f.storage.rows.keys()].find(key=>key.endsWith(f.manifest.files[0].sha256));f.storage.rows.get(blob).bytes=Buffer.alloc(8);await assert.rejects(async()=>{for await(const _ of treeFiles(f.storage,f.tree)){};},/identity changed/);});
+test('snapshot transfers are bounded, preserve manifest order and store repeated blobs once',async()=>{
+ const storage=bucket(),put=storage.put;let active=0,peak=0,reads=0;
+ storage.put=async(key,...args)=>{if(key.endsWith('manifest.json'))return put(key,...args);active++;peak=Math.max(peak,active);try{await new Promise(setImmediate);return await put(key,...args);}finally{active--;}};
+ const bytes=Array.from({length:12},(_,i)=>Buffer.from([i])),entries=await Promise.all(bytes.map(async(content,i)=>({path:`file-${i}`,mode:'100644',size:1,sha256:await sha256(content)})));
+ const manifest={version:1,totalBytes:13,files:[...entries,{...entries[0],path:'duplicate'}]};
+ const tree=await persistContainerTree(storage,{sourceId:randomUUID(),operationId:randomUUID(),role:'snapshot-files',manifest,readFile:async i=>{reads++;return new Response(bytes[i]);}});
+ assert.equal(peak,4);assert.equal(active,0);assert.equal(reads,12);assert.equal(storage.rows.size,13);assert.deepEqual(await readTreeManifest(storage,tree),manifest);
+});
+test('a failed transfer drains active writes before rejecting and never commits a manifest',async()=>{
+ const storage=bucket();let release,ready,entered=0,settled=false;const started=new Promise(resolve=>{ready=resolve;});
+ const held=new Promise(resolve=>{release=resolve;});
+ const bytes=Array.from({length:8},(_,i)=>Buffer.from([i])),manifest={version:1,totalBytes:8,files:await Promise.all(bytes.map(async(content,i)=>({path:`file-${i}`,mode:'100644',size:1,sha256:await sha256(content)})))};
+ const work=persistContainerTree(storage,{sourceId:randomUUID(),operationId:randomUUID(),role:'snapshot-files',manifest,readFile:async i=>{entered++;if(entered===4)ready();if(i===0)throw new Error('transfer interrupted');await held;return new Response(bytes[i]);}});
+ work.then(()=>{settled=true;},()=>{settled=true;});await started;assert.equal(entered,4);assert.equal(settled,false);
+ release();await assert.rejects(work,/transfer interrupted/);assert.equal(entered,4);assert.equal([...storage.rows.keys()].some(key=>key.endsWith('manifest.json')),false);assert.equal(storage.rows.size,3);
+});

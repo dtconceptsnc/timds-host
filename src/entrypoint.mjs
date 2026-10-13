@@ -95,7 +95,7 @@ export default {
       if(request.method==='POST'&&new URL(request.url).pathname==='/api/operator/design-system-assets/uploads'){
         const url=new URL(request.url);url.pathname='/api/timds/media/uploads';request=new Request(url,request);
       }
-      return await createHostOAuth(env,{api,publicFetch,claimInvitations:(request,bindings)=>claimLoginInvitations({request,env:bindings,catalog:new Catalog(bindings.CATALOG),getCoordinator:id=>getCoordinator(ctx,id)})}).fetch(request,env,ctx);
+      return await createHostOAuth(env,{api,publicFetch,requestOrigin:new URL(request.url).origin,claimInvitations:(request,bindings)=>claimLoginInvitations({request,env:bindings,catalog:new Catalog(bindings.CATALOG),getCoordinator:id=>getCoordinator(ctx,id)})}).fetch(request,env,ctx);
     } catch(error) {return errorResponse(error);}
   },
   async queue(batch,env,ctx) {

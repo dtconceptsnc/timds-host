@@ -3,7 +3,7 @@ import { Catalog } from '../store/catalog.mjs';
 import { fail } from '../store/errors.mjs';
 import { authenticateAccess, verifyBootstrapSecret } from './access.mjs';
 import { principalActor } from './authorization.mjs';
-import { escapeHtml, hostOrigin, jsonResponse, readJson } from '../http.mjs';
+import { escapeHtml, oauthOrigin, jsonResponse, readJson } from '../http.mjs';
 
 export const scopes = ['timds:read', 'timds:write', 'offline_access'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,8 +20,8 @@ function consentPolicy(validatedRedirectUri) {
   return `default-src 'none'; form-action 'self' ${redirectOrigin}; frame-ancestors 'none'; base-uri 'none'`;
 }
 
-export function createHostOAuth(env, { api, publicFetch, claimInvitations=async()=>{} }) {
-  const origin = hostOrigin(env), resource = `${origin}/api/timds`;
+export function createHostOAuth(env, { api, publicFetch, claimInvitations=async()=>{}, requestOrigin }) {
+  const origin = oauthOrigin(env, requestOrigin), resource = `${origin}/api/timds`;
   const options = {
     apiRoute: '/api/timds', authorizeEndpoint: '/authorize', tokenEndpoint: '/token', clientRegistrationEndpoint: '/register',
     scopesSupported: scopes, requiredScopes: ['timds:read'], clientIdMetadataDocumentEnabled: true,

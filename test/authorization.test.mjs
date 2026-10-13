@@ -8,7 +8,7 @@ const env = { ACCESS_TEAM_DOMAIN: 'https://timds-test.cloudflareaccess.com', ACC
 const { privateKey, publicKey } = await generateKeyPair('RS256');
 const signed = (claims = {}, options = {}) => new SignJWT({ sub:'human-subject', ...claims }).setProtectedHeader({alg:'RS256'}).setIssuer(options.issuer || env.ACCESS_TEAM_DOMAIN).setAudience(options.audience || env.ACCESS_AUD).setIssuedAt().setExpirationTime(options.expires || '1h').sign(privateKey);
 test('Access verifies signature, pinned issuer, audience and expiration before mapping identity', async () => {
-  assert.deepEqual(await verifyAccessToken(await signed({email:'display@example.test'}), env, {keys:publicKey}), {issuer:env.ACCESS_TEAM_DOMAIN, subject:'user:human-subject',type:'user',name:'display@example.test'});
+  assert.deepEqual(await verifyAccessToken(await signed({email:'display@example.test'}), env, {keys:publicKey}), {issuer:env.ACCESS_TEAM_DOMAIN, subject:'user:human-subject',type:'user',name:'display@example.test',email:'display@example.test'});
   for (const token of [await signed({}, {issuer:'https://attacker.cloudflareaccess.com'}), await signed({}, {audience:'other'}), await signed({}, {expires:'1 minute ago'}), 'x.y.z']) await assert.rejects(verifyAccessToken(token, env, {keys:publicKey}), {statusCode:401});
   const other = await generateKeyPair('RS256');
   await assert.rejects(verifyAccessToken(await signed(),env,{keys:other.publicKey}),{statusCode:401});
