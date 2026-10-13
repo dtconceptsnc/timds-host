@@ -42,6 +42,7 @@ export default defineConfig({
       HOST_ORIGIN:bindings.text(process.env.TIMDS_HOST_ORIGIN || 'http://127.0.0.1:8787'),
       TIMDS_PUBLIC_ORIGIN:bindings.text(process.env.TIMDS_PUBLIC_ORIGIN || 'http://127.0.0.1:8788'),
       TIMDS_PORTAL_ORIGIN:bindings.text(process.env.TIMDS_PORTAL_ORIGIN || ''),
+      TIMDS_ACCESS_INVITATIONS_ENABLED:bindings.text(process.env.TIMDS_ACCESS_INVITATIONS_ENABLED==='true'?'true':'false'),
       TIMDS_HOST_WORKER_NAME:bindings.text(name),
       ACCESS_TEAM_DOMAIN:bindings.text(process.env.TIMDS_ACCESS_TEAM_DOMAIN || ''),
       ACCESS_AUD:bindings.text(process.env.TIMDS_ACCESS_AUD || ''),

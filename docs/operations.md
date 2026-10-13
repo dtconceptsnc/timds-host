@@ -6,6 +6,13 @@ acceptance is still in progress. Use a fresh installation name and disposable
 source for initial acceptance. Existing-system import/cutover is separate;
 provisioning below does not adopt existing repositories.
 
+For a collaborator who has not signed into the host, use
+[explicit source access invitations](access-invitations.md). Apply migration
+`0004_access_invitations.sql` before enabling
+`TIMDS_ACCESS_INVITATIONS_ENABLED=true`; it defaults off. The collaborator must
+authenticate themselves through the configured Access policy. Historical portal
+identity mappings never stand in for that person's verified login.
+
 ## Prerequisites and configuration
 
 Install Node.js 22.18+ and npm, and start a local Docker engine capable of

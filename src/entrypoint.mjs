@@ -13,6 +13,7 @@ import { UUID } from './public/host-routes.mjs';
 import { createHostMcp } from './mcp/index.mjs';
 import { fail } from './store/errors.mjs';
 import { studioFetch } from './studio.mjs';
+import { claimLoginInvitations } from './invitations/service.mjs';
 
 const getCoordinator=(ctx,id)=>ctx.exports.SystemCoordinator.getByName(id);
 function publishedServices(env,ctx) {
@@ -69,7 +70,7 @@ export default {
         const services=publishedServices(env,ctx);
         return new URL(request.url).pathname==='/mcp'?services.mcp(request,env,ctx):services.roots.fetch(request);
       }
-      return await createHostOAuth(env,{api,publicFetch}).fetch(request,env,ctx);
+      return await createHostOAuth(env,{api,publicFetch,claimInvitations:(request,bindings)=>claimLoginInvitations({request,env:bindings,catalog:new Catalog(bindings.CATALOG),getCoordinator:id=>getCoordinator(ctx,id)})}).fetch(request,env,ctx);
     } catch(error) {return errorResponse(error);}
   },
   async queue(batch,env,ctx) {

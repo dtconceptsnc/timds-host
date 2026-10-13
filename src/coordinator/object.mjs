@@ -16,6 +16,7 @@ import { createImporter } from '../imports/service.mjs';
 import { createPortalReceiptVerifier } from '../imports/portal-proof.mjs';
 import { hostOrigin } from '../http.mjs';
 import { createSourceDeletion } from '../lifecycle/deletion.mjs';
+import { createSourceInvitations } from '../invitations/service.mjs';
 import { readSourceView } from '../source-view.mjs';
 import { readImportedPublicMedia } from '../mcp/public-media.mjs';
 
@@ -66,15 +67,21 @@ export class SystemCoordinator extends DurableObject {
       build:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`build:${input.publicationId}`).run(input),'build')});
     this.importer=createImporter({sourceId,storage:ctx.storage,catalog:this.catalog,store:this.store,artifacts:this.artifacts,releases:env,origin:hostOrigin(env),verifyPortalReceipt:createPortalReceiptVerifier(env)});
     this.deletion=createSourceDeletion({sourceId,storage:ctx.storage,catalog:this.catalog,store:this.store,artifacts:this.artifacts,preview:this.preview,live:this.requests.live,runMutation:this.engine.runMutation,env,origin:hostOrigin(env)});
+    this.invitations=createSourceInvitations({sourceId,catalog:this.catalog,store:this.store,env});
   }
   async importOperation(input){
     try{return {ok:true,value:await this.engine.runMutation(()=>this.importer(input))};}
+    catch(error){return {ok:false,error:safeError(error)};}
+  }
+  async claimAccessInvitation(input){
+    try{return {ok:true,value:await this.engine.runMutation(()=>this.invitations.claim(input))};}
     catch(error){return {ok:false,error:safeError(error)};}
   }
   async api({operation,actor,args=[]}) {
     try {
       let value, httpStatus;
       if(operation==='sourceView')value=await this.engine.sourceView(actor);
+      else if(['listInvitations','reserveInvitation','revokeInvitation'].includes(operation))value=await this.engine.runMutation(()=>this.invitations.admin({operation:{listInvitations:'list',reserveInvitation:'reserve',revokeInvitation:'revoke'}[operation],actor,input:args[0]}));
       else if(['prepareDeletion','readDeletion','confirmDeletion','deletionHistory'].includes(operation))value=await this.engine.runMutation(()=>this.deletion.invoke({operation:{prepareDeletion:'prepare',readDeletion:'read',confirmDeletion:'confirm',deletionHistory:'history'}[operation],actor,input:args[0]}));
       else if(operation==='createRequest'||operation==='readRequest')value=await this.engine.requestsInvoke({operation:operation==='createRequest'?'create':'read',actor,args});
       else if(operation==='rollback')value=await this.engine.rollbackVersion({actor,input:args[0],operationId:crypto.randomUUID()});

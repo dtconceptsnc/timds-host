@@ -2634,6 +2634,196 @@
           }
         }
       }
+    },
+    "/api/timds/admin/systems/{sourceId}/invitations": {
+      "get": {
+        "operationId": "listAccessInvitations",
+        "summary": "List source access invitation receipts",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current administrator-only invitation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessInvitations"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current active host administrator required"
+          },
+          "409": {
+            "description": "Immutable invitation, source readiness or existing reservation conflict"
+          },
+          "503": {
+            "description": "Access invitations are disabled until their migration is configured"
+          }
+        }
+      },
+      "post": {
+        "operationId": "reserveAccessInvitation",
+        "summary": "Reserve explicit source permissions for the invited human’s own Access sign-in",
+        "description": "Active administrator only; ready or importing source. No grant at reservation time. Configured Access issuer and explicit email required. Write requires read. Default disabled; see docs/access-invitations.md. Never merges historical identities or sends email.",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessInvitationInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current administrator-only invitation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessInvitation"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current active host administrator required"
+          },
+          "409": {
+            "description": "Immutable invitation, source readiness or existing reservation conflict"
+          },
+          "503": {
+            "description": "Access invitations are disabled until their migration is configured"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/invitations/{cursor}": {
+      "get": {
+        "operationId": "pageAccessInvitations",
+        "summary": "Continue listing source invitations",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current administrator-only invitation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessInvitations"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current active host administrator required"
+          },
+          "409": {
+            "description": "Immutable invitation, source readiness or existing reservation conflict"
+          },
+          "503": {
+            "description": "Access invitations are disabled until their migration is configured"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/{sourceId}/invitations/{invitationId}/revoke": {
+      "post": {
+        "operationId": "revokePendingAccessInvitation",
+        "summary": "Permanently revoke an unclaimed invitation",
+        "description": "Claimed invitations require explicit ordinary source permission changes; later sign-ins never regrant a claimed invitation.",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current administrator-only invitation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessInvitation"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current active host administrator required"
+          },
+          "409": {
+            "description": "Immutable invitation, source readiness or existing reservation conflict"
+          },
+          "503": {
+            "description": "Access invitations are disabled until their migration is configured"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4190,6 +4380,164 @@
           "recordedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "AccessInvitationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "invitationId",
+          "email",
+          "issuer",
+          "read",
+          "write",
+          "publish"
+        ],
+        "properties": {
+          "invitationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "issuer": {
+            "type": "string",
+            "format": "uri"
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "write": {
+            "type": "boolean"
+          },
+          "publish": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AccessInvitation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "sourceId",
+          "issuer",
+          "email",
+          "permissions",
+          "status",
+          "requestedBy",
+          "createdAt",
+          "claimedPrincipalId",
+          "claimedAt",
+          "revokedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuer": {
+            "type": "string",
+            "format": "uri"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "permissions": {
+            "type": "object",
+            "required": [
+              "read",
+              "write",
+              "publish"
+            ],
+            "properties": {
+              "read": {
+                "type": "boolean"
+              },
+              "write": {
+                "type": "boolean"
+              },
+              "publish": {
+                "type": "boolean"
+              }
+            }
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "claimed",
+              "revoked"
+            ]
+          },
+          "requestedBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "claimedPrincipalId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "claimedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "AccessInvitations": {
+        "type": "object",
+        "required": [
+          "apiVersion",
+          "sourceId",
+          "invitations",
+          "nextCursor"
+        ],
+        "properties": {
+          "apiVersion": {
+            "const": 1
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "invitations": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/AccessInvitation"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           }
         }
       }

@@ -20,7 +20,7 @@ function consentPolicy(validatedRedirectUri) {
   return `default-src 'none'; form-action 'self' ${redirectOrigin}; frame-ancestors 'none'; base-uri 'none'`;
 }
 
-export function createHostOAuth(env, { api, publicFetch }) {
+export function createHostOAuth(env, { api, publicFetch, claimInvitations=async()=>{} }) {
   const origin = hostOrigin(env), resource = `${origin}/api/timds`;
   const options = {
     apiRoute: '/api/timds', authorizeEndpoint: '/authorize', tokenEndpoint: '/token', clientRegistrationEndpoint: '/register',
@@ -93,6 +93,7 @@ export function createHostOAuth(env, { api, publicFetch }) {
         if (form.get('decision') !== 'approve') throw fail(400, 'Choose Connect or Cancel');
         const approved = await helpers.approveConsent(request, handle);
         await bindings.OAUTH_KV.delete(consentKey(handle));
+        await claimInvitations(request,bindings,context);
         const { redirectTo } = await helpers.completeAuthorization({ request:approved.request, userId:principal.id, metadata:{ name:principal.name }, scope:approved.request.scope, props:{ principalId:principal.id } });
         const headers = new Headers(approved.headers); headers.set('Location',redirectTo); headers.set('Cache-Control','no-store');
         return new Response(null,{status:302,headers});

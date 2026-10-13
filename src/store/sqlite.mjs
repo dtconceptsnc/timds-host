@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { decode, fail, json, principalId, storageError } from './errors.mjs';
+import { AccessInvitations,applyInvitationClaim,invitationOperation } from '../invitations/catalog.mjs';
 
 const schema = `
 CREATE TABLE IF NOT EXISTS coordinator_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -372,7 +373,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       const pending = meta('authority_pending');
       if (!pending) return;
       let receipt;
-      try { receipt = await catalog.applyAuthorityOperation(pending); }
+      try { receipt = pending.kind==='invitation' ? await applyInvitationClaim(catalog,pending) : await catalog.applyAuthorityOperation(pending); }
       catch (error) {
         // A definite rejection with a primary-confirmed absent receipt made no
         // grant mutation. An unknown storage outcome keeps its durable barrier.
@@ -397,6 +398,22 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       await store.reconcileAuthority();
       await store.flushOutbox();
       return catalog.authorityOperation(operationId);
+    },
+    async claimAccessInvitation({invitationId,identity,principalId:id}) {
+      await store.reconcileAuthority();
+      const invitation=await new AccessInvitations(catalog).read(invitationId);
+      if(!invitation||invitation.source_id!==sourceId||invitation.issuer!==identity.issuer||invitation.email!==identity.email||identity.type!=='user'||!identity.subject.startsWith('user:'))throw fail(403,'Invitation does not match this verified identity');
+      if(invitation.status!=='pending')return {invitationId,status:invitation.status,claimed:invitation.status==='claimed'&&invitation.claimed_principal_id===id};
+      const facts=await catalog.readAuthority(sourceId,id),inviter=await catalog.principal(invitation.requested_by);
+      if(meta('deletion_fence')||facts.source?.lifecycle_status!=='ready'||facts.source.archived_at||facts.organizationStatus!=='active'||inviter?.status!=='active'||!inviter.admin)return {invitationId,status:'pending',claimed:false};
+      if(facts.principal?.status!=='active'||facts.principal.type!=='user'||facts.principal.issuer!==identity.issuer||facts.principal.subject!==identity.subject)throw fail(403,'The Access principal is unavailable');
+      // Invitations add the reviewed permissions; they never revoke an existing
+      // grant, confer administration, or reactivate an archived history actor.
+      const command={principalId:id,read:Boolean(invitation.can_read||facts.access.read||facts.access.write),write:Boolean(invitation.can_write||facts.access.write),publish:Boolean(invitation.can_publish||facts.publisher)};
+      const pending={kind:'invitation',operationId:invitationOperation(invitationId),sourceId,actorId:invitation.requested_by,expectedVersion:facts.authorityVersion,command,invitationClaim:{id:invitationId,principalId:id,issuer:identity.issuer,email:identity.email,subject:identity.subject}};
+      atomic(()=>setMeta('authority_pending',pending));
+      await store.reconcileAuthority();await store.flushOutbox();
+      return {invitationId,status:'claimed',claimed:true,principalId:id};
     },
     stageVersion: ({publicationId,lease,version}) => atomic(() => {
       const publication = publicationLease(publicationId,lease);

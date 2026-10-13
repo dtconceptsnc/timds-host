@@ -27,7 +27,10 @@ export async function verifyAccessToken(token, env, { keys } = {}) {
     return { issuer, subject: `service:${payload.common_name}`, type: 'agent', name: payload.common_name };
   }
   if (typeof payload.sub !== 'string' || !payload.sub || payload.common_name) throw fail(401, 'Access identity has no stable subject');
-  return { issuer, subject: `user:${payload.sub}`, type: 'user', name: typeof payload.email === 'string' ? payload.email : payload.sub };
+  return { issuer, subject: `user:${payload.sub}`, type: 'user', name: typeof payload.email === 'string' ? payload.email : payload.sub,
+    // This email comes only from the verified Access assertion. It is never
+    // used to resolve/merge principals; explicit invitations may match it.
+    email:typeof payload.email==='string'&&payload.email_verified!==false?payload.email:null };
 }
 
 export async function authenticateAccess(request, env, catalog) {

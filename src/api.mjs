@@ -89,6 +89,18 @@ export function createApi({ getCoordinator, provision, mcp }) {
         return jsonResponse({organization:await catalog.ensureOrganization({id:input.id,name:input.name})});
       }
       if(path==='/api/timds/admin/systems'&&method==='POST'&&provision)return respond(await provision({input,actor,env,context,catalog}));
+      match=path.match(/^\/api\/timds\/admin\/systems\/([^/]+)\/invitations(?:\/([^/]+))?(?:\/(revoke))?$/);
+      if(match){
+        const row=await source(segment(match[1])),id=match[2]?segment(match[2]):null;
+        if(id&&!uuid.test(id))throw fail(400,'An invitation UUID is required');
+        if(!match[3]&&method==='GET')return respond(await call(row.id,'listInvitations',[{after:id||''}]));
+        if(!id&&method==='POST')return respond(await call(row.id,'reserveInvitation',[input]));
+        if(id&&match[3]==='revoke'&&method==='POST'){
+          if(Object.keys(input).length)throw fail(400,'Invitation revocation has no additional inputs');
+          return respond(await call(row.id,'revokeInvitation',[{invitationId:id}]));
+        }
+        throw fail(405,'Use invitation list, reservation or revocation');
+      }
       match=path.match(/^\/api\/timds\/admin\/systems\/([^/]+)\/deletion(?:\/([^/]+))?(?:\/(confirm|history))?$/);
       if(match){
         const row=await source(segment(match[1])),operationId=match[2]?segment(match[2]):input.operationId,action=match[3];
