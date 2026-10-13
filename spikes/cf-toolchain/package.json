@@ -1,0 +1,21 @@
+{
+  "name": "timds-host-cf-toolchain-spike",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "cf dev",
+    "build": "cf build",
+    "deploy": "cf deploy --secrets-file .dev.vars",
+    "typecheck": "cf workers types && tsc",
+    "setup-token": "node scripts/setup-token.mjs",
+    "probe": "node scripts/probe.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.sha-91c870c02",
+    "@types/node": "26.6.5",
+    "cf": "1.0.0-beta.14",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  }
+}

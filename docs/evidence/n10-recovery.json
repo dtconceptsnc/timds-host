@@ -1,0 +1,3075 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-13T17:29:04.777777+00:00",
+  "batchId": "7fcba971-c7d9-4ed3-9d10-5b64f5ebd27a",
+  "sourceId": "6ffb48ea-862e-42de-9303-5edcbe8829d5",
+  "allOriginalIdsPreserved": true,
+  "consecutiveVersions": true,
+  "directParentChain": true,
+  "publications": [
+    {
+      "index": 1,
+      "requestId": "8b8aef11-2728-40ea-9aeb-dff882bc6fe1",
+      "submissionId": "538cd465-c86a-4b20-8e62-9ddf992f5f1e",
+      "publicationId": "37ddd8fa-aaf1-490f-9528-f3108fd5078d",
+      "workflowStatus": "complete",
+      "workflowVersionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "publicationStatus": "published",
+      "stage": "close",
+      "queuePosition": 2,
+      "completedAt": "2026-10-13T14:43:05.529Z",
+      "error": null,
+      "stamp": {
+        "schemaVersion": 1,
+        "systemId": "timds/cf-preview-source-proof",
+        "version": "2026.10.13-3",
+        "sourceCommit": "667c573d0caa250f55c3a7d8af41a5e00ed5fb67",
+        "contentDigest": "a9011477a6da5f4b20ff6501e5ebcf85d0df16f8b9ff93f98097e4d41d910a69"
+      },
+      "parentRevision": "0c1a05238acf4a91667c1460606eef0890031c98",
+      "pointerEventId": "93743ae3-866e-403d-941f-19b3dd1e70b8",
+      "pointerVersionId": "37ddd8fa-aaf1-490f-9528-f3108fd5078d",
+      "mergedKeys": [],
+      "conflictedKeys": [],
+      "conflictRate": null,
+      "autoRebaseSuccess": null,
+      "submitToPublishMs": 886645,
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ],
+      "requestStatus": "succeeded",
+      "submissionStatus": "published",
+      "sessionId": "8ed2b763-b801-465b-a692-6be94394cfb8",
+      "sessionStatus": "closed",
+      "pinned": {
+        "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-3/.timds-artifact.json",
+        "status": 200,
+        "sha256": "68e482b5ccc1c5e4c650a15c38c395bcde790aacf4c492e5506faea14896a106",
+        "stamp": {
+          "schemaVersion": 1,
+          "systemId": "timds/cf-preview-source-proof",
+          "version": "2026.10.13-3",
+          "sourceCommit": "667c573d0caa250f55c3a7d8af41a5e00ed5fb67",
+          "contentDigest": "a9011477a6da5f4b20ff6501e5ebcf85d0df16f8b9ff93f98097e4d41d910a69"
+        }
+      },
+      "authorConflictCount": 0
+    },
+    {
+      "index": 2,
+      "requestId": "fc51da7f-2017-498b-a31b-8e460b5bf412",
+      "submissionId": "636b889e-05ef-4108-8b0a-9005f027e722",
+      "publicationId": "ff6b1798-27b9-400d-ab8c-c6bed16e6ce4",
+      "workflowStatus": "complete",
+      "workflowVersionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "publicationStatus": "published",
+      "stage": "close",
+      "queuePosition": 3,
+      "completedAt": "2026-10-13T14:50:13.510Z",
+      "error": null,
+      "stamp": {
+        "schemaVersion": 1,
+        "systemId": "timds/cf-preview-source-proof",
+        "version": "2026.10.13-4",
+        "sourceCommit": "840e8e50e8672075a385a2da2a996a32e0dba9f7",
+        "contentDigest": "954159166ec0ae0880a2e223ad298dcc485b71dae4f3d21c08085909af3f64b3"
+      },
+      "parentRevision": "667c573d0caa250f55c3a7d8af41a5e00ed5fb67",
+      "pointerEventId": "72697bc3-04ff-4c61-8836-0f64541d9011",
+      "pointerVersionId": "ff6b1798-27b9-400d-ab8c-c6bed16e6ce4",
+      "mergedKeys": [
+        {
+          "path": "tokens/space.json",
+          "key": "host69Proof2"
+        }
+      ],
+      "conflictedKeys": [],
+      "conflictRate": null,
+      "autoRebaseSuccess": null,
+      "submitToPublishMs": 1915102,
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 4
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ],
+      "requestStatus": "succeeded",
+      "submissionStatus": "published",
+      "sessionId": "06e42095-8568-465c-bda9-87bf56330e03",
+      "sessionStatus": "closed",
+      "pinned": {
+        "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-4/.timds-artifact.json",
+        "status": 200,
+        "sha256": "84a936cdb328da100c009b6d0b17d80299cfc20aa26d563f7090cfb8498fe0e4",
+        "stamp": {
+          "schemaVersion": 1,
+          "systemId": "timds/cf-preview-source-proof",
+          "version": "2026.10.13-4",
+          "sourceCommit": "840e8e50e8672075a385a2da2a996a32e0dba9f7",
+          "contentDigest": "954159166ec0ae0880a2e223ad298dcc485b71dae4f3d21c08085909af3f64b3"
+        }
+      },
+      "authorConflictCount": 0
+    },
+    {
+      "index": 3,
+      "requestId": "c005c626-3e34-4516-8b1b-c52922d63873",
+      "submissionId": "a8d9ffc4-967e-464e-a9c8-b04ceadaf20e",
+      "publicationId": "68b84f4a-ab1a-4bec-9adc-7409e96cce75",
+      "workflowStatus": "complete",
+      "workflowVersionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "publicationStatus": "published",
+      "stage": "close",
+      "queuePosition": 4,
+      "completedAt": "2026-10-13T16:17:12.940Z",
+      "error": null,
+      "stamp": {
+        "schemaVersion": 1,
+        "systemId": "timds/cf-preview-source-proof",
+        "version": "2026.10.13-5",
+        "sourceCommit": "5f1df9ba9f1a1a7b49c849c42830015333e1655a",
+        "contentDigest": "31a8cdb1abade6f701065b00cf78e3c5a48f4b3d96b58c5984965fc63ab22a46"
+      },
+      "parentRevision": "840e8e50e8672075a385a2da2a996a32e0dba9f7",
+      "pointerEventId": "acb3c61c-4fe8-4145-b693-3431d9da4d98",
+      "pointerVersionId": "68b84f4a-ab1a-4bec-9adc-7409e96cce75",
+      "mergedKeys": [
+        {
+          "path": "tokens/space.json",
+          "key": "host69Proof3"
+        }
+      ],
+      "conflictedKeys": [],
+      "conflictRate": null,
+      "autoRebaseSuccess": null,
+      "submitToPublishMs": 7022365,
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 5
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 2
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ],
+      "requestStatus": "succeeded",
+      "submissionStatus": "published",
+      "sessionId": "4f4bd66d-97cb-408b-8a31-183205a37911",
+      "sessionStatus": "closed",
+      "pinned": {
+        "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-5/.timds-artifact.json",
+        "status": 200,
+        "sha256": "2e27a8f1cd8cc38cbdc2af0cfeb2eeae88643540d30b430769d8327a5a0b4649",
+        "stamp": {
+          "schemaVersion": 1,
+          "systemId": "timds/cf-preview-source-proof",
+          "version": "2026.10.13-5",
+          "sourceCommit": "5f1df9ba9f1a1a7b49c849c42830015333e1655a",
+          "contentDigest": "31a8cdb1abade6f701065b00cf78e3c5a48f4b3d96b58c5984965fc63ab22a46"
+        }
+      },
+      "authorConflictCount": 0
+    },
+    {
+      "index": 4,
+      "requestId": "e8f826dd-4ca8-49f2-9eb3-8c125a16d21e",
+      "submissionId": "eedbd083-139f-40a5-9017-37187af33ecb",
+      "publicationId": "35551855-ff65-4347-bca5-3768f19a1736",
+      "workflowStatus": "complete",
+      "workflowVersionId": "df619161-dcdc-4d5a-9321-93497cb39b26",
+      "publicationStatus": "published",
+      "stage": "close",
+      "queuePosition": 5,
+      "completedAt": "2026-10-13T16:37:31.183Z",
+      "error": null,
+      "stamp": {
+        "schemaVersion": 1,
+        "systemId": "timds/cf-preview-source-proof",
+        "version": "2026.10.13-6",
+        "sourceCommit": "03e814953a51e076672006a73fb6e5f1060d91bd",
+        "contentDigest": "4054d53f645ba1a4e48c2747f764b5f94c4dbd01d34f6172f5c059b6d7b60061"
+      },
+      "parentRevision": "5f1df9ba9f1a1a7b49c849c42830015333e1655a",
+      "pointerEventId": "2ba06411-85a2-4fd3-a7f6-bf13f965e223",
+      "pointerVersionId": "35551855-ff65-4347-bca5-3768f19a1736",
+      "mergedKeys": [
+        {
+          "path": "tokens/space.json",
+          "key": "host69Proof4"
+        }
+      ],
+      "conflictedKeys": [],
+      "conflictRate": null,
+      "autoRebaseSuccess": null,
+      "submitToPublishMs": 8136417,
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ],
+      "requestStatus": "succeeded",
+      "submissionStatus": "published",
+      "sessionId": "b85f557a-23b4-4535-874f-6153306861ea",
+      "sessionStatus": "closed",
+      "pinned": {
+        "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-6/.timds-artifact.json",
+        "status": 200,
+        "sha256": "88da0f2a3b3aa4ca24be38b48192fffd5c5b41278637adb4d9b9c74ef6cbc518",
+        "stamp": {
+          "schemaVersion": 1,
+          "systemId": "timds/cf-preview-source-proof",
+          "version": "2026.10.13-6",
+          "sourceCommit": "03e814953a51e076672006a73fb6e5f1060d91bd",
+          "contentDigest": "4054d53f645ba1a4e48c2747f764b5f94c4dbd01d34f6172f5c059b6d7b60061"
+        }
+      },
+      "authorConflictCount": 0
+    },
+    {
+      "index": 5,
+      "requestId": "4e70f0e0-9c12-4d0b-b7fe-7fb344297f17",
+      "submissionId": "de04d2cc-cef8-4de1-a7fa-97b06645fbc7",
+      "publicationId": "76881aba-ca8a-4a00-939d-ae91e2aed7a6",
+      "workflowStatus": "complete",
+      "workflowVersionId": "a496534d-a5bd-4189-9eb7-64d8b0c599f6",
+      "publicationStatus": "published",
+      "stage": "close",
+      "queuePosition": 6,
+      "completedAt": "2026-10-13T16:47:17.150Z",
+      "error": null,
+      "stamp": {
+        "schemaVersion": 1,
+        "systemId": "timds/cf-preview-source-proof",
+        "version": "2026.10.13-7",
+        "sourceCommit": "866e1a648b900f7d9924bd10cb68fbf34594f5b7",
+        "contentDigest": "823564a530f73afc92394a9fb2485c3434bf6309f97ef2abafb9dde5fe995dab"
+      },
+      "parentRevision": "03e814953a51e076672006a73fb6e5f1060d91bd",
+      "pointerEventId": "717d9779-ae4c-4a05-9ef6-3cd832d94ea7",
+      "pointerVersionId": "76881aba-ca8a-4a00-939d-ae91e2aed7a6",
+      "mergedKeys": [
+        {
+          "path": "tokens/space.json",
+          "key": "host69Proof5"
+        }
+      ],
+      "conflictedKeys": [],
+      "conflictRate": null,
+      "autoRebaseSuccess": null,
+      "submitToPublishMs": 8623303,
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ],
+      "requestStatus": "succeeded",
+      "submissionStatus": "published",
+      "sessionId": "d728160f-3c90-485b-b0fb-f9a345624b98",
+      "sessionStatus": "closed",
+      "pinned": {
+        "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-7/.timds-artifact.json",
+        "status": 200,
+        "sha256": "5c88fe5a68022af7a1950d96bb256d4edf6615f9d35675f13176058098536ad7",
+        "stamp": {
+          "schemaVersion": 1,
+          "systemId": "timds/cf-preview-source-proof",
+          "version": "2026.10.13-7",
+          "sourceCommit": "866e1a648b900f7d9924bd10cb68fbf34594f5b7",
+          "contentDigest": "823564a530f73afc92394a9fb2485c3434bf6309f97ef2abafb9dde5fe995dab"
+        }
+      },
+      "authorConflictCount": 0
+    },
+    {
+      "index": 6,
+      "requestId": "a15c9d34-b6d5-41c8-8b0d-b16e9cf5470a",
+      "submissionId": "38ba943e-c113-42ab-b427-11725de61797",
+      "publicationId": "6ad333f9-ad32-4f11-92b6-652fc1337011",
+      "workflowStatus": "complete",
+      "workflowVersionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "publicationStatus": "published",
+      "stage": "close",
+      "queuePosition": 7,
+      "completedAt": "2026-10-13T16:55:01.253Z",
+      "error": null,
+      "stamp": {
+        "schemaVersion": 1,
+        "systemId": "timds/cf-preview-source-proof",
+        "version": "2026.10.13-8",
+        "sourceCommit": "0c724b2d6e8cbef9a4dc358a177a1faebe042f26",
+        "contentDigest": "e60f0361254c9e960b60e7b1a82064251375bdb30ee67e2af70dbeb404d5418e"
+      },
+      "parentRevision": "866e1a648b900f7d9924bd10cb68fbf34594f5b7",
+      "pointerEventId": "ea994c8c-b978-4204-ac95-1d9e0ecf29bf",
+      "pointerVersionId": "6ad333f9-ad32-4f11-92b6-652fc1337011",
+      "mergedKeys": [
+        {
+          "path": "tokens/space.json",
+          "key": "host69Proof6"
+        }
+      ],
+      "conflictedKeys": [],
+      "conflictRate": null,
+      "autoRebaseSuccess": null,
+      "submitToPublishMs": 8398874,
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ],
+      "requestStatus": "succeeded",
+      "submissionStatus": "published",
+      "sessionId": "1433f102-d315-4b61-a667-eebc2900d958",
+      "sessionStatus": "closed",
+      "pinned": {
+        "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-8/.timds-artifact.json",
+        "status": 200,
+        "sha256": "1a574bd906e7debf0202a44b9c48bbcf7cfffc984e7429b5d78279d79baac74c",
+        "stamp": {
+          "schemaVersion": 1,
+          "systemId": "timds/cf-preview-source-proof",
+          "version": "2026.10.13-8",
+          "sourceCommit": "0c724b2d6e8cbef9a4dc358a177a1faebe042f26",
+          "contentDigest": "e60f0361254c9e960b60e7b1a82064251375bdb30ee67e2af70dbeb404d5418e"
+        }
+      },
+      "authorConflictCount": 0
+    },
+    {
+      "index": 7,
+      "requestId": "a1a208d2-44a1-4133-bb78-a22f2f90cf8d",
+      "submissionId": "5557dfcc-79b0-4838-a0e2-ff4cc7f253cf",
+      "publicationId": "2f65642a-2e9b-4875-a00b-19c7edd05a63",
+      "workflowStatus": "complete",
+      "workflowVersionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "publicationStatus": "published",
+      "stage": "close",
+      "queuePosition": 8,
+      "completedAt": "2026-10-13T17:05:38.715Z",
+      "error": null,
+      "stamp": {
+        "schemaVersion": 1,
+        "systemId": "timds/cf-preview-source-proof",
+        "version": "2026.10.13-9",
+        "sourceCommit": "6591d817536496319e286d2cdae2232301cb94f5",
+        "contentDigest": "c4c921da4be411f8e9000d638e6650c8e7cb34fd93fe5d4f5a892138157bd921"
+      },
+      "parentRevision": "0c724b2d6e8cbef9a4dc358a177a1faebe042f26",
+      "pointerEventId": "b984fdc5-c18d-4bff-93c5-764de8f4bb62",
+      "pointerVersionId": "2f65642a-2e9b-4875-a00b-19c7edd05a63",
+      "mergedKeys": [
+        {
+          "path": "tokens/space.json",
+          "key": "host69Proof7"
+        }
+      ],
+      "conflictedKeys": [],
+      "conflictRate": null,
+      "autoRebaseSuccess": null,
+      "submitToPublishMs": 9525045,
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ],
+      "requestStatus": "succeeded",
+      "submissionStatus": "published",
+      "sessionId": "075ccd42-a2a0-4114-8b0d-c6627e91c58b",
+      "sessionStatus": "closed",
+      "pinned": {
+        "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-9/.timds-artifact.json",
+        "status": 200,
+        "sha256": "dd85351482a8e5fb7f23643544868f690a7996eb3f2f42eff15563af7b29b61a",
+        "stamp": {
+          "schemaVersion": 1,
+          "systemId": "timds/cf-preview-source-proof",
+          "version": "2026.10.13-9",
+          "sourceCommit": "6591d817536496319e286d2cdae2232301cb94f5",
+          "contentDigest": "c4c921da4be411f8e9000d638e6650c8e7cb34fd93fe5d4f5a892138157bd921"
+        }
+      },
+      "authorConflictCount": 0
+    },
+    {
+      "index": 8,
+      "requestId": "2ce78c9f-2a11-4180-806d-860e64083a42",
+      "submissionId": "d0c19b5a-a704-45a6-ab0a-388e4b121dde",
+      "publicationId": "f779727a-5311-462b-bcca-23135b377f8d",
+      "workflowStatus": "complete",
+      "workflowVersionId": "fa493a5c-c711-474c-b756-4ba75446f269",
+      "publicationStatus": "published",
+      "stage": "close",
+      "queuePosition": 9,
+      "completedAt": "2026-10-13T17:11:21.869Z",
+      "error": null,
+      "stamp": {
+        "schemaVersion": 1,
+        "systemId": "timds/cf-preview-source-proof",
+        "version": "2026.10.13-10",
+        "sourceCommit": "ada0481799e7c932969d2e974b77073b3085d268",
+        "contentDigest": "f228eedbecd65aec2295774609eba3d0c5f44a85d1f26fae0841a151a54bc02b"
+      },
+      "parentRevision": "6591d817536496319e286d2cdae2232301cb94f5",
+      "pointerEventId": "3e17f58c-6faf-49dd-8f31-16aaf6352a48",
+      "pointerVersionId": "f779727a-5311-462b-bcca-23135b377f8d",
+      "mergedKeys": [
+        {
+          "path": "tokens/space.json",
+          "key": "host69Proof8"
+        }
+      ],
+      "conflictedKeys": [],
+      "conflictRate": null,
+      "autoRebaseSuccess": null,
+      "submitToPublishMs": 9972719,
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ],
+      "requestStatus": "succeeded",
+      "submissionStatus": "published",
+      "sessionId": "8ca977c2-736c-48b8-95b0-ec6fb20b330e",
+      "sessionStatus": "closed",
+      "pinned": {
+        "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-10/.timds-artifact.json",
+        "status": 200,
+        "sha256": "76d6d54b8525a4acb280f7e692c20899ca53924294660a4bd78b0fee08f3f3f9",
+        "stamp": {
+          "schemaVersion": 1,
+          "systemId": "timds/cf-preview-source-proof",
+          "version": "2026.10.13-10",
+          "sourceCommit": "ada0481799e7c932969d2e974b77073b3085d268",
+          "contentDigest": "f228eedbecd65aec2295774609eba3d0c5f44a85d1f26fae0841a151a54bc02b"
+        }
+      },
+      "authorConflictCount": 0
+    },
+    {
+      "index": 9,
+      "requestId": "49cd0d2d-9f6b-47a7-997a-a358ea28b050",
+      "submissionId": "8fe5c6c6-130c-4f82-ad00-4268fc350ff0",
+      "publicationId": "5c387a1e-c3a8-4fe4-ad11-ed7d93386dda",
+      "workflowStatus": "complete",
+      "workflowVersionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "publicationStatus": "published",
+      "stage": "close",
+      "queuePosition": 10,
+      "completedAt": "2026-10-13T17:17:21.494Z",
+      "error": null,
+      "stamp": {
+        "schemaVersion": 1,
+        "systemId": "timds/cf-preview-source-proof",
+        "version": "2026.10.13-11",
+        "sourceCommit": "b0a5dab92bdb95d23f9206f67cdcf93a9619b46c",
+        "contentDigest": "6c751446c98de7ed17147ceb1e71745d2b9ef8ea5e29e0cf3e22e80efc71c644"
+      },
+      "parentRevision": "ada0481799e7c932969d2e974b77073b3085d268",
+      "pointerEventId": "d0caaf65-96a9-4260-9c64-eb16b84693e9",
+      "pointerVersionId": "5c387a1e-c3a8-4fe4-ad11-ed7d93386dda",
+      "mergedKeys": [
+        {
+          "path": "tokens/space.json",
+          "key": "host69Proof9"
+        }
+      ],
+      "conflictedKeys": [],
+      "conflictRate": null,
+      "autoRebaseSuccess": null,
+      "submitToPublishMs": 9820845,
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ],
+      "requestStatus": "succeeded",
+      "submissionStatus": "published",
+      "sessionId": "be91dd9c-b9f5-4feb-866e-08ca71b80065",
+      "sessionStatus": "closed",
+      "pinned": {
+        "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-11/.timds-artifact.json",
+        "status": 200,
+        "sha256": "3de8aa10977dc60c146f860894db1a7628f112c4728dbe59d663bf820848b34b",
+        "stamp": {
+          "schemaVersion": 1,
+          "systemId": "timds/cf-preview-source-proof",
+          "version": "2026.10.13-11",
+          "sourceCommit": "b0a5dab92bdb95d23f9206f67cdcf93a9619b46c",
+          "contentDigest": "6c751446c98de7ed17147ceb1e71745d2b9ef8ea5e29e0cf3e22e80efc71c644"
+        }
+      },
+      "authorConflictCount": 0
+    },
+    {
+      "index": 10,
+      "requestId": "e3d52f91-44e2-487f-b4af-81bbbe9fb778",
+      "submissionId": "a91cf3f2-ba1d-44e9-9d21-4a29e0d93f8b",
+      "publicationId": "bb64290f-0ccc-4c2f-b3ee-37958679563f",
+      "workflowStatus": "complete",
+      "workflowVersionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "publicationStatus": "published",
+      "stage": "close",
+      "queuePosition": 11,
+      "completedAt": "2026-10-13T17:23:59.232Z",
+      "error": null,
+      "stamp": {
+        "schemaVersion": 1,
+        "systemId": "timds/cf-preview-source-proof",
+        "version": "2026.10.13-12",
+        "sourceCommit": "7f5242df2bc55e3af1117e906fa154dd66bc53ea",
+        "contentDigest": "38b886af1e97151d2c04cfb4e14c9a8f17007ad58ee20cf9400e0d1617458eeb"
+      },
+      "parentRevision": "b0a5dab92bdb95d23f9206f67cdcf93a9619b46c",
+      "pointerEventId": "84bf161e-1fbb-4a0c-84d0-4ab693f09fe7",
+      "pointerVersionId": "bb64290f-0ccc-4c2f-b3ee-37958679563f",
+      "mergedKeys": [
+        {
+          "path": "tokens/space.json",
+          "key": "host69Proof10"
+        }
+      ],
+      "conflictedKeys": [],
+      "conflictRate": null,
+      "autoRebaseSuccess": null,
+      "submitToPublishMs": 10399769,
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 2
+        }
+      ],
+      "requestStatus": "succeeded",
+      "submissionStatus": "published",
+      "sessionId": "b3f98952-5ba8-4db0-80c2-02fef2889c53",
+      "sessionStatus": "closed",
+      "pinned": {
+        "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/v/2026.10.13-12/.timds-artifact.json",
+        "status": 200,
+        "sha256": "dac2851349801060051c045a69d1bd0062bab7c0be74608f69f220e2abf45be5",
+        "stamp": {
+          "schemaVersion": 1,
+          "systemId": "timds/cf-preview-source-proof",
+          "version": "2026.10.13-12",
+          "sourceCommit": "7f5242df2bc55e3af1117e906fa154dd66bc53ea",
+          "contentDigest": "38b886af1e97151d2c04cfb4e14c9a8f17007ad58ee20cf9400e0d1617458eeb"
+        }
+      },
+      "authorConflictCount": 0
+    }
+  ],
+  "host": "https://timds-host-69.timds.workers.dev",
+  "publicOrigin": "https://timds-host-69-public.timds.workers.dev",
+  "apiCheckedAt": "2026-10-13T17:29:04.939Z",
+  "currentAtBatchCompletion": {
+    "url": "https://timds-host-69-public.timds.workers.dev/systems/timds%2Fcf-preview-source-proof/.timds-artifact.json",
+    "status": 200,
+    "sha256": "dac2851349801060051c045a69d1bd0062bab7c0be74608f69f220e2abf45be5",
+    "stamp": {
+      "schemaVersion": 1,
+      "systemId": "timds/cf-preview-source-proof",
+      "version": "2026.10.13-12",
+      "sourceCommit": "7f5242df2bc55e3af1117e906fa154dd66bc53ea",
+      "contentDigest": "38b886af1e97151d2c04cfb4e14c9a8f17007ad58ee20cf9400e0d1617458eeb"
+    }
+  },
+  "mcp": {
+    "version": "2026.10.13-12",
+    "tools": [
+      "describe_system",
+      "get_tokens",
+      "read_page",
+      "read_derived_layer"
+    ],
+    "proofTokenNames": [
+      "--space-host69proof10",
+      "--space-host69proof1",
+      "--space-host69proof2",
+      "--space-host69proof3",
+      "--space-host69proof4",
+      "--space-host69proof5",
+      "--space-host69proof6",
+      "--space-host69proof7",
+      "--space-host69proof8",
+      "--space-host69proof9"
+    ]
+  },
+  "recoveryActions": [
+    {
+      "at": "2026-10-13T16:24:20.699Z",
+      "index": 4,
+      "publicationId": "35551855-ff65-4347-bca5-3768f19a1736",
+      "action": "resume",
+      "result": {
+        "status": "paused",
+        "timestamp": "2026-10-13T16:24:20.699Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:27:34.265Z",
+      "index": 4,
+      "publicationId": "35551855-ff65-4347-bca5-3768f19a1736",
+      "action": "pause",
+      "result": {
+        "status": "waitingForPause",
+        "timestamp": "2026-10-13T16:27:34.265Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:28:15.513Z",
+      "index": 4,
+      "publicationId": "35551855-ff65-4347-bca5-3768f19a1736",
+      "action": "restart",
+      "result": {
+        "status": "queued",
+        "timestamp": "2026-10-13T16:28:15.513Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:37:56.681Z",
+      "index": 5,
+      "publicationId": "76881aba-ca8a-4a00-939d-ae91e2aed7a6",
+      "action": "resume",
+      "result": {
+        "status": "paused",
+        "timestamp": "2026-10-13T16:37:56.681Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:40:09.870Z",
+      "index": 5,
+      "publicationId": "76881aba-ca8a-4a00-939d-ae91e2aed7a6",
+      "action": "pause",
+      "result": {
+        "status": "waitingForPause",
+        "timestamp": "2026-10-13T16:40:09.870Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:40:58.312Z",
+      "index": 5,
+      "publicationId": "76881aba-ca8a-4a00-939d-ae91e2aed7a6",
+      "action": "restart",
+      "result": {
+        "status": "queued",
+        "timestamp": "2026-10-13T16:40:58.312Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:49:02.988627+00:00",
+      "index": 6,
+      "status": "running",
+      "versionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": null,
+          "attempts": 5
+        },
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T16:49:03.673932+00:00",
+      "index": 6,
+      "publicationId": "6ad333f9-ad32-4f11-92b6-652fc1337011",
+      "action": "pause",
+      "result": {
+        "status": "waitingForPause",
+        "timestamp": "2026-10-13T16:49:03.615Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:49:07.176371+00:00",
+      "index": 6,
+      "publicationId": "6ad333f9-ad32-4f11-92b6-652fc1337011",
+      "action": "restart",
+      "result": {
+        "status": "queued",
+        "timestamp": "2026-10-13T16:49:07.113Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:49:27.829524+00:00",
+      "index": 6,
+      "status": "running",
+      "versionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T16:51:30.993068+00:00",
+      "index": 6,
+      "status": "running",
+      "versionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T16:52:52.734337+00:00",
+      "index": 6,
+      "status": "running",
+      "versionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T16:54:55.432491+00:00",
+      "index": 6,
+      "status": "running",
+      "versionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T16:55:15.904314+00:00",
+      "index": 6,
+      "status": "complete",
+      "versionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T16:58:04.053403+00:00",
+      "index": 6,
+      "publicationId": "6ad333f9-ad32-4f11-92b6-652fc1337011",
+      "complete": true,
+      "version": "2026.10.13-8",
+      "completedAt": "2026-10-13T16:55:01.253Z"
+    },
+    {
+      "at": "2026-10-13T16:58:05.588412+00:00",
+      "index": 7,
+      "publicationId": "2f65642a-2e9b-4875-a00b-19c7edd05a63",
+      "action": "resume",
+      "result": {
+        "status": "paused",
+        "timestamp": "2026-10-13T16:58:05.542Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:58:06.015606+00:00",
+      "index": 7,
+      "status": "paused",
+      "versionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": null,
+          "attempts": 5
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T16:58:26.569395+00:00",
+      "index": 7,
+      "status": "running",
+      "versionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": null,
+          "attempts": 5
+        },
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T16:58:27.275454+00:00",
+      "index": 7,
+      "publicationId": "2f65642a-2e9b-4875-a00b-19c7edd05a63",
+      "action": "pause",
+      "result": {
+        "status": "waitingForPause",
+        "timestamp": "2026-10-13T16:58:27.223Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:58:30.378658+00:00",
+      "index": 7,
+      "publicationId": "2f65642a-2e9b-4875-a00b-19c7edd05a63",
+      "action": "restart",
+      "result": {
+        "status": "queued",
+        "timestamp": "2026-10-13T16:58:30.324Z"
+      }
+    },
+    {
+      "at": "2026-10-13T16:58:50.934711+00:00",
+      "index": 7,
+      "status": "running",
+      "versionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:00:33.682543+00:00",
+      "index": 7,
+      "status": "running",
+      "versionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:01:55.518667+00:00",
+      "index": 7,
+      "status": "running",
+      "versionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:02:56.964410+00:00",
+      "index": 7,
+      "status": "running",
+      "versionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:05:40.944868+00:00",
+      "index": 7,
+      "status": "complete",
+      "versionId": "307f4df9-4db0-4f83-b03e-fabe89bee5fe",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:05:42.243245+00:00",
+      "index": 7,
+      "publicationId": "2f65642a-2e9b-4875-a00b-19c7edd05a63",
+      "complete": true,
+      "version": "2026.10.13-9",
+      "completedAt": "2026-10-13T17:05:38.715Z"
+    },
+    {
+      "at": "2026-10-13T17:05:43.671372+00:00",
+      "index": 8,
+      "publicationId": "f779727a-5311-462b-bcca-23135b377f8d",
+      "action": "resume",
+      "result": {
+        "status": "paused",
+        "timestamp": "2026-10-13T17:05:43.643Z"
+      }
+    },
+    {
+      "at": "2026-10-13T17:05:44.145917+00:00",
+      "index": 8,
+      "status": "paused",
+      "versionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": null,
+          "attempts": 5
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:06:04.633052+00:00",
+      "index": 8,
+      "status": "running",
+      "versionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": null,
+          "attempts": 5
+        },
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:06:05.114276+00:00",
+      "index": 8,
+      "publicationId": "f779727a-5311-462b-bcca-23135b377f8d",
+      "action": "pause",
+      "result": {
+        "status": "waitingForPause",
+        "timestamp": "2026-10-13T17:06:05.089Z"
+      }
+    },
+    {
+      "at": "2026-10-13T17:06:08.171655+00:00",
+      "index": 8,
+      "publicationId": "f779727a-5311-462b-bcca-23135b377f8d",
+      "action": "restart",
+      "result": {
+        "status": "queued",
+        "timestamp": "2026-10-13T17:06:08.142Z"
+      }
+    },
+    {
+      "at": "2026-10-13T17:06:28.636558+00:00",
+      "index": 8,
+      "status": "running",
+      "versionId": "fa493a5c-c711-474c-b756-4ba75446f269",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:07:50.842827+00:00",
+      "index": 8,
+      "status": "running",
+      "versionId": "fa493a5c-c711-474c-b756-4ba75446f269",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:09:12.815861+00:00",
+      "index": 8,
+      "status": "running",
+      "versionId": "fa493a5c-c711-474c-b756-4ba75446f269",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:11:15.977738+00:00",
+      "index": 8,
+      "status": "running",
+      "versionId": "fa493a5c-c711-474c-b756-4ba75446f269",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:11:36.448178+00:00",
+      "index": 8,
+      "status": "complete",
+      "versionId": "fa493a5c-c711-474c-b756-4ba75446f269",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:11:37.900108+00:00",
+      "index": 8,
+      "publicationId": "f779727a-5311-462b-bcca-23135b377f8d",
+      "complete": true,
+      "version": "2026.10.13-10",
+      "completedAt": "2026-10-13T17:11:21.869Z"
+    },
+    {
+      "at": "2026-10-13T17:11:39.811536+00:00",
+      "index": 9,
+      "publicationId": "5c387a1e-c3a8-4fe4-ad11-ed7d93386dda",
+      "action": "resume",
+      "result": {
+        "status": "paused",
+        "timestamp": "2026-10-13T17:11:39.784Z"
+      }
+    },
+    {
+      "at": "2026-10-13T17:11:40.264419+00:00",
+      "index": 9,
+      "status": "paused",
+      "versionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": null,
+          "attempts": 5
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:12:00.728748+00:00",
+      "index": 9,
+      "status": "running",
+      "versionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": null,
+          "attempts": 5
+        },
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:12:01.485352+00:00",
+      "index": 9,
+      "publicationId": "5c387a1e-c3a8-4fe4-ad11-ed7d93386dda",
+      "action": "pause",
+      "result": {
+        "status": "waitingForPause",
+        "timestamp": "2026-10-13T17:12:01.440Z"
+      }
+    },
+    {
+      "at": "2026-10-13T17:12:04.780980+00:00",
+      "index": 9,
+      "publicationId": "5c387a1e-c3a8-4fe4-ad11-ed7d93386dda",
+      "action": "restart",
+      "result": {
+        "status": "queued",
+        "timestamp": "2026-10-13T17:12:04.746Z"
+      }
+    },
+    {
+      "at": "2026-10-13T17:12:25.271341+00:00",
+      "index": 9,
+      "status": "running",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:14:07.746866+00:00",
+      "index": 9,
+      "status": "running",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:15:09.467042+00:00",
+      "index": 9,
+      "status": "running",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:15:30.025339+00:00",
+      "index": 9,
+      "status": "running",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:17:12.486158+00:00",
+      "index": 9,
+      "status": "running",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:17:33.330791+00:00",
+      "index": 9,
+      "status": "complete",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:17:34.928342+00:00",
+      "index": 9,
+      "publicationId": "5c387a1e-c3a8-4fe4-ad11-ed7d93386dda",
+      "complete": true,
+      "version": "2026.10.13-11",
+      "completedAt": "2026-10-13T17:17:21.494Z"
+    },
+    {
+      "at": "2026-10-13T17:17:36.539397+00:00",
+      "index": 10,
+      "publicationId": "bb64290f-0ccc-4c2f-b3ee-37958679563f",
+      "action": "resume",
+      "result": {
+        "status": "paused",
+        "timestamp": "2026-10-13T17:17:36.500Z"
+      }
+    },
+    {
+      "at": "2026-10-13T17:17:37.011587+00:00",
+      "index": 10,
+      "status": "paused",
+      "versionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": null,
+          "attempts": 5
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:17:57.525023+00:00",
+      "index": 10,
+      "status": "running",
+      "versionId": "c7972a8e-12e6-4145-ac23-adb5531444ac",
+      "steps": [
+        {
+          "name": "preflight-1",
+          "success": null,
+          "attempts": 5
+        },
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:17:58.310795+00:00",
+      "index": 10,
+      "publicationId": "bb64290f-0ccc-4c2f-b3ee-37958679563f",
+      "action": "pause",
+      "result": {
+        "status": "waitingForPause",
+        "timestamp": "2026-10-13T17:17:58.243Z"
+      }
+    },
+    {
+      "at": "2026-10-13T17:18:02.095090+00:00",
+      "index": 10,
+      "publicationId": "bb64290f-0ccc-4c2f-b3ee-37958679563f",
+      "action": "restart",
+      "result": {
+        "status": "queued",
+        "timestamp": "2026-10-13T17:18:02.041Z"
+      }
+    },
+    {
+      "at": "2026-10-13T17:18:22.582528+00:00",
+      "index": 10,
+      "status": "running",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:19:44.496835+00:00",
+      "index": 10,
+      "status": "running",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:21:07.418684+00:00",
+      "index": 10,
+      "status": "running",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:21:27.901353+00:00",
+      "index": 10,
+      "status": "running",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:23:52.055355+00:00",
+      "index": 10,
+      "status": "running",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": null,
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:28:55.123690+00:00",
+      "index": 10,
+      "status": "complete",
+      "versionId": "9deb32a9-ac23-492e-ad4f-23cad6bb5bb7",
+      "steps": [
+        {
+          "name": "preflight:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "preflight-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "merge-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "build-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "prepare-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "release-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "flip-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close:queue:0-1",
+          "success": true,
+          "attempts": 1
+        },
+        {
+          "name": "close-1",
+          "success": true,
+          "attempts": 2
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T17:28:56.551841+00:00",
+      "index": 10,
+      "publicationId": "bb64290f-0ccc-4c2f-b3ee-37958679563f",
+      "complete": true,
+      "version": "2026.10.13-12",
+      "completedAt": "2026-10-13T17:23:59.232Z"
+    },
+    {
+      "at": "2026-10-13T17:28:56.552013+00:00",
+      "batchId": "7fcba971-c7d9-4ed3-9d10-5b64f5ebd27a",
+      "allOriginalPublicationsComplete": true
+    }
+  ],
+  "limitations": {
+    "leaseVerification": "No direct SQL lease read; predecessor completed, provider paused with ended attempts, binding queue readiness true, and atomic claim rechecks enforced by deployed host.",
+    "metrics": "conflictRate and autoRebaseSuccess persisted as null; observed conflict counts and merge checkpoint keys are retained, not invented metric values.",
+    "latency": "submitToPublishMs includes operator pauses, deployments and provider delays; not a throughput benchmark."
+  },
+  "lastCloseReceipt": {
+    "name": "close-1",
+    "start": "2026-10-13T17:23:41.473Z",
+    "end": "2026-10-13T17:28:38.937Z",
+    "success": true,
+    "attempts": [
+      {
+        "start": "2026-10-13T17:23:41.473Z",
+        "end": "2026-10-13T17:28:38.815Z",
+        "success": false,
+        "error": {
+          "name": "WorkflowInternalError",
+          "message": "Attempt failed due to internal workflows error"
+        }
+      },
+      {
+        "start": "2026-10-13T17:28:38.815Z",
+        "end": "2026-10-13T17:28:38.937Z",
+        "success": true,
+        "error": null
+      }
+    ]
+  }
+}

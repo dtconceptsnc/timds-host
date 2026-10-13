@@ -1,0 +1,78 @@
+name: Disposable host conformance
+
+on:
+  workflow_dispatch:
+    inputs:
+      host_url:
+        description: Explicit reachable host origin, without path or credentials
+        required: true
+        type: string
+      fixture_source_id:
+        description: UUID of a dedicated disposable source named TimDS conformance
+        required: true
+        type: string
+      fixture_system_id:
+        description: Exact immutable system ID of that disposable source
+        required: true
+        type: string
+      member_principal_id:
+        description: UUID of the distinct member identity matching the member secret
+        required: true
+        type: string
+      disposable_write_acknowledgement:
+        description: Enter the exact source UUID, colon, then system ID to authorize fixture writes
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Never interrupt an accepted publication because another run was dispatched.
+concurrency:
+  group: host-conformance-${{ inputs.fixture_source_id }}
+  cancel-in-progress: false
+
+jobs:
+  conformance:
+    name: Explicit disposable host lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      TIMDS_HOST_URL: ${{ inputs.host_url }}
+      TIMDS_FIXTURE_SOURCE_ID: ${{ inputs.fixture_source_id }}
+      TIMDS_FIXTURE_SYSTEM_ID: ${{ inputs.fixture_system_id }}
+      TIMDS_MEMBER_PRINCIPAL_ID: ${{ inputs.member_principal_id }}
+      TIMDS_ALLOW_DISPOSABLE_WRITES: ${{ inputs.disposable_write_acknowledgement }}
+      TIMDS_CONFORMANCE_TIMEOUT_MS: '900000'
+    defaults:
+      run:
+        working-directory: conformance
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.18.0
+          package-manager-cache: false
+      - name: Validate explicit target and required credentials before installation
+        env:
+          TIMDS_ACCESS_TOKEN: ${{ secrets.TIMDS_CONFORMANCE_OWNER_TOKEN }}
+          TIMDS_MEMBER_ACCESS_TOKEN: ${{ secrets.TIMDS_CONFORMANCE_MEMBER_TOKEN }}
+        run: node --input-type=module -e 'import { readConfiguration } from "./config.mjs"; readConfiguration(); console.log("Explicit fixture configuration validated.");'
+      - run: npm ci --ignore-scripts
+      - name: Exercise the real host contract
+        env:
+          TIMDS_ACCESS_TOKEN: ${{ secrets.TIMDS_CONFORMANCE_OWNER_TOKEN }}
+          TIMDS_MEMBER_ACCESS_TOKEN: ${{ secrets.TIMDS_CONFORMANCE_MEMBER_TOKEN }}
+        run: npm run test:host
+      - name: Save only redacted conformance evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: host-conformance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: conformance/artifacts/*.json
+          if-no-files-found: warn
+          retention-days: 7

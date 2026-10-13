@@ -1,0 +1,11 @@
+import { readFile } from 'node:fs/promises';
+const base = new URL(process.argv[2] || 'http://127.0.0.1:8796');
+if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password) throw new Error('Expected an HTTP(S) Worker URL without embedded credentials.');
+const vars = await readFile(new URL('../.dev.vars', import.meta.url), 'utf8');
+const token = vars.match(/^PROBE_TOKEN=([a-f0-9]{64})$/m)?.[1];
+if (!token) throw new Error('Run npm run setup-token first.');
+const response = await fetch(new URL('/probe', base), { method: 'POST', headers: { Authorization: `Bearer ${token}` }, redirect: 'error', signal: AbortSignal.timeout(90_000) });
+if (!response.ok) throw new Error(`Probe failed with HTTP ${response.status}`);
+const result = await response.json();
+if (!/^git version \d+\.\d+/.test(result.gitVersion) || !/^[a-f0-9]{40}$/.test(result.commit) || result.r2 !== result.commit || result.d1?.healthy !== 1 || result.queue !== 'sent' || result.artifacts !== 'cloned and pushed') throw new Error('Probe response did not satisfy the acceptance checks.');
+console.log(JSON.stringify(result, null, 2));

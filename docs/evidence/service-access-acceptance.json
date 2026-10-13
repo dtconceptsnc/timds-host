@@ -1,0 +1,14 @@
+{
+  "checkedAt": "2026-10-13T12:46:00Z",
+  "hostOrigin": "https://timds-host-69.ratebucket.workers.dev",
+  "sourceId": "6ffb48ea-862e-42de-9303-5edcbe8829d5",
+  "principalId": "98af0be4-adaa-4b33-ac09-b01607320df6",
+  "flow": "Existing dedicated Access service credential exchanged at /service-auth; signed assertion used directly against the deployed host API",
+  "serviceAuthenticationStatus": 200,
+  "sourceReadBeforeGrantStatus": 403,
+  "adminAuthorityGrantStatus": 200,
+  "sourceReadAfterGrantStatus": 200,
+  "canPublishAfterGrant": true,
+  "scope": "Disposable host acceptance source only",
+  "limitations": "This proves service identity and live D1 grant enforcement. Publication and production source migration are not yet accepted."
+}

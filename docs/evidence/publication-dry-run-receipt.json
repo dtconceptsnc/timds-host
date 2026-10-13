@@ -1,0 +1,27 @@
+{
+  "recordedAt": "2026-10-13",
+  "host": "https://timds-host-69.ratebucket.workers.dev",
+  "deploymentId": "a8107924-c424-4dde-bc31-c6f2663a9b3a",
+  "sourceId": "6ffb48ea-862e-42de-9303-5edcbe8829d5",
+  "httpStatus": 200,
+  "durationMs": 198481,
+  "preflight": {
+    "systemId": "timds/cf-preview-source-proof",
+    "submissionId": "189cf3bd-5082-4c9e-8a47-f74094139f83",
+    "sessionId": "e0dc69fe-cd08-4cd2-90b2-73096ed4a1ea",
+    "version": "2026.10.13-2",
+    "previewUrl": "https://review-189cf3bd50824c9e-timds-6ffb48ea862e42de93035edcbe8829d5.ratebucket.workers.dev/",
+    "diffSummary": {
+      "files": 3,
+      "addedLines": 4,
+      "removedLines": 2
+    },
+    "currency": "clean",
+    "autoRebased": false,
+    "mainRevision": "08bbc06409ca1a6ef9f27828151b4479c8c58b4e",
+    "dryRun": true,
+    "buildChecked": true,
+    "apiVersion": 1
+  },
+  "published": false
+}

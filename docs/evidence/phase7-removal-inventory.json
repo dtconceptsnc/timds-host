@@ -1,0 +1,1444 @@
+{
+  "recordedAt": "2026-10-13T13:41:47.514657+00:00",
+  "repository": "dtconceptsnc/toperator",
+  "checkoutHead": "22430b85a4c68dde0311714053929fe4756d8c85",
+  "scope": "Read-only candidate/dependency inventory; not a deletion manifest. Test files excluded from importer listing; no tests run. Local uncommitted changes may be present.",
+  "modules": [
+    {
+      "path": "server/design-system-session-repository.mjs",
+      "exports": [
+        {
+          "name": "sessionFilePath",
+          "line": 5
+        },
+        {
+          "name": "parseSessionResolution",
+          "line": 12
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/design-system-sessions.mjs",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-repository-rpc.mjs",
+      "exports": [
+        {
+          "name": "createDesignSystemRepositoryRpc",
+          "line": 6
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 17
+        },
+        {
+          "path": "server/design-system-session-repository.mjs",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-sessions.mjs",
+      "exports": [
+        {
+          "name": "TIMDS_HOST_API_VERSION",
+          "line": 6
+        },
+        {
+          "name": "TIMDS_SESSION_TTL_MS",
+          "line": 7
+        },
+        {
+          "name": "TIMDS_CHANGESET_MAX_BYTES",
+          "line": 8
+        },
+        {
+          "name": "requireTimdsSessionActor",
+          "line": 12
+        },
+        {
+          "name": "validateTimdsChangeSet",
+          "line": 19
+        },
+        {
+          "name": "timdsSessionView",
+          "line": 56
+        },
+        {
+          "name": "timdsSubmissionView",
+          "line": 57
+        },
+        {
+          "name": "createDesignSystemSessions",
+          "line": 59
+        },
+        {
+          "name": "createDesignSystemSessionsRouter",
+          "line": 284
+        },
+        {
+          "name": "tokensCssFromSnapshot",
+          "line": 329
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/design-system-designer-requests.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 26
+        },
+        {
+          "path": "server/design-system-submissions-admin.mjs",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-collaboration-store.mjs",
+      "exports": [
+        {
+          "name": "createDesignSystemCollaborationStore",
+          "line": 17
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/design-system-public-roots.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/design-system-designer-requests.mjs",
+          "line": 2
+        },
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/design-system-submission-publish.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/design-system-lifecycle-adapters.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/design-system-lifecycle.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/design-system-sessions.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/design-system-submissions-admin.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/design-system-authorization.mjs",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-designer.mjs",
+      "exports": [
+        {
+          "name": "requireDesignerRunner",
+          "line": 5
+        },
+        {
+          "name": "createAgentForkSubscriptions",
+          "line": 12
+        },
+        {
+          "name": "createDesignSystemDesigner",
+          "line": 60
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 22
+        },
+        {
+          "path": "server/design-system-live-sessions.mjs",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-designer-requests.mjs",
+      "exports": [
+        {
+          "name": "createDesignSystemDesignerRequests",
+          "line": 9
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-live-sessions.mjs",
+      "exports": [
+        {
+          "name": "liveWorkerName",
+          "line": 5
+        },
+        {
+          "name": "createLivePreviewHosts",
+          "line": 10
+        },
+        {
+          "name": "createDesignSystemLiveSessions",
+          "line": 49
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 24
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-previews.mjs",
+      "exports": [
+        {
+          "name": "designSystemPreviewWorker",
+          "line": 10
+        },
+        {
+          "name": "designSystemPreviewPath",
+          "line": 14
+        },
+        {
+          "name": "designSystemWranglerBinary",
+          "line": 23
+        },
+        {
+          "name": "createDesignSystemPreviewAdapter",
+          "line": 43
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 18
+        },
+        {
+          "path": "server/migrate-design-system-artifacts.mjs",
+          "line": 13
+        },
+        {
+          "path": "server/design-system-live-sessions.mjs",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-submissions-admin.mjs",
+      "exports": [
+        {
+          "name": "createDesignSystemSubmissionsAdmin",
+          "line": 14
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-submission-publish.mjs",
+      "exports": [
+        {
+          "name": "submissionPublicationView",
+          "line": 10
+        },
+        {
+          "name": "createDesignSystemSubmissionPublisher",
+          "line": 14
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 20
+        },
+        {
+          "path": "server/design-system-submissions-admin.mjs",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-submission-publish-worker.mjs",
+      "exports": [
+        {
+          "name": "TIMDS_PUBLICATION_TOOLKIT_VERSION",
+          "line": 10
+        },
+        {
+          "name": "loadPublicationToolkit",
+          "line": 30
+        },
+        {
+          "name": "readPublicationArtifact",
+          "line": 46
+        },
+        {
+          "name": "buildDesignSystemSubmission",
+          "line": 65
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/design-system-submission-publish.mjs",
+          "line": 2
+        },
+        {
+          "path": "server/design-system-draft-read.mjs",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-publication-steps.mjs",
+      "exports": [
+        {
+          "name": "PUBLICATION_STEP_CONTRACTS",
+          "line": 9
+        },
+        {
+          "name": "createDesignSystemPublicationSteps",
+          "line": 22
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/design-system-submission-publish.mjs",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-publication-artifacts.mjs",
+      "exports": [
+        {
+          "name": "createPublicationArtifactStore",
+          "line": 7
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/design-system-submission-publish.mjs",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-submission-artifact.mjs",
+      "exports": [
+        {
+          "name": "writeSubmissionPublicationArtifact",
+          "line": 9
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-cli-publish.mjs",
+      "exports": [
+        {
+          "name": "TIMDS_PUBLISH_ROUTE",
+          "line": 4
+        },
+        {
+          "name": "normalizeTimdsPublishStamp",
+          "line": 12
+        },
+        {
+          "name": "assertTimdsPublishStamp",
+          "line": 27
+        },
+        {
+          "name": "createTimdsPublishHandler",
+          "line": 33
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 144
+        },
+        {
+          "path": "server/design-system-source-sync.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/design-system-submission-artifact.mjs",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-public-read.mjs",
+      "exports": [
+        {
+          "name": "createAnonymousPublicReadFetch",
+          "line": 13
+        },
+        {
+          "name": "fetchAnonymousPublicRead",
+          "line": 32
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/design-system-publication-steps.mjs",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-rollback.mjs",
+      "exports": [
+        {
+          "name": "createDesignSystemRollbackRouter",
+          "line": 7
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-source-sync.mjs",
+      "exports": [
+        {
+          "name": "createDesignSystemSourceSync",
+          "line": 4
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 145
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-sync-scheduler.mjs",
+      "exports": [
+        {
+          "name": "DESIGN_SYSTEM_SYNC_INTERVAL_MS",
+          "line": 3
+        },
+        {
+          "name": "designSystemShouldAutoPublish",
+          "line": 5
+        },
+        {
+          "name": "createDesignSystemSyncLock",
+          "line": 20
+        },
+        {
+          "name": "createDesignSystemSyncScheduler",
+          "line": 31
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "path": "server/run-design-system-sync.mjs",
+      "exports": [],
+      "directServerImporters": []
+    },
+    {
+      "path": "server/run-design-system-session-cleanup.mjs",
+      "exports": [],
+      "directServerImporters": []
+    },
+    {
+      "path": "server/timds-draft-runner.mjs",
+      "exports": [
+        {
+          "name": "DRAFT_COMMIT_AUTHOR",
+          "line": 43
+        },
+        {
+          "name": "DEFAULT_DRAFTS_ROOT",
+          "line": 56
+        },
+        {
+          "name": "DRAFT_BUILD_IMAGE",
+          "line": 57
+        },
+        {
+          "name": "DRAFT_CONTAINER_TIMEOUT_MS",
+          "line": 58
+        },
+        {
+          "name": "parseBuildNetwork",
+          "line": 79
+        },
+        {
+          "name": "draftRunnerConfig",
+          "line": 103
+        },
+        {
+          "name": "draftSourcePaths",
+          "line": 139
+        },
+        {
+          "name": "draftBranchName",
+          "line": 170
+        },
+        {
+          "name": "compactCheckReport",
+          "line": 182
+        },
+        {
+          "name": "createDraftPortalClient",
+          "line": 210
+        },
+        {
+          "name": "loadDraftToolkit",
+          "line": 277
+        },
+        {
+          "name": "NODE_MODULES_VOLUME_PREFIX",
+          "line": 361
+        },
+        {
+          "name": "nodeModulesVolumeKey",
+          "line": 373
+        },
+        {
+          "name": "nodeModulesVolumeName",
+          "line": 377
+        },
+        {
+          "name": "draftDependencySets",
+          "line": 387
+        },
+        {
+          "name": "createSerialQueue",
+          "line": 408
+        },
+        {
+          "name": "hostContainerQueue",
+          "line": 426
+        },
+        {
+          "name": "runDockerContainer",
+          "line": 435
+        },
+        {
+          "name": "parseContainerCheckOutput",
+          "line": 510
+        },
+        {
+          "name": "createHostExecutor",
+          "line": 549
+        },
+        {
+          "name": "createDockerExecutor",
+          "line": 602
+        },
+        {
+          "name": "createDraftExecutor",
+          "line": 782
+        },
+        {
+          "name": "pruneDraftRuntime",
+          "line": 797
+        },
+        {
+          "name": "createDraftRunner",
+          "line": 906
+        },
+        {
+          "name": "runTimdsDraftRunner",
+          "line": 1701
+        }
+      ],
+      "directServerImporters": []
+    },
+    {
+      "path": "server/design-system-drafts.mjs",
+      "exports": [
+        {
+          "name": "DRAFT_SHARE_TTL_MS",
+          "line": 21
+        },
+        {
+          "name": "DRAFT_ARTIFACT_LIMITS",
+          "line": 22
+        },
+        {
+          "name": "DRAFT_BUILD_METADATA_HEADER",
+          "line": 27
+        },
+        {
+          "name": "DRAFT_STATUSES",
+          "line": 28
+        },
+        {
+          "name": "DRAFT_BUILD_STATUSES",
+          "line": 29
+        },
+        {
+          "name": "DRAFT_CHECK_STATUSES",
+          "line": 30
+        },
+        {
+          "name": "isUuid",
+          "line": 41
+        },
+        {
+          "name": "isValidDraftBranch",
+          "line": 57
+        },
+        {
+          "name": "signDraftShareToken",
+          "line": 67
+        },
+        {
+          "name": "verifyDraftShareToken",
+          "line": 77
+        },
+        {
+          "name": "draftPreviewUrl",
+          "line": 94
+        },
+        {
+          "name": "draftContentDigest",
+          "line": 105
+        },
+        {
+          "name": "scanDraftBuildArchive",
+          "line": 167
+        },
+        {
+          "name": "collectDraftBuildFiles",
+          "line": 225
+        },
+        {
+          "name": "parseDraftBuildMetadata",
+          "line": 264
+        },
+        {
+          "name": "normalizeCheckReport",
+          "line": 292
+        },
+        {
+          "name": "normalizeDraftChanges",
+          "line": 300
+        },
+        {
+          "name": "mergeDraftChanges",
+          "line": 311
+        },
+        {
+          "name": "viewerDraftChanges",
+          "line": 317
+        },
+        {
+          "name": "viewerDraftBuild",
+          "line": 324
+        },
+        {
+          "name": "viewerDraftRecord",
+          "line": 352
+        },
+        {
+          "name": "designSystemDraftViewerRoute",
+          "line": 371
+        },
+        {
+          "name": "designSystemDraftInternalRoute",
+          "line": 386
+        },
+        {
+          "name": "isTimdsMcpRoute",
+          "line": 401
+        },
+        {
+          "name": "isRetiredDesignSystemDraftRoute",
+          "line": 406
+        },
+        {
+          "name": "draftRunnerProxyHeaders",
+          "line": 432
+        },
+        {
+          "name": "draftRunnerProxyResponseHeaders",
+          "line": 453
+        },
+        {
+          "name": "receiveDraftBuildArchive",
+          "line": 502
+        },
+        {
+          "name": "createDesignSystemDraftHandlers",
+          "line": 547
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/design-system-consumer-previews.mjs",
+          "line": 39
+        },
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 129
+        },
+        {
+          "path": "server/design-system-read-mcp.mjs",
+          "line": 32
+        },
+        {
+          "path": "server/design-system-consumer-review.mjs",
+          "line": 30
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-draft-read.mjs",
+      "exports": [
+        {
+          "name": "createDesignSystemDraftReader",
+          "line": 8
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 6
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-lifecycle.mjs",
+      "exports": [
+        {
+          "name": "DESIGN_SYSTEM_LIFECYCLE_JOB_TYPES",
+          "line": 5
+        },
+        {
+          "name": "SITE_PROVISION_JOB_TYPE",
+          "line": 6
+        },
+        {
+          "name": "SITE_SCAFFOLD_MINIMUM_PATCH",
+          "line": 9
+        },
+        {
+          "name": "SITE_ACTIONS_MINIMUM_PATCH",
+          "line": 11
+        },
+        {
+          "name": "SITE_PUBLISHED_MINIMUM_PATCH",
+          "line": 12
+        },
+        {
+          "name": "SITE_PLATFORMS",
+          "line": 13
+        },
+        {
+          "name": "LIFECYCLE_STAGES",
+          "line": 14
+        },
+        {
+          "name": "lifecycleError",
+          "line": 20
+        },
+        {
+          "name": "lifecycleHash",
+          "line": 21
+        },
+        {
+          "name": "suggestedDesignSystemRepository",
+          "line": 22
+        },
+        {
+          "name": "suggestedSiteRepository",
+          "line": 25
+        },
+        {
+          "name": "normalizeSiteInput",
+          "line": 29
+        },
+        {
+          "name": "normalizeProvisioningInput",
+          "line": 56
+        },
+        {
+          "name": "assertLifecycleGitHubPermissions",
+          "line": 69
+        },
+        {
+          "name": "verifyOperationRepository",
+          "line": 75
+        },
+        {
+          "name": "validateSiteScaffoldResult",
+          "line": 107
+        },
+        {
+          "name": "validateScaffoldResult",
+          "line": 131
+        },
+        {
+          "name": "lifecycleOperationView",
+          "line": 147
+        },
+        {
+          "name": "createDesignSystemLifecycle",
+          "line": 166
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/site-actions-provisioning.mjs",
+          "line": 4
+        },
+        {
+          "path": "server/design-system-unused-worker.mjs",
+          "line": 3
+        },
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 14
+        },
+        {
+          "path": "server/design-system-toolkit-version.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/design-system-lifecycle-adapters.mjs",
+          "line": 4
+        },
+        {
+          "path": "server/design-system-lifecycle-cleanup.mjs",
+          "line": 5
+        },
+        {
+          "path": "server/design-system-admin.mjs",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-lifecycle-adapters.mjs",
+      "exports": [
+        {
+          "name": "createPortalDesignSystemLifecycleAdapters",
+          "line": 9
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 15
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-lifecycle-worker.mjs",
+      "exports": [
+        {
+          "name": "scaffoldProgram",
+          "line": 14
+        },
+        {
+          "name": "generateLifecycleScaffold",
+          "line": 150
+        },
+        {
+          "name": "dispatchDesignSystemLifecycleJob",
+          "line": 177
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/run-execution-jobs.mjs",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-lifecycle-cleanup.mjs",
+      "exports": [
+        {
+          "name": "lifecycleStoragePrefixes",
+          "line": 7
+        },
+        {
+          "name": "createDesignSystemLifecycleCleanup",
+          "line": 16
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/design-system-lifecycle-adapters.mjs",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-unused-worker.mjs",
+      "exports": [
+        {
+          "name": "unusedWorkerInspectionScript",
+          "line": 7
+        },
+        {
+          "name": "createUnusedWorkerSourceVerifier",
+          "line": 70
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 27
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-artifacts-adapter.mjs",
+      "exports": [
+        {
+          "name": "createDesignSystemArtifactsAdapter",
+          "line": 8
+        },
+        {
+          "name": "artifactsGitEnvironment",
+          "line": 73
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 16
+        },
+        {
+          "path": "server/migrate-design-system-artifacts.mjs",
+          "line": 12
+        },
+        {
+          "path": "server/spike-design-system-artifacts.mjs",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-artifacts.mjs",
+      "exports": [
+        {
+          "name": "normalizeDesignSystemArtifactPath",
+          "line": 14
+        },
+        {
+          "name": "designSystemArtifactDirectory",
+          "line": 36
+        },
+        {
+          "name": "designSystemArtifactAccessBlocked",
+          "line": 48
+        },
+        {
+          "name": "blockDesignSystemArtifactWrites",
+          "line": 51
+        },
+        {
+          "name": "writeDesignSystemArtifact",
+          "line": 57
+        },
+        {
+          "name": "readDesignSystemArtifactMetadata",
+          "line": 108
+        },
+        {
+          "name": "resolveDesignSystemArtifactFile",
+          "line": 128
+        },
+        {
+          "name": "DESIGN_SYSTEM_VIEWER_SANDBOX",
+          "line": 157
+        },
+        {
+          "name": "DESIGN_SYSTEM_VIEWER_CONTENT_SECURITY_POLICY",
+          "line": 159
+        },
+        {
+          "name": "designSystemArtifactContentType",
+          "line": 173
+        },
+        {
+          "name": "rewriteDesignSystemArtifactText",
+          "line": 201
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/design-system-consumer-previews.mjs",
+          "line": 29
+        },
+        {
+          "path": "server/design-system-cli-publish.mjs",
+          "line": 1
+        },
+        {
+          "path": "server/design-system-public-roots.mjs",
+          "line": 8
+        },
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 88
+        },
+        {
+          "path": "server/design-system-read-mcp.mjs",
+          "line": 33
+        },
+        {
+          "path": "server/design-system-drafts.mjs",
+          "line": 19
+        },
+        {
+          "path": "server/import-design-system-site.mjs",
+          "line": 6
+        },
+        {
+          "path": "server/design-system-lifecycle-cleanup.mjs",
+          "line": 4
+        },
+        {
+          "path": "server/design-system-submission-artifact.mjs",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-artifact-uploads.mjs",
+      "exports": [
+        {
+          "name": "DESIGN_SYSTEM_ARTIFACT_MAX_FILES",
+          "line": 13
+        },
+        {
+          "name": "DESIGN_SYSTEM_ARTIFACT_MAX_BODY_BYTES",
+          "line": 14
+        },
+        {
+          "name": "normalizeDesignSystemArtifactUploadPath",
+          "line": 27
+        },
+        {
+          "name": "normalizeDesignSystemArtifactUploadRequest",
+          "line": 48
+        },
+        {
+          "name": "designSystemArtifactObjectPrefix",
+          "line": 77
+        },
+        {
+          "name": "designSystemArtifactObjectKey",
+          "line": 85
+        },
+        {
+          "name": "designSystemArtifactPublicBase",
+          "line": 89
+        },
+        {
+          "name": "assertDesignSystemArtifactStorageConfigured",
+          "line": 93
+        },
+        {
+          "name": "designSystemArtifactCacheControl",
+          "line": 115
+        },
+        {
+          "name": "designSystemArtifactIsCurrent",
+          "line": 133
+        },
+        {
+          "name": "beginDesignSystemArtifactUpload",
+          "line": 146
+        },
+        {
+          "name": "createDesignSystemArtifactUploadPlans",
+          "line": 198
+        },
+        {
+          "name": "createDesignSystemArtifactUploadToken",
+          "line": 267
+        },
+        {
+          "name": "parseDesignSystemArtifactUploadToken",
+          "line": 272
+        },
+        {
+          "name": "signDesignSystemArtifactPart",
+          "line": 296
+        },
+        {
+          "name": "completeDesignSystemArtifactUpload",
+          "line": 309
+        },
+        {
+          "name": "abortDesignSystemArtifactUpload",
+          "line": 335
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 113
+        },
+        {
+          "path": "server/design-system-read-mcp.mjs",
+          "line": 34
+        },
+        {
+          "path": "server/design-system-submission-artifact.mjs",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-public-roots.mjs",
+      "exports": [
+        {
+          "name": "PUBLIC_ROOT_ROUTE",
+          "line": 11
+        },
+        {
+          "name": "CURRENT_CACHE",
+          "line": 13
+        },
+        {
+          "name": "VERSION_CACHE",
+          "line": 14
+        },
+        {
+          "name": "parsePublicDesignSystemPath",
+          "line": 20
+        },
+        {
+          "name": "publicDesignSystemRelease",
+          "line": 33
+        },
+        {
+          "name": "rewritePublicArtifact",
+          "line": 37
+        },
+        {
+          "name": "createPublicDesignSystemRootHandler",
+          "line": 117
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 12
+        },
+        {
+          "path": "server/design-system-lifecycle-adapters.mjs",
+          "line": 3
+        },
+        {
+          "path": "server/design-system-consumer-link.mjs",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-public-worker.mjs",
+      "exports": [],
+      "directServerImporters": [
+        {
+          "path": "server/configure-design-system-public-roots.mjs",
+          "line": 54
+        }
+      ]
+    },
+    {
+      "path": "server/configure-design-system-public-roots.mjs",
+      "exports": [
+        {
+          "name": "publicRootHosts",
+          "line": 8
+        },
+        {
+          "name": "configurePublicRoots",
+          "line": 21
+        }
+      ],
+      "directServerImporters": []
+    },
+    {
+      "path": "server/migrate-design-system-artifacts.mjs",
+      "exports": [
+        {
+          "name": "MIGRATION_SYSTEMS",
+          "line": 17
+        },
+        {
+          "name": "assertPreservedPublication",
+          "line": 36
+        },
+        {
+          "name": "hostedMigrationManifest",
+          "line": 40
+        },
+        {
+          "name": "hostedMigrationPackage",
+          "line": 43
+        },
+        {
+          "name": "hostedInstallation",
+          "line": 49
+        },
+        {
+          "name": "migrationGitHub",
+          "line": 54
+        },
+        {
+          "name": "capturePublishedBytes",
+          "line": 114
+        },
+        {
+          "name": "migrate",
+          "line": 129
+        }
+      ],
+      "directServerImporters": []
+    },
+    {
+      "path": "server/design-system-admin.mjs",
+      "exports": [
+        {
+          "name": "catalogDefaults",
+          "line": 5
+        },
+        {
+          "name": "validateCatalogPatch",
+          "line": 6
+        },
+        {
+          "name": "requireDesignSystemAdmin",
+          "line": 29
+        },
+        {
+          "name": "createDesignSystemAdminRouter",
+          "line": 38
+        },
+        {
+          "name": "createDesignSystemReadTokenAction",
+          "line": 117
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 9
+        },
+        {
+          "path": "server/design-system-submissions-admin.mjs",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-authorization.mjs",
+      "exports": [
+        {
+          "name": "isTimdsOperator",
+          "line": 8
+        },
+        {
+          "name": "requireTimdsOperator",
+          "line": 9
+        },
+        {
+          "name": "isTimdsMediaIdentityRoute",
+          "line": 10
+        },
+        {
+          "name": "authorizeTimdsMediaSource",
+          "line": 17
+        },
+        {
+          "name": "isTimdsIdentityRoute",
+          "line": 28
+        },
+        {
+          "name": "identityTokenView",
+          "line": 40
+        },
+        {
+          "name": "createDesignSystemAuthorization",
+          "line": 42
+        },
+        {
+          "name": "createDesignSystemAuthorizationRouter",
+          "line": 107
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 8
+        },
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-core.mjs",
+      "exports": [
+        {
+          "name": "DESIGN_SYSTEM_SOURCE_PATH",
+          "line": 6
+        },
+        {
+          "name": "STANDALONE_DESIGN_SYSTEM_SOURCE_PATH",
+          "line": 7
+        },
+        {
+          "name": "designSystemSubmoduleUrl",
+          "line": 9
+        },
+        {
+          "name": "resolveRelativeDesignSystemSubmoduleIdentity",
+          "line": 31
+        },
+        {
+          "name": "mergePublishedArtifactEntries",
+          "line": 43
+        },
+        {
+          "name": "validatePublishedArtifactMetadata",
+          "line": 280
+        },
+        {
+          "name": "discoverRepoDesignSystemFromFiles",
+          "line": 852
+        },
+        {
+          "name": "publishedDesignSystemConsumer",
+          "line": 896
+        },
+        {
+          "name": "discoverRepoDesignSystem",
+          "line": 903
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 79
+        },
+        {
+          "path": "server/migrate-design-system-artifacts.mjs",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "path": "server/design-system-assets.mjs",
+      "exports": [
+        {
+          "name": "normalizeDesignSystemAssetInput",
+          "line": 42
+        },
+        {
+          "name": "designSystemAssetStorageConfig",
+          "line": 76
+        },
+        {
+          "name": "assertDesignSystemAssetStorageConfigured",
+          "line": 100
+        },
+        {
+          "name": "createDesignSystemAssetStorageClient",
+          "line": 133
+        },
+        {
+          "name": "designSystemAssetBucket",
+          "line": 143
+        },
+        {
+          "name": "designSystemAssetObjectKey",
+          "line": 148
+        },
+        {
+          "name": "designSystemAssetPublicUrl",
+          "line": 153
+        },
+        {
+          "name": "beginDesignSystemAssetUpload",
+          "line": 168
+        },
+        {
+          "name": "signDesignSystemAssetPart",
+          "line": 197
+        },
+        {
+          "name": "completeDesignSystemAssetUpload",
+          "line": 203
+        },
+        {
+          "name": "abortDesignSystemAssetUpload",
+          "line": 225
+        },
+        {
+          "name": "signDesignSystemAssetDownload",
+          "line": 234
+        }
+      ],
+      "directServerImporters": [
+        {
+          "path": "server/repo-inspection-api.mjs",
+          "line": 102
+        },
+        {
+          "path": "server/timds-transfer-probes.mjs",
+          "line": 4
+        }
+      ]
+    }
+  ]
+}

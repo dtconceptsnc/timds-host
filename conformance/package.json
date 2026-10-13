@@ -1,0 +1,17 @@
+{
+  "name": "@dtconcepts/timds-host-conformance",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:host": "node --test --test-concurrency=1 host.test.mjs"
+  },
+  "dependencies": {
+    "@dtconcepts/timds": "0.1.464",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1"
+  }
+}
