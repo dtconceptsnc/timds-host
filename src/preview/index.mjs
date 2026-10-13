@@ -2,6 +2,11 @@
 // cf beta.14 preview creation, migration and deletion use the configured provider API.
 import {requestDiagnostic,safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 const fail=(statusCode,message)=>Object.assign(new Error(message),{statusCode});
+// Opt-in for sources with the reviewed static dist -> Vite packaging config.
+// Repackage after all TimDS checks, in Preview context, before using --prebuilt.
+export const STATIC_PREVIEW_DEPLOY_COMMAND='CLOUDFLARE_PREVIEW_BUILD=true npx vite build && npx cf previews deploy --prebuilt';
+// Only opt in after verifying npm build already runs the workspace check.
+export const STATIC_CHECKED_PREVIEW_BUILD_COMMAND='npm run build && npm run timds -- check --skip-build';
 const previewEndpoint = (method,route) => {
   const path=route.split('?')[0];
   if(path==='/workers/scripts')return 'worker-list';
@@ -159,7 +164,9 @@ export function createPreviews({ env = {}, fetchImpl = fetch } = {}) {
     if (config.git_repository.branch !== 'main' || !config.previews_enabled || config.auto_build_enabled === false) throw fail(409, 'The Design System build connection must enable automatic builds and Previews from main');
     for (const [key, command] of [['production_settings', 'npx cf deploy'], ['previews_base_config', 'npx cf previews deploy']]) {
       const settings = config[key];
-      if (settings?.build_command !== 'npm run build:preview' || settings.deploy_command !== command || settings.root_directory !== '/' || settings.build_token_uuid !== buildTokenUuid
+      const compatibleDeploy=settings?.deploy_command===command || key==='previews_base_config'&&settings?.deploy_command===STATIC_PREVIEW_DEPLOY_COMMAND;
+      const compatibleBuild=settings?.build_command==='npm run build:preview' || key==='previews_base_config'&&settings?.deploy_command===STATIC_PREVIEW_DEPLOY_COMMAND&&settings?.build_command===STATIC_CHECKED_PREVIEW_BUILD_COMMAND;
+      if (!compatibleBuild || !compatibleDeploy || settings.root_directory !== '/' || settings.build_token_uuid !== buildTokenUuid
         || !Array.isArray(settings.path_includes) || settings.path_includes.length !== 1 || settings.path_includes[0] !== '*'
         || !Array.isArray(settings.path_excludes) || settings.path_excludes.length) throw fail(409, 'The Design System build connection has incompatible build or deploy settings');
     }

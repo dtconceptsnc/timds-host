@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPreviews, designSystemPreviewWorker, designSystemPreviewPath } from '../../src/preview/index.mjs';
+import { createPreviews, designSystemPreviewWorker, designSystemPreviewPath, STATIC_PREVIEW_DEPLOY_COMMAND, STATIC_CHECKED_PREVIEW_BUILD_COMMAND } from '../../src/preview/index.mjs';
 
 const source = { id:'11111111-2222-4333-8444-555555555555', artifacts_namespace:'timds-org', artifacts_repository:'source', artifacts_repository_id:'repo-id' };
 const name = designSystemPreviewWorker(source);
@@ -88,7 +88,7 @@ test('unknown connection-create outcome is recovered by readback without a dupli
 
 test('failed connection setup remains retryable on the same owned Worker', async () => {
   const f = fixture({ failCreate:true });
-  await assert.rejects(f.adapter.prepareSource(source), /HTTP 503/);
+  await assert.rejects(f.adapter.prepareSource(source), error => error.requestDiagnostic?.providerStatus === 503);
   await f.adapter.prepareSource(source);
   assert.equal(f.calls.filter(c => c.method === 'PUT').length, 1);
   assert.equal(f.calls.filter(c => c.route === '/builds/workers' && c.method === 'POST').length, 2);
@@ -109,6 +109,8 @@ test('existing connections cannot adopt another provider or namespace and must s
     config => { config.git_repository.branch = 'other'; },
     config => { config.auto_build_enabled = false; },
     config => { config.previews_base_config.deploy_command = 'npx cf deploy'; },
+    config => { config.previews_base_config.deploy_command = 'npx cf previews deploy --prebuilt'; },
+    config => { config.production_settings.deploy_command = STATIC_PREVIEW_DEPLOY_COMMAND; },
     config => { config.production_settings.build_token_uuid = 'another-registration'; },
     config => { config.previews_base_config.build_token_uuid = 'another-registration'; },
     config => { config.previews_base_config.path_excludes = ['*']; },
@@ -120,6 +122,25 @@ test('existing connections cannot adopt another provider or namespace and must s
     await assert.rejects(f.adapter.prepareSource(source), /does not match|must enable|incompatible/, 'retry must not accept the incompatible configuration');
     assert.equal(f.calls.some(c => c.method !== 'GET'), false);
   }
+});
+
+test('reviewed static preview packaging is preserved while the full source check remains required',async()=>{
+  const f=fixture({existing:true,connected:true}),config=structuredClone(f.defaultConfig);
+  config.previews_base_config.deploy_command=STATIC_PREVIEW_DEPLOY_COMMAND;f.setConfig(config);
+  await f.adapter.prepareSource(source);
+  assert.equal(f.calls.some(c=>c.method==='PATCH'),false);
+  config.previews_base_config.build_command='npm run timds -- check --skip-build';f.setConfig(config);
+  await assert.rejects(f.adapter.prepareSource(source),/incompatible/);
+});
+
+test('reviewed build containing the workspace check requires static Preview packaging',async()=>{
+  const f=fixture({existing:true,connected:true}),config=structuredClone(f.defaultConfig);
+  config.previews_base_config.build_command=STATIC_CHECKED_PREVIEW_BUILD_COMMAND;f.setConfig(config);
+  await assert.rejects(f.adapter.prepareSource(source),/incompatible/);
+  config.previews_base_config.deploy_command=STATIC_PREVIEW_DEPLOY_COMMAND;f.setConfig(config);
+  await f.adapter.prepareSource(source);
+  config.production_settings.build_command=STATIC_CHECKED_PREVIEW_BUILD_COMMAND;f.setConfig(config);
+  await assert.rejects(f.adapter.prepareSource(source),/incompatible/);
 });
 
 test('connected source gets bounded workers.dev URLs and scoped Preview cleanup', async () => {
@@ -156,7 +177,7 @@ test('connection cleanup refuses another repository or a connection used by anot
 
 test('failed connection cleanup preserves discoverable triggers and succeeds on retry without deleting tokens', async () => {
   const f = fixture({ existing:true, connected:true, failConnectionDelete:true });
-  await assert.rejects(f.adapter.deleteSourcePreview(source), /HTTP 503/);
+  await assert.rejects(f.adapter.deleteSourcePreview(source), error => error.requestDiagnostic?.providerStatus === 503);
   assert.deepEqual(f.calls.filter(c => c.method === 'DELETE').map(c => c.route), ['/builds/repos/connections/connection-id']);
   await f.adapter.deleteSourcePreview(source);
   assert.equal(f.calls.some(c => c.route.includes('/tokens')), false);
@@ -173,7 +194,7 @@ test('unconfigured credentials prevent mutation and provider error messages cann
   const empty = createPreviews({ env:{}, fetchImpl:async () => { throw new Error('must not fetch'); } });
   await assert.rejects(empty.ensureSource(source), /requires the server Workers Builds credential/);
   const bad = createPreviews({ env, fetchImpl:async () => Response.json({ success:false, errors:[{ code:10000, message:'account-secret builds-secret' }] }, { status:403 }) });
-  await assert.rejects(bad.ensureSource(source), error => error.message.includes('10000') && !error.message.includes('secret'));
+  await assert.rejects(bad.ensureSource(source), error => error.requestDiagnostic?.providerCodes?.includes(10000) && !error.message.includes('secret'));
 });
 
 test('owned exact-source legacy trigger is migrated and read back before readiness',async()=>{const f=fixture({existing:true,connected:true}),config=structuredClone(f.defaultConfig);config.previews_enabled=false;f.setConfig(config);await f.adapter.ensure(source);assert.equal(f.calls.filter(row=>row.route.endsWith('/migrate_to_previews') && row.method==='POST').length,1);await f.adapter.ensure(source);assert.equal(f.calls.filter(row=>row.route.endsWith('/migrate_to_previews') && row.method==='POST').length,1);});

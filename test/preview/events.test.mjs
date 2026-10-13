@@ -34,7 +34,7 @@ test('Preview readiness uses actual owned-worker metadata and an anonymous nonre
   const gitRepository={provider_type:'cloudflare_artifacts',provider_account_id:'test',provider_account_name:'test',repo_name:'source',repo_id:'repo-id'};
   const adapter=createPreviews({env:{CLOUDFLARE_ACCOUNT_ID:'account',CLOUDFLARE_API_TOKEN:'test-worker-token',TIMDS_BUILDS_API_TOKEN:'test-build-token'},fetchImpl:async(url,options)=>{
     calls.push({url,options});
-    if(url.startsWith('https://review-')){assert.equal(options.headers,undefined);assert.equal(options.redirect,'error');return new Response('Preview',{status:html?200:503,headers:{'Content-Type':'text/html'}});}
+    if(url.startsWith('https://review-')){assert.equal(options.headers,undefined);assert.equal(options.redirect,'manual');return new Response('Preview',{status:html?200:503,headers:{'Content-Type':'text/html'}});}
     const path=new URL(url).pathname;let result;
     if(path.endsWith('/workers/scripts'))result=[{id:workerName,tag:'owned-tag',tags:[`timds-source:${source.id}`]}];
     else if(path.endsWith('/builds/workers/owned-tag'))result={git_repository:gitRepository};
