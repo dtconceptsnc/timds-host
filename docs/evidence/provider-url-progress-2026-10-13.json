@@ -1,0 +1,259 @@
+{
+  "recordedAt": "2026-10-13",
+  "status": "partial; paused at user request",
+  "providerUrl": "https://studio.timds.com",
+  "consumerPinsEdited": false,
+  "completedSources": [
+    {
+      "name": "speed",
+      "sourceId": "d9465b2e-3c19-48de-a3ee-7d1c4770c8ad",
+      "systemId": "timds/3afe701d-dfb2-4071-beaf-5094aeb3691b",
+      "before": {
+        "id": "2bb7f148-5dd8-47de-95b5-8007f31cc018",
+        "versionLabel": "0.1.12",
+        "sourceCommit": "175d267cd40e2dc89fb6bcca8adfa68d691f3ade",
+        "contentDigest": "b2c6ffc96dc218acb09933c5838c3b4b100265872e275bea64d6628061f1e495",
+        "publishedAt": "2026-10-12T16:11:52.234997+00:00",
+        "rollbackEligible": true
+      },
+      "after": {
+        "id": "ca565a91-af01-42a6-a2f6-e3d3669798e4",
+        "versionLabel": "2026.10.13-1",
+        "sourceCommit": "be1742141cc9f1802c5400c943509c7b055a6ece",
+        "contentDigest": "0d10b8cd64b326a51e0b74f2864eace3b6fc6f7f8050a30e9e38e364d324202f",
+        "publishedAt": "2026-10-13T19:07:16.149Z",
+        "rollbackEligible": true
+      },
+      "publishedManifest": {
+        "name": "speed",
+        "ref": "be1742141cc9f1802c5400c943509c7b055a6ece",
+        "systemId": "timds/3afe701d-dfb2-4071-beaf-5094aeb3691b",
+        "version": "2026.10.13-1",
+        "provider": {
+          "kind": "hosted",
+          "url": "https://studio.timds.com"
+        }
+      },
+      "sessionId": "abff0be0-26fe-4558-a5e0-25c01bdf5723",
+      "sessionClosed": true,
+      "submissionId": "fa7b27fe-0d4d-49ec-a3d4-36539d364696",
+      "publicationId": "ca565a91-af01-42a6-a2f6-e3d3669798e4",
+      "completedAt": "2026-10-13T19:07:32.939Z",
+      "dryRun": {
+        "systemId": "timds/3afe701d-dfb2-4071-beaf-5094aeb3691b",
+        "submissionId": "fa7b27fe-0d4d-49ec-a3d4-36539d364696",
+        "sessionId": "abff0be0-26fe-4558-a5e0-25c01bdf5723",
+        "version": "2026.10.13-1",
+        "previewUrl": "https://review-fa7b27fe0d4d49ec-timds-d9465b2e3c1948dea3ee7d1c4770c8ad.timds.workers.dev/",
+        "diffSummary": {
+          "files": 8,
+          "addedLines": 847,
+          "removedLines": 544
+        },
+        "currency": "clean",
+        "autoRebased": false,
+        "mainRevision": "b66db6b695a297d59956307d473ae100317a0285",
+        "dryRun": true,
+        "buildChecked": true,
+        "apiVersion": 1
+      },
+      "productionBuild": {
+        "build_uuid": "ce5fee87-22e1-4434-95aa-d0027b7d364b",
+        "status": "stopped",
+        "build_outcome": "success",
+        "stopped_on": "2026-10-13T19:07:28.902Z",
+        "created_on": "2026-10-13T19:06:58.343Z"
+      },
+      "publicImmutableTokens": {
+        "at": "2026-10-13T19:16:23.610Z",
+        "url": "https://ds.timds.com/v/2026.10.13-1/tokens.json",
+        "status": 200,
+        "bytes": 118864
+      },
+      "historicalReleaseIdentitiesUnchanged": 11,
+      "previewPackaging": {
+        "name": "speed",
+        "at": "2026-10-13T18:47:56.946Z",
+        "assetCount": 87,
+        "allPackagedAssetsByteIdentical": true,
+        "toolkitVersion": "0.1.462"
+      },
+      "reviewedPaths": [
+        ".gitignore",
+        "CHANGELOG.md",
+        "cloudflare.config.ts",
+        "package-lock.json",
+        "package.json",
+        "timds.json",
+        "vite.config.mjs",
+        "wrangler.jsonc"
+      ]
+    },
+    {
+      "name": "wpl",
+      "sourceId": "5b69a328-c6a2-4a40-aa0c-0c7588ae4c0c",
+      "systemId": "wpl-design-system/core",
+      "before": {
+        "id": "3c31bb75-30d4-4427-803b-2bd4b47ca0d1",
+        "versionLabel": "0.1.43",
+        "sourceCommit": "479259b49e6220da08739b96b6b926b1831ec1c8",
+        "contentDigest": "a1fda84d5f01e59502b4302ceecbd1864fe93de6db64833fabb6493df8ea044b",
+        "publishedAt": "2026-10-09T21:07:48.098284+00:00",
+        "rollbackEligible": true
+      },
+      "after": {
+        "id": "e9764baf-2e1e-4878-9a6d-49bce074a94d",
+        "versionLabel": "2026.10.13-1",
+        "sourceCommit": "e60450d01c61d4c7c8c9f299ab277d4ccd914cf8",
+        "contentDigest": "0df54c1ea6c053e4999978411f2f53b442a9bd6887e6f9ae03373881027972c6",
+        "publishedAt": "2026-10-13T19:47:05.830Z",
+        "rollbackEligible": true
+      },
+      "publishedManifest": {
+        "name": "wpl",
+        "ref": "e60450d01c61d4c7c8c9f299ab277d4ccd914cf8",
+        "systemId": "wpl-design-system/core",
+        "version": "2026.10.13-1",
+        "provider": {
+          "kind": "hosted",
+          "url": "https://studio.timds.com"
+        }
+      },
+      "sessionId": "863df7f2-c7f4-4694-9976-b821c862b082",
+      "sessionClosed": true,
+      "submissionId": "afe37460-328e-4939-98ec-2fce79191e61",
+      "publicationId": "e9764baf-2e1e-4878-9a6d-49bce074a94d",
+      "completedAt": "2026-10-13T19:47:21.482Z",
+      "dryRun": {
+        "systemId": "wpl-design-system/core",
+        "submissionId": "afe37460-328e-4939-98ec-2fce79191e61",
+        "sessionId": "863df7f2-c7f4-4694-9976-b821c862b082",
+        "version": "2026.10.13-1",
+        "previewUrl": "https://review-afe37460328e4939-timds-5b69a328c6a24a40aa0c0c7588ae4c0c.timds.workers.dev/design-system",
+        "diffSummary": {
+          "files": 11,
+          "addedLines": 5876,
+          "removedLines": 5633
+        },
+        "currency": "clean",
+        "autoRebased": false,
+        "mainRevision": "9a7cd56d64c5c8d6150fe539be2ee01f05292a05",
+        "dryRun": true,
+        "buildChecked": true,
+        "apiVersion": 1
+      },
+      "productionBuild": {
+        "build_uuid": "efd10598-9552-46bc-aab4-9935cf78d536",
+        "status": "stopped",
+        "build_outcome": "success",
+        "stopped_on": "2026-10-13T19:47:54.626Z",
+        "created_on": "2026-10-13T19:46:31.644Z"
+      },
+      "publicImmutableTokens": {
+        "at": "2026-10-13T19:48:09.976Z",
+        "url": "https://wpl-ds.timds.com/v/2026.10.13-1/design-system/tokens.json",
+        "status": 200,
+        "bytes": 118273
+      },
+      "historicalReleaseIdentitiesUnchanged": 12,
+      "previewPackaging": {
+        "name": "wpl",
+        "at": "2026-10-13T18:50:45.249Z",
+        "assetCount": 301,
+        "allPackagedAssetsByteIdentical": true,
+        "toolkitVersion": "0.1.462"
+      },
+      "reviewedPaths": [
+        ".gitignore",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "astro.config.mjs",
+        "cloudflare.config.ts",
+        "package-lock.json",
+        "package.json",
+        "scripts/package-preview.mjs",
+        "timds.json",
+        "vite.config.mjs",
+        "wrangler.jsonc"
+      ]
+    }
+  ],
+  "pendingSource": {
+    "name": "pierce",
+    "sourceId": "f7cfb345-391a-40ba-80f4-fc08359696bb",
+    "systemId": "pierce-law-group/core",
+    "sessionId": "3bda4490-3702-44fc-aee0-8b743e342f91",
+    "submissionId": "c2b068f0-292e-4de5-acb9-b3cee93c6160",
+    "reviewedHead": "b1995e3aaa634915f7a8397866495d5dd8a1eb87",
+    "successfulDryRun": {
+      "startedAt": "2026-10-13T19:48:38.529Z",
+      "completedAt": "2026-10-13T19:58:03.298Z",
+      "server": {
+        "name": "timds-design-system",
+        "version": "0.1.472"
+      },
+      "command": {
+        "name": "timds_publish",
+        "arguments": {
+          "submission": "c2b068f0-292e-4de5-acb9-b3cee93c6160",
+          "dryRun": true
+        }
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"systemId\": \"pierce-law-group/core\",\n  \"submissionId\": \"c2b068f0-292e-4de5-acb9-b3cee93c6160\",\n  \"sessionId\": \"3bda4490-3702-44fc-aee0-8b743e342f91\",\n  \"version\": \"2026.10.13-2\",\n  \"previewUrl\": \"https://review-c2b068f0292e4de5-timds-f7cfb345391a40ba80f4fc08359696bb.timds.workers.dev/design-system\",\n  \"diffSummary\": {\n    \"files\": 11,\n    \"addedLines\": 6084,\n    \"removedLines\": 5841\n  },\n  \"currency\": \"clean\",\n  \"autoRebased\": false,\n  \"mainRevision\": \"3c309261e00cb21ed87d98b79ac803e508ca740a\",\n  \"dryRun\": true,\n  \"buildChecked\": true,\n  \"apiVersion\": 1\n}"
+          }
+        ],
+        "structuredContent": {
+          "systemId": "pierce-law-group/core",
+          "submissionId": "c2b068f0-292e-4de5-acb9-b3cee93c6160",
+          "sessionId": "3bda4490-3702-44fc-aee0-8b743e342f91",
+          "version": "2026.10.13-2",
+          "previewUrl": "https://review-c2b068f0292e4de5-timds-f7cfb345391a40ba80f4fc08359696bb.timds.workers.dev/design-system",
+          "diffSummary": {
+            "files": 11,
+            "addedLines": 6084,
+            "removedLines": 5841
+          },
+          "currency": "clean",
+          "autoRebased": false,
+          "mainRevision": "3c309261e00cb21ed87d98b79ac803e508ca740a",
+          "dryRun": true,
+          "buildChecked": true,
+          "apiVersion": 1
+        }
+      }
+    },
+    "publicationId": "b7ec0b7c-2cbd-48c5-922f-eef88d4ff8ee",
+    "publicationStatus": "failed",
+    "publicationStage": "preflight",
+    "publicationError": "Publication preflight failed",
+    "publishAttemptStartedAt": "2026-10-13T19:58:11.250Z",
+    "publishAttemptCompletedAt": "2026-10-13T20:02:24.341Z",
+    "currentReleaseAtPause": "2026.10.13-1",
+    "plannedReleaseFromDryRun": "2026.10.13-2",
+    "previewBuild": [
+      {
+        "build_uuid": "109ae3c5-66aa-473a-b492-8d18adb62864",
+        "status": "stopped",
+        "build_outcome": "success",
+        "created_on": "2026-10-13T19:13:38.664Z"
+      },
+      {
+        "build_uuid": "df566ad1-4e22-4228-9d61-22882549ae49",
+        "status": "stopped",
+        "build_outcome": "terminated",
+        "created_on": "2026-10-13T19:01:25.927Z"
+      }
+    ],
+    "separateHostDeployment": {
+      "versionId": "e785fb9c-e881-4e23-bfaf-44bc583d3786",
+      "deployedAt": "2026-10-13T20:01:42.739202Z",
+      "userConfirmedAnotherDeploymentRunning": true,
+      "causalLinkToFailure": "not established"
+    }
+  },
+  "finalAllSourceHistoricalComparison": "Pending after Pierce publication; do not interpret earlier comparison as a final three-source check."
+}
