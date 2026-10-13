@@ -1,64 +1,70 @@
 # TimDS Host
 
-An Apache-2.0 Cloudflare host for TimDS sessions, collaboration, previews and
-publication. The toolkit remains `@dtconcepts/timds` (MIT).
+An Apache-2.0 Cloudflare host for TimDS sessions, collaboration, previews,
+publication and Studio. The toolkit remains `@dtconcepts/timds` (MIT).
 
-**Implementation in progress.** This checkout contains the versioned contract
-and the proven toolchain foundation. It does not yet serve authoring traffic.
-Production cutover is gated on conformance against the existing portal, then the
-new host, and byte-for-byte checks of existing published systems.
+**Implemented and deployed to an isolated host; acceptance is in progress.**
+The production portal conformance baseline passed before extraction. The new
+Worker, public companion, native containers, storage, OAuth discovery and Studio
+assets have deployed successfully. Authenticated host conformance, existing-system
+migration and production cutover remain separate gates. See the
+[deployment receipt](docs/evidence/phase-3-deployment.md).
 
-The extraction is tracked in
-[toperator #69](https://github.com/dtconceptsnc/toperator/issues/69).
+## Run your own host
 
-## Toolchain
+Follow the [operations runbook](docs/operations.md) for resource creation,
+immutable release storage, credentials, API/public deployment, Access, first
+administrator bootstrap, organizations and source provisioning.
 
-Node.js 22.18+ and npm are required. `cf` is pinned to `1.0.0-beta.14`, with a
-committed npm lockfile and `cloudflare.config.ts`. No Wrangler dependency is
-required. The Cloudflare Vite plugin builds the Worker and its container images.
+Node.js 22.18+, npm and a running local Docker engine are required. The project
+pins `cf@1.0.0-beta.14` and its Cloudflare Vite plugin in the lockfile. Container
+images build locally and run on Cloudflare; a VPS is not a runtime dependency.
 
 ```sh
 npm ci
-npm run dev
 npm run typecheck
 npm run build
-npm run deploy
 ```
 
-`cf dev` uses the local runtime; `cf dev --local` is invalid in this release.
-Docker must be running for Sandbox development. Artifacts has no local emulator:
-its binding requires `dev: { remote: true }` and a disposable remote namespace.
-Local tests must state whether they use that namespace or an explicit test adapter.
+`npm run dev` starts `cf dev`. Artifacts has no local emulator; the host's
+Artifacts adapter still needs a disposable remote namespace and credentials.
+Local development is not a self-contained substitute for deployed acceptance.
+Deployment requires the environment and resources in the runbook.
 
-The Phase 0 spike deployed a container-backed SQLite Durable Object, executed
-Git against a disposable Artifacts repository, and exercised D1, R2 and a Queue
-using `cf` alone. Reproduction details and sanitized receipts are in
-[Phase 0 evidence](docs/evidence/phase-0.md).
+## Runtime and contract
 
-A second [Workers Builds spike](docs/evidence/cf-preview-builds.md) proved
-`cf deploy` on main and `cf previews deploy` on a review branch, including real
-success events and public HTML. Both spikes' remote resources were cleaned up.
-The tested beta needs an explicit preview migration on newly created Builds
-connections and has no Preview-delete CLI command; the documented cleanup uses
-the verified Cloudflare API. No Wrangler command was required.
+The API Worker owns OAuth, a D1 identity/grant catalog, per-system SQLite Durable
+Objects, native repository/live/build containers, Queues and publication
+Workflows. R2 holds source/build snapshots and locked immutable release objects.
+A separate public Worker receives only the public-read service binding. Studio
+is served from an explicit static-asset allowlist.
 
-## Contract
+API v1 uses `X-TimDS-API-Version: 1` and `apiVersion: 1`; the toolkit selects the
+host through `provider: { kind: 'hosted', url }`. The vendored
+[OpenAPI contract](docs/api/timds-host.openapi.json),
+[architecture](docs/architecture.md) and [conformance package](conformance/README.md)
+describe these boundaries. The build and conformance baseline pin toolkit
+`0.1.464`. Human login to this OAuth host currently requires the OAuth-capable
+toolkit change in [timds-toolkit PR #100](https://github.com/dtconceptsnc/timds-toolkit/pull/100)
+until it is released; the published device-login flow is not a host OAuth client.
 
-[`docs/api/timds-host.openapi.json`](docs/api/timds-host.openapi.json) is vendored
-from portal commit `2b0148c`. API v1 uses `X-TimDS-API-Version: 1` and
-`apiVersion: 1`. The toolkit chooses a host with `provider: { kind: 'hosted', url }`.
-The contract must pass a black-box suite against the production portal before
-the host's replacement domain services are implemented.
+## Verification and limitations
 
-The [conformance package](conformance/README.md) pins toolkit 0.1.464 and validates
-host responses against the vendored OpenAPI contract. [CI instructions](docs/ci.md)
-describe the automatic foundation checks and separate manually dispatched test
-of an explicitly selected disposable host. A green foundation build does not
-claim live host conformance; the initial portal acceptance run is still pending.
+- [Production portal conformance](docs/evidence/phase-1-portal-conformance.md)
+  passed the lifecycle before replacement services were implemented.
+- [Native toolchain proof](docs/evidence/phase-0.md) exercised container Git,
+  Artifacts, D1, R2 and Queues through `cf`.
+- [Workers Builds proof](docs/evidence/cf-preview-builds.md) verified main
+  `cf deploy` and branch `cf previews deploy`, success events and public HTML.
+- [Runtime image proof](docs/evidence/runtime-build.md) records actual local
+  image builds and an offline toolkit artifact build.
+- [CI](docs/ci.md) distinguishes build checks from a manually selected live host.
 
-The [architecture plan](docs/architecture.md) describes the proposed coordinator,
-grant consistency, publication recovery, identity and per-system migration
-protocols. It separates planned implementation from the evidence above.
+No Wrangler command was required for these deployments. The pinned beta has
+specific [tooling limitations](docs/operations.md#pinned-cf-limitations), including
+Preview migration/readback and a direct API exception for Preview deletion.
+The extraction and remaining acceptance work are tracked in
+[toperator #69](https://github.com/dtconceptsnc/toperator/issues/69).
 
 ## License
 

@@ -25,7 +25,7 @@ provider, and service-token list endpoints returned HTTP 200 with empty
 collections despite the real dashboard records above. These empty lists are
 not reliable inventory evidence under this credential. The separately refreshed
 broader toolchain OAuth credential also returned 403 for the organization.
-No credential values were displayed or copied into the repository.
+This inventory stage did not display credential values or copy them into the repository.
 
 ## Approved host configuration
 
@@ -46,11 +46,35 @@ runner/CI service credential. The dashboard confirmed creation of:
 - Six-hour application sessions, HttpOnly and binding cookies, SameSite Lax,
   hostname-scoped cookie, and no App Launcher listing.
 
-The dedicated token form is prepared as **timds-host-69-runner-ci** with the
-shortest dashboard lifetime (one year), but the token has **not** been generated.
-The native Terminal secret-capture path was blocked by computer-use safety.
-Secure human capture is pending before generation; no new service policy is
-active yet and no secret was written to this repository or tool output.
+The dedicated token **timds-host-69-runner-ci** uses the shortest dashboard
+lifetime (one year). The first generated credential was accidentally exposed in
+a tool transcript because Cloudflare included the secret in a copy button's
+label. It had no policy attachment or observed use. It was immediately disabled,
+then deleted after the user's explicit revoke-and-replace instruction. The
+replacement was generated without reading credential fields, button labels or
+screenshots. The user copied its values into the waiting private Terminal capture helper.
+The replacement token UUID is `69ec089f-5813-4841-9b1e-38a2a342aec3`. No
+replacement value was read into a tool transcript or written to this repository.
+The deleted credential must never be used.
+
+The native Terminal capture path was unavailable to computer-use automation.
+The human runs the echo-disabled helper directly; it creates
+`~/.config/timds/timds-host-69-access.env` with mode `0600`; the user confirmed
+capture and file permissions were verified without printing values.
+
+Saved and reopened policy **TimDS host 69 runner service**,
+`124d4586-08b7-4756-87d2-da6d64349d69`, has action **Service Auth** and exactly one
+Include rule for the replacement **timds-host-69-runner-ci** token. It is attached
+to the approved host application alongside staff OTP. No existing runner token,
+application, or policy was changed.
+
+Live verification on 2026-10-13 used private values only in process memory:
+`GET /service-auth` returned HTTP 200 and an assertion, then `GET /api/timds/me`
+with that assertion in `Cf-Access-Jwt-Assertion` returned HTTP 200 and agent
+principal `98af0be4-adaa-4b33-ac09-b01607320df6`. The assertion was not logged or
+persisted. This proves Access service identity, not system grants or publication
+authority. An initial attempt using OAuth's `Authorization: Bearer` header
+returned 401, as expected for this separate signed-Access path.
 
 ## Configuration intent and helper
 

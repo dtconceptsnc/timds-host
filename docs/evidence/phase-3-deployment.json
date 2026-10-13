@@ -1,0 +1,182 @@
+{
+  "queueId": "432ff3be507843e5a0bd381cae6dbb70",
+  "catalogId": "bea1c205-b5a9-48ef-a18b-9c501b5bb504",
+  "snapshots": "timds-host-69-snapshots",
+  "releases": "timds-host-69-releases",
+  "mainVersion": "4de6f130-b68f-4e74-8434-b1e941a913cc",
+  "mainOrigin": "https://timds-host-69.ratebucket.workers.dev",
+  "publicOrigin": "https://timds-host-69-public.ratebucket.workers.dev",
+  "releaseLock": {
+    "prefix": "sources/",
+    "type": "Indefinite",
+    "enabled": true
+  },
+  "recordedAt": "2026-10-13T11:52:01.867880+00:00",
+  "publicVersion": "a3861f83-94a5-41c6-990a-56f89e35239f",
+  "toolchain": "cf@1.0.0-beta.14",
+  "containerImages": {
+    "build": "sha256:30e6610995fc01866abdd27e931c243d74f882b06faa682bdee5d9367079f0a2",
+    "dependencies": "sha256:30e6610995fc01866abdd27e931c243d74f882b06faa682bdee5d9367079f0a2",
+    "live": "sha256:44cf061b24f20b8e11006cd6e71e42063c4cba0de70e4ab66147ed0e95cabb5b",
+    "repository": "sha256:25fbaaa2b38c23cd4a8acb33386a145a113c5a89fc3f1a8ee9d83935d0219cda"
+  },
+  "httpReceipts": [
+    {
+      "origin": "api",
+      "path": "/health",
+      "status": 200,
+      "ready": false,
+      "phase": "integration"
+    },
+    {
+      "origin": "api",
+      "path": "/api/timds/systems",
+      "status": 401
+    },
+    {
+      "origin": "public",
+      "path": "/api/timds/systems",
+      "status": 404
+    },
+    {
+      "origin": "public",
+      "path": "/systems/missing/",
+      "status": 404
+    },
+    {
+      "origin": "public",
+      "path": "/mcp",
+      "method": "initialize",
+      "status": 200,
+      "server": "timds-design-system-read",
+      "protocol": "2025-03-26"
+    }
+  ],
+  "catalogMigration": "0001_catalog.sql",
+  "catalogStatements": 18,
+  "authenticatedHostConformance": "Human OAuth and authenticated /me passed; bootstrap/provision/full host conformance pending",
+  "oauthDiscovery": {
+    "authorizationServer": {
+      "path": "/.well-known/oauth-authorization-server",
+      "status": 200,
+      "issuer": "https://timds-host-69.ratebucket.workers.dev",
+      "scopes": [
+        "timds:read",
+        "timds:write",
+        "offline_access"
+      ],
+      "pkce": [
+        "S256"
+      ],
+      "grants": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "cimd": true
+    },
+    "resource": {
+      "path": "/.well-known/oauth-protected-resource/api/timds",
+      "status": 200,
+      "resource": "https://timds-host-69.ratebucket.workers.dev/api/timds",
+      "baselineScopes": [
+        "timds:read"
+      ]
+    },
+    "anonymousChallenge": {
+      "status": 401,
+      "resourceMetadata": "https://timds-host-69.ratebucket.workers.dev/.well-known/oauth-protected-resource/api/timds"
+    },
+    "authorizeWithoutAccess": 302,
+    "serviceAuthWithoutAccess": 302
+  },
+  "studioHttp": [
+    {
+      "path": "/studio/",
+      "status": 200,
+      "contentType": "text/html",
+      "cacheControl": "no-store",
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      "nosniff": "nosniff",
+      "location": null,
+      "sha256": "1cea51980df7d68ab8fdfedd182e7a6a3ff527b0f76f8fc4977e2c1f8dd65cb8",
+      "localMatch": true
+    },
+    {
+      "path": "/studio/app.js",
+      "status": 200,
+      "contentType": "text/javascript",
+      "cacheControl": "no-store",
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      "nosniff": "nosniff",
+      "location": null,
+      "sha256": "f43ad63eb4957b536b406020ceb4d4dbc2744221e0dcba51fbeb1af430cb82d3",
+      "localMatch": true
+    },
+    {
+      "path": "/studio/style.css",
+      "status": 200,
+      "contentType": "text/css",
+      "cacheControl": "no-store",
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      "nosniff": "nosniff",
+      "location": null,
+      "sha256": "9fde5666f866b3015d4b4eeb3e1f0e01fc2a8a4bf3d3870ecaf213858e2f28e6",
+      "localMatch": true
+    },
+    {
+      "path": "/",
+      "status": 302,
+      "contentType": null,
+      "cacheControl": "no-store",
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      "nosniff": "nosniff",
+      "location": "https://timds-host-69.ratebucket.workers.dev/studio/"
+    },
+    {
+      "path": "/README.md",
+      "status": 404,
+      "contentType": "text/plain;charset=UTF-8",
+      "cacheControl": null,
+      "csp": null,
+      "nosniff": null,
+      "location": null
+    },
+    {
+      "path": "/app.js",
+      "status": 404,
+      "contentType": "text/plain;charset=UTF-8",
+      "cacheControl": null,
+      "csp": null,
+      "nosniff": null,
+      "location": null
+    }
+  ],
+  "access": {
+    "configured": true,
+    "teamOrigin": "https://petindex.cloudflareaccess.com",
+    "applicationId": "097b4e3e-791e-4918-b74d-8a7e4177f336",
+    "audience": "921c2c50fd5378eb09d45dc65fa471b3e2036d98a5e35099c05e6c6b33db7917",
+    "authorizeStatus": 302,
+    "serviceAuthStatus": 302,
+    "apiAnonymousStatus": 401
+  },
+  "deploymentScope": "Studio, Access, frozen provisioning/retry receipts, external-push reconciliation, validated callback-origin CSP and same-origin consent referrer policy",
+  "oauthConsentRedirect": {
+    "browserBeforeFix": "Chrome ERR_BLOCKED_BY_CLIENT after consent POST; no CLI credential saved",
+    "cause": "Fresh browser POST returned403 under no-referrer; after same-origin policy CLI code exchange and credential persistence succeeded",
+    "fix": "Add only validated registered callback origin including exact port to form-action; reject CSP syntax/wildcards",
+    "typecheck": "passed",
+    "cfBuild": "passed",
+    "cfDeploy": "passed",
+    "browserAfterCspFix": "Fresh CLI and same-origin Studio consent still failed; Chrome Network showed POST /authorize HTTP403. No grant keys existed.",
+    "browserAfterReferrerFix": "CLI exit0 authorization saved; admin.mjs me HTTP200 returned human principal with admin:false. Browser callback landing still displayed ERR_BLOCKED_BY_CLIENT, tracked separately.",
+    "referrerFix": "Consent GET uses same-origin to retain same-origin POST Origin while omitting cross-origin callback referrer",
+    "logs": "cf o11y telemetry query returns403/code10000 with both existing OAuth profiles; Worker observability not enabled; no settings changed",
+    "authenticatedMe": {
+      "httpStatus": 200,
+      "principalId": "cca20844-e655-40dc-92f5-a51a9ee6b206",
+      "type": "user",
+      "admin": false
+    }
+  }
+}

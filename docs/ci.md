@@ -1,9 +1,9 @@
 # Foundation and host conformance CI
 
 The workflows test different things. A green **Foundation checks** run means
-the current Worker foundation typechecks/builds and the conformance harness
-passes its own unit tests. It does not mean this repository implements the
-host contract, that Cloudflare resources exist, or that a live host has passed.
+the current Worker typechecks/builds and the conformance harness passes its own
+unit tests. The native host is implemented and deployed to an isolated account
+surface; a green build does not mean a live host has passed conformance.
 
 ## Automatic foundation checks
 
@@ -13,8 +13,9 @@ or `main`, and manual dispatch. It uses Node.js 22.18.0, the supported minimum.
 The Worker job runs `npm ci`, `npm run typecheck`, and `npm run build` in the
 repository root. A separate harness job runs `npm ci --ignore-scripts` and
 `npm test` in `conformance/`. Neither job receives application credentials or
-provisions/deploys cloud resources. The current foundation has no remote
-bindings to authenticate during these checks.
+provisions/deploys cloud resources. Building the native Container images requires
+a running Docker engine on the build runner. These are local image builds;
+the workflow does not authenticate the configured remote runtime bindings.
 
 ## Manual live conformance
 
@@ -60,15 +61,17 @@ Preflight failure produces no receipt. Inspect the job result and cleanup
 outcome as well as the evidence; an uploaded artifact alone does not prove a
 successful lifecycle.
 
-## Future local/deployed-host gate
+## Local/deployed-host acceptance gate
 
 The issue's full `cf dev` and deployed-host conformance gate remains pending
-domain implementation and the first successful production-portal run. There
-is no simulated-host job advertised as live conformance. When the host exists,
-CI must explicitly start it with its real backing services and disposable
-resources, run the same suite, and close those resources. `cf dev` uses a local
-runtime, but Artifacts currently requires a remote disposable namespace; this
-is not a credential-free local emulator test.
+authenticated acceptance. The [production-portal baseline passed locally](evidence/phase-1-portal-conformance.md),
+and [the isolated native deployment is recorded](evidence/phase-3-deployment.md);
+neither is a GitHub Actions or new-host lifecycle acceptance claim. There is no
+simulated-host job advertised as live conformance. A local-host CI job must
+explicitly start the real backing services and disposable resources, run the
+same suite, and close those resources. `cf dev` uses a local runtime, but
+Artifacts requires a remote disposable namespace. Follow the
+[operations runbook](operations.md) to provision a host and disposable source.
 
 ## Action pins
 

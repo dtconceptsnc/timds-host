@@ -9,6 +9,16 @@ export const scopes = ['timds:read', 'timds:write', 'offline_access'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const securityHeaders = { 'Cache-Control':'no-store', 'Content-Security-Policy': "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer' };
 const consentKey = handle => `host-consent:${handle}`;
+function consentPolicy(validatedRedirectUri) {
+  const redirectOrigin = new URL(validatedRedirectUri).origin;
+  // parseAuthRequest has checked the registered URI and allowed scheme. Keep
+  // its origin literal: client metadata must not inject CSP syntax/wildcards.
+  if (!/^https?:\/\/(?:[a-z0-9.-]+|\[[a-f0-9:]+\])(?::[0-9]+)?$/i.test(redirectOrigin)) throw fail(400, 'Unsupported OAuth callback origin');
+  // Chromium also applies form-action to the POST's redirect. The consent form
+  // still posts to this host; permit only this request's validated callback,
+  // including its exact loopback port, for the subsequent OAuth redirect.
+  return `default-src 'none'; form-action 'self' ${redirectOrigin}; frame-ancestors 'none'; base-uri 'none'`;
+}
 
 export function createHostOAuth(env, { api, publicFetch }) {
   const origin = hostOrigin(env), resource = `${origin}/api/timds`;
@@ -54,11 +64,16 @@ export function createHostOAuth(env, { api, publicFetch }) {
         if (request.method === 'GET') {
           const authRequest = await helpers.parseAuthRequest(request);
           if (authRequest.codeChallengeMethod !== 'S256' || !authRequest.codeChallenge || authRequest.resource !== resource || !authRequest.scope.includes('timds:read') || authRequest.scope.some(scope => !scopes.includes(scope))) throw fail(400, 'Use PKCE S256 and the TimDS resource and scopes');
+          const policy = consentPolicy(authRequest.redirectUri);
           const description = await helpers.describeConsent(authRequest);
           const transaction = await helpers.beginConsent(authRequest);
           await bindings.OAUTH_KV.put(consentKey(transaction.handle), principal.id, { expirationTtl: 600 });
           const headers = new Headers(transaction.headers);
           for (const [key,value] of Object.entries(securityHeaders)) headers.set(key,value);
+          headers.set('Content-Security-Policy',policy);
+          // no-referrer makes a navigation POST's Origin null. Retain the
+          // same-origin POST guard without sending a referrer to the callback.
+          headers.set('Referrer-Policy','same-origin');
           headers.set('Content-Type','text/html; charset=utf-8');
           const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connect to TimDS</title><main><h1>Connect to TimDS</h1><p>Signed in as ${escapeHtml(principal.name)}</p><h2>${escapeHtml(description.clientName)}</h2><p>${description.clientDomain ? `Client domain: ${escapeHtml(description.clientDomain)}` : 'The client supplied this name.'}</p><p>Send authorization to <strong>${escapeHtml(description.redirectHost)}</strong></p><p>${escapeHtml(description.redirectUri)}</p>${description.redirectIsLoopback ? '<p>This opens a local app. Any local process could be listening at this address.</p>' : ''}<ul>${description.scope.map(scope => `<li>${escapeHtml(scope === 'timds:read' ? 'Read Design Systems you can access' : scope === 'timds:write' ? 'Edit and publish with your existing permissions' : 'Stay connected until you revoke access')}</li>`).join('')}</ul><form method="post" action="/authorize"><input type="hidden" name="handle" value="${escapeHtml(transaction.handle)}"><button name="decision" value="approve">Connect</button> <button name="decision" value="deny">Cancel</button></form></main></html>`;
           return new Response(html, { headers });
