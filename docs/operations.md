@@ -467,3 +467,12 @@ the portal consumer attachment barrier migration and its short-lived server
 proof; a zero-consumer count alone is insufficient. See [the deletion protocol](lifecycle-deletion.md)
 for routes, recovery and retained-byte semantics. No production source deletion
 is part of the current implementation evidence.
+
+### Authenticated MCP on a configured Studio domain
+
+When the installation configures `TIMDS_STUDIO_ORIGIN`, its authenticated
+`/api/timds/mcp` endpoint accepts that exact origin alongside `HOST_ORIGIN`.
+The OAuth deployment must also enable that origin. Credentials remain scoped to
+their issuing origin/resource; do not relabel an existing local session or
+credential. Browser Origin checks still require the request's accepted origin,
+and anonymous `/mcp` remains on the separate public host.
