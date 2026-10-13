@@ -1,0 +1,23 @@
+{
+  "name": "timds-local-oauth-provider-spike",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=22.18.0" },
+  "scripts": {
+    "dev": "cf dev",
+    "typecheck": "cf workers types && tsc --noEmit",
+    "build": "cf build",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.sha-91c870c02",
+    "cf": "1.0.0-beta.14",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  }
+}
