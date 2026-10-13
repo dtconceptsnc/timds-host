@@ -764,6 +764,63 @@
         }
       }
     },
+    "/api/timds/design-systems/{source}/principals": {
+      "get": {
+        "operationId": "listSourcePrincipals",
+        "summary": "List people and agents who can be invited into this Design System's sessions",
+        "description": "Active principals with a read, write or publish grant on the source, plus the configured designer agent, sorted by name and bounded to 500. Same read authorization as active-work; never returns emails or credentials and never waits behind the source writer queue.",
+        "tags": [
+          "Collaboration"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrincipalDirectory"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
     "/api/timds/design-systems/{source}/events": {
       "get": {
         "operationId": "getSourceEvents",
@@ -1186,7 +1243,7 @@
       "post": {
         "operationId": "startDesignerRequest",
         "summary": "Start an instruction in a new or existing live session",
-        "description": "Reuse requestId and identical prompt/target for retries. Targeting a session or draft requires owner/publisher authority; the runner joins that exact live sandbox.",
+        "description": "Reuse requestId and identical prompt/target for retries. Targeting a session or draft requires owner/publisher authority; the runner joins that exact live sandbox. A Request that names a session or draft is queued behind earlier Requests for that session and starts only when its runner is idle (submitted, failed, conflicted, sleeping or closed); a busy session never consumes an attempt or fails the Request.",
         "tags": [
           "Requests"
         ],
@@ -3321,6 +3378,15 @@
           },
           "canInvite": {
             "type": "boolean"
+          },
+          "runner": {
+            "$ref": "#/components/schemas/RunnerPresence",
+            "description": "Present on active-work sessions/drafts and the session status view."
+          },
+          "queueLength": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Requests queued for this session and not yet started (active-work and status views)."
           }
         },
         "required": [
@@ -4065,6 +4131,23 @@
                 "type": "null"
               }
             ]
+          },
+          "queuePosition": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 when the Request is running, finished, starts its own session, or is next with no runner ahead of it; otherwise the number of Requests ahead of it in its target session, counting the one whose runner currently holds the session."
+          },
+          "targetSessionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The session or draft named when the Request was created; null for a Request that starts its own session."
           }
         },
         "required": [
@@ -4823,6 +4906,114 @@
             "format": "uuid"
           }
         }
+      },
+      "RunnerPresence": {
+        "type": "object",
+        "description": "The designer runner's stored state for one session, read from its live session record without starting a container. idle: no Request has run in the session; sleeping: the last run finished and its container stopped; unknown: the record could not be read within the bounded timeout.",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "starting",
+              "running",
+              "submitting",
+              "submitted",
+              "conflicted",
+              "failed",
+              "sleeping",
+              "closed",
+              "unknown"
+            ]
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "submissionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "requestId",
+          "submissionId",
+          "error"
+        ]
+      },
+      "PrincipalDirectory": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "principals": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "user",
+                    "agent"
+                  ]
+                },
+                "active": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "type",
+                "active"
+              ]
+            }
+          }
+        },
+        "required": [
+          "apiVersion",
+          "sourceId",
+          "principals"
+        ]
       }
     },
     "responses": {

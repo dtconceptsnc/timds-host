@@ -2,13 +2,31 @@
 // Request receipt recovery. Identity and Fetch routing belong to the host edge.
 import { timdsSessionView } from '../domain/sessions.mjs';
 import { requestDiagnostic, safeRequestDiagnostic } from './diagnostics.mjs';
+import { isRunnerBusy } from './designer.mjs';
 
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const principalId = actor => actor?.principalId || actor?.id;
 const sessionActor = actor => ({...actor,principalId:principalId(actor),userId:actor.userId || null,clientId:actor.clientId || null,operator:actor.operator === true});
+const activeRun = run => ['starting','running','submitting'].includes(run?.state);
+// LiveSession status() reads its durable record only; it never starts a container.
+// idle: no Request has run here. sleeping: the last run finished and the container stopped.
+export const runnerView = status => {
+  const run=status?.runner,live=status?.state;
+  const state=['closed','closing'].includes(live)?'closed':!run?'idle':activeRun(run) || ['failed','conflicted'].includes(run.state)?run.state:live==='sleeping'?'sleeping':run.state==='submitted'?'submitted':'unknown';
+  return {state,requestId:run?.requestId || null,submissionId:run?.submissionId || null,error:run?.error || null};
+};
+const unknownRunner = () => ({state:'unknown',requestId:null,submissionId:null,error:null});
+const timed = (task,ms) => {let timer;return Promise.race([task,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Runner status timed out')),ms);})]).finally(()=>clearTimeout(timer));};
 
-export function createDesignerRequests({sourceId, store, requestStore, authorization, sessions, designer, schedule, runMutation = task=>task()}) {
+export function createDesignerRequests({sourceId, store, requestStore, authorization, sessions, designer, live, schedule, runMutation = task=>task()}) {
+  // Bounded (8 at a time, 1.5 s each) runner reads; a slow or failed one is unknown, never an error.
+  async function runnerStates(ids) {
+    const states=new Map(),queue=[...new Set(ids)];
+    const worker=async()=>{for(let id=queue.shift();id;id=queue.shift()){try{states.set(id,runnerView(await timed(live.runner(id),1500)));}catch{states.set(id,unknownRunner());}}};
+    await Promise.all(Array.from({length:Math.min(8,queue.length)},worker));
+    return states;
+  }
   async function source(id) {
     if(id!==sourceId)throw fail(404,'Design System not found');
     const system=await store.getSource(id);
@@ -74,7 +92,8 @@ export function createDesignerRequests({sourceId, store, requestStore, authoriza
       const boundRunner=runner && (runner.requestId===requestId || (!runner.requestId && session?.originating_request_id===requestId))?runner:null;
       const receipt=!boundRunner?.submissionId && session?await store.requestReceipt(session.id,requestId):null;
       const error=boundRunner?.error || (!boundRunner && !receipt?.submission_id && ['failed','dead_letter','cancelled'].includes(job.status)?job.error_message:null);
-      return {apiVersion:1,requestId,status:job.status,error:error || null,...(safeRequestDiagnostic(job.failure_diagnostic)?{diagnostic:safeRequestDiagnostic(job.failure_diagnostic)}:{}),session:session?timdsSessionView(session,system):null,sessionId:session?.id || null,submissionId:boundRunner?.submissionId || receipt?.submission_id || null,runner:boundRunner};
+      const queuePosition=requestStore.queuePosition(requestId,{runnerActive:runner?.requestId?activeRun(runner) && runner.requestId!==requestId:undefined});
+      return {apiVersion:1,requestId,status:job.status,queuePosition,targetSessionId:request.session_id || null,error:error || null,...(safeRequestDiagnostic(job.failure_diagnostic)?{diagnostic:safeRequestDiagnostic(job.failure_diagnostic)}:{}),session:session?timdsSessionView(session,system):null,sessionId:session?.id || null,submissionId:boundRunner?.submissionId || receipt?.submission_id || null,runner:boundRunner};
     },
     async execute(requestId,lease) {
       let stage='lease';
@@ -95,11 +114,32 @@ export function createDesignerRequests({sourceId, store, requestStore, authoriza
         // fork. A lost forwarding response cannot cause another model execution.
         stage='recovery';
         let result=await completed(system,request);
-        if(!result){stage='designer';result=await designer.start(system,request,request.prompt,{sessionId:request.session_id,caller:sessionActor(caller)});}
+        if(!result){
+          stage='designer';
+          try{result=await designer.start(system,request,request.prompt,{sessionId:request.session_id,caller:sessionActor(caller)});}
+          catch(error){
+            if(!request.session_id || !isRunnerBusy(error))throw error;
+            // The session's runner is busy: keep this Request queued in order, attempt unspent.
+            stage='requeue';
+            await runMutation(()=>requestStore.requeue(lease));
+            return {requestId,queued:true};
+          }
+        }
         stage='finish';
         await runMutation(()=>requestStore.finish({...lease,result}));
         return result;
       } catch(error) { throw requestDiagnostic(error,stage,'designer-request-execute'); }
+    },
+    // Adds runner and queueLength to activeWork sessions/drafts or a status session.
+    async presence(view) {
+      try {
+        const rows=view?.sessions || (view?.session?[view.session]:[]);
+        const states=await runnerStates(rows.filter(row=>row.status==='open').map(row=>row.id)),lengths=requestStore.queueLengths();
+        const enrich=row=>({...row,runner:row.status==='open'?states.get(row.id) || unknownRunner():{state:row.status==='starting'?'idle':'closed',requestId:null,submissionId:null,error:null},queueLength:lengths[row.id] || 0});
+        if(!view?.sessions)return view?.session?{...view,session:enrich(view.session)}:view;
+        const sessions=view.sessions.map(enrich),byId=new Map(sessions.map(row=>[row.id,row]));
+        return {...view,sessions,...(Array.isArray(view.drafts)?{drafts:view.drafts.map(row=>byId.get(row.id) || enrich(row))}:{})};
+      } catch { return view; }
     },
     async binding(requestId) {
       const request=await requestStore.get(requestId);

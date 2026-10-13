@@ -3,6 +3,18 @@ import { requestDiagnostic } from './diagnostics.mjs';
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
 const busy = 'This session is busy; retry when its current operation finishes';
 const conflicted = 'This Request overlaps a newer edit. Start a follow-up Request to resolve it.';
+// The runtime's single-task guard. Request execution re-queues on it, never fails.
+export const runnerBusy = 'Another Request is running in this session';
+export const isRunnerBusy = error => error?.message === runnerBusy;
+// Advisory scope of a designer Request: the paths its session last submitted,
+// otherwise the token and source trees a designer change normally touches.
+export const DESIGNER_CLAIM_DEFAULT = ['tokens.json','tokens/**','src/**'];
+const safeClaimPath = value => typeof value === 'string' && value.trim() && value.length <= 500 && !value.startsWith('/') && !value.includes('..') && !/[\\\x00-\x1f]/.test(value);
+async function designerClaimPatterns(store,sessionId) {
+  const latest=(await store.submissions(sessionId)).filter(row=>typeof row.diff_json==='string').sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)))[0];
+  const paths=[...new Set([...(latest?.diff_json || '').matchAll(/^diff --git a\/(\S+) b\//gm)].map(match=>match[1]))];
+  return paths.length && paths.length<=100 && paths.every(safeClaimPath)?paths.sort():DESIGNER_CLAIM_DEFAULT;
+}
 
 /** Native live DO dispatch. The model can submit bounded changes, never publish. */
 export function createDesigner({designerPrincipalId, authorization, sessions, store, live, getRequestBinding, reconcilePush, ensurePreview = async()=>{}, runMutation = task=>task()}) {
@@ -39,6 +51,15 @@ export function createDesigner({designerPrincipalId, authorization, sessions, st
         stage='session-identity';
         const session=await store.get(started.session.id);
         if(session.source_id!==source.id || (!sessionId && (session.owner_principal_id!==actor.principalId || session.originating_request_id!==request.id)))throw fail(409,'Designer session Request identity mismatch');
+        // One runner per session: a busy session is reported before this Request claims it.
+        stage='runtime-status';
+        const current=await live.runner(session.id);
+        if(current.runner?.requestId!==request.id && ['starting','running','submitting'].includes(current.runner?.state))throw fail(409,runnerBusy);
+        // The designer declares its intent once per Request; a retry with the same claim writes nothing.
+        stage='claim';
+        const claimNote=prompt.trim().slice(0,200).trim(),claimPatterns=await designerClaimPatterns(store,session.id);
+        const priorClaim=(await store.claims(session.id)).find(row=>row.principal_id===actor.principalId && (row.kind || 'advisory')==='advisory');
+        if(!priorClaim || priorClaim.note!==claimNote || JSON.stringify(priorClaim.patterns)!==JSON.stringify(claimPatterns))await runMutation(()=>sessions.claim(actor,session.id,{patterns:claimPatterns,note:claimNote}));
         stage='claims';
         const activeWork=sessions.activeWork?await sessions.activeWork(actor,source.id):null;
         const claims=activeWork?.claims || activeWork?.sessions?.flatMap(item=>item.claims || []) || [];
