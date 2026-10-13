@@ -1,0 +1,2688 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TimDS Host API",
+    "version": "1.0.0",
+    "description": "Portable hosted editing and multiplayer contract. The toolkit selects a host URL and speaks v1; it does not depend on Supabase, the portal, git or a specific runtime. The portal implements this contract today; a standalone host can implement the same routes. Optional X-TimDS-API-Version and JSON apiVersion default to 1. Success JSON carries apiVersion:1. Unknown response fields must be ignored. Credentials come from the existing identity/device flow; this document covers host work operations, not identity provisioning or operator catalogue administration. Internal Worker RPC, callbacks and consumer MCP JSON-RPC are separate service boundaries. Sessions, submissions, claims, members and events are stored behind one collaboration store. Publication is preflight, merge, build, prepare, release, close with serializable step receipts. New asynchronous behavior is triggered by pushes or session alarms."
+  },
+  "servers": [
+    {
+      "url": "https://{host}",
+      "variables": {
+        "host": {
+          "default": "timds.com",
+          "description": "Configured host origin; no toolkit vendor dependency."
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "Sessions",
+      "description": "Isolated source work and shared-session lifecycle."
+    },
+    {
+      "name": "Collaboration",
+      "description": "Members, advisory claims and active work."
+    },
+    {
+      "name": "Drafts",
+      "description": "Named nonexpiring integration branches."
+    },
+    {
+      "name": "Requests",
+      "description": "Human intent and live execution progress."
+    },
+    {
+      "name": "Publication",
+      "description": "Ordered immutable releases and principal-authorized rollback."
+    },
+    {
+      "name": "Consumer preview",
+      "description": "Opt-in public token preview without changing production pins."
+    }
+  ],
+  "security": [
+    {
+      "identity": []
+    }
+  ],
+  "paths": {
+    "/api/timds/sessions": {
+      "post": {
+        "operationId": "startSession",
+        "summary": "Start or recover a hosted editing session",
+        "description": "Creates an isolated fork and a 24-hour session. Reusing an idempotency key for different origins fails. Source access is rechecked.",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiVersion": {
+                    "type": "integer",
+                    "const": 1
+                  },
+                  "systemId": {
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "description": "Reuse after any uncertain outcome. Bound to principal, source and session origins.",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "draft": {
+                    "type": "string",
+                    "description": "Name of an open draft the caller can join; submissions target it instead of main."
+                  },
+                  "on": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Advisory claim patterns established when starting."
+                  },
+                  "patterns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Alias for on."
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "description": "Intent recorded on the initial advisory claim."
+                  },
+                  "from": {
+                    "type": "string",
+                    "description": "main or a previously published immutable version label."
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "session",
+                      "draft"
+                    ],
+                    "default": "session"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,79}$",
+                    "description": "Required when kind=draft. Prefer the source drafts endpoint."
+                  }
+                },
+                "required": [
+                  "systemId"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/sessions/{sessionId}": {
+      "get": {
+        "operationId": "snapshotSession",
+        "summary": "Pull the current source snapshot",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Session or draft UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/sessions/{sessionId}/status": {
+      "get": {
+        "operationId": "getSessionStatus",
+        "summary": "Get members, claims, submissions and live state",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Session or draft UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/sessions/{sessionId}/history": {
+      "get": {
+        "operationId": "getSessionHistory",
+        "summary": "Read commit and append-only event history",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Session or draft UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/sessions/{sessionId}/submit": {
+      "post": {
+        "operationId": "submitSession",
+        "summary": "Freeze a submission and preview",
+        "description": "Up to 4,000 changed/deleted paths and 10 MiB decoded changes (16 MiB JSON transport). A 200 result may contain stale=true or conflicts and no submission; the fork is not mutated by a stale write. Pull/reapply and retry against the returned session.baseRevision. Conflict choices are bound to mainRevision. Child submissions integrate into their draft; they do not publish main.",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Session or draft UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeSet"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/sessions/{sessionId}/update": {
+      "post": {
+        "operationId": "updateSession",
+        "summary": "Reconcile an editing session with its target",
+        "description": "Up to 4,000 changed/deleted paths and 10 MiB decoded changes (16 MiB JSON transport). A 200 result may contain stale=true or conflicts and no submission; the fork is not mutated by a stale write. Pull/reapply and retry against the returned session.baseRevision. Conflict choices are bound to mainRevision. Child submissions integrate into their draft; they do not publish main.",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Session or draft UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeSet"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/sessions/{sessionId}/close": {
+      "post": {
+        "operationId": "closeSession",
+        "summary": "Close a session and release all owned resources",
+        "description": "Owner or publisher may close; operators may perform cleanup. Idempotent. Retains audit while removing live runtime, fork, credentials, subscriptions and previews. Closing a draft first closes its child sessions.",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Session or draft UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionedInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/sessions/{sessionId}/join": {
+      "post": {
+        "operationId": "joinSession",
+        "summary": "Join an invited session or invite another principal",
+        "description": "Omit principalId to join as the authenticated, already invited member. Only owner or publisher can invite another principal. Membership grants session access, not publication.",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Session or draft UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiVersion": {
+                    "type": "integer",
+                    "const": 1
+                  },
+                  "principalId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/sessions/{sessionId}/claims": {
+      "post": {
+        "operationId": "claimSessionWork",
+        "summary": "Declare advisory path patterns and intent",
+        "description": "Claims warn about overlaps and never lock a file. Change sets also produce active change claims.",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Session or draft UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiVersion": {
+                    "type": "integer",
+                    "const": 1
+                  },
+                  "patterns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "minItems": 1,
+                    "maxItems": 100
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "patterns"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}/active-work": {
+      "get": {
+        "operationId": "getActiveWork",
+        "summary": "Read concurrent work, members, claims and audit",
+        "tags": [
+          "Collaboration"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveWork"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}/submissions": {
+      "get": {
+        "operationId": "listSubmissions",
+        "summary": "Read source submissions and publication status",
+        "tags": [
+          "Publication"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Submissions"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}/drafts": {
+      "get": {
+        "operationId": "listDrafts",
+        "summary": "List open named drafts",
+        "tags": [
+          "Drafts"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftList"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createDraft",
+        "summary": "Create a named draft without expiry",
+        "tags": [
+          "Drafts"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiVersion": {
+                    "type": "integer",
+                    "const": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"
+                  },
+                  "from": {
+                    "type": "string",
+                    "description": "main or a previously published immutable version label.",
+                    "default": "main"
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}/drafts/{name}/snapshot": {
+      "get": {
+        "operationId": "snapshotDraft",
+        "summary": "Read a draft snapshot for source-authorized integration",
+        "tags": [
+          "Drafts"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Draft name or UUID.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}/drafts/{name}/close": {
+      "post": {
+        "operationId": "closeDraft",
+        "summary": "Close a draft and its child sessions",
+        "tags": [
+          "Drafts"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Draft name or UUID.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionedInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{sourceId}/requests": {
+      "post": {
+        "operationId": "startDesignerRequest",
+        "summary": "Start an instruction in a new or existing live session",
+        "description": "Reuse requestId and identical prompt/target for retries. Targeting a session or draft requires owner/publisher authority; the runner joins that exact live sandbox.",
+        "tags": [
+          "Requests"
+        ],
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted; poll the returned job/publication identity.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiVersion": {
+                    "type": "integer",
+                    "const": 1
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "description": "1\u201332 KiB UTF-8 instruction.",
+                    "minLength": 1
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "sessionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "prompt",
+                  "requestId"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{sourceId}/requests/{requestId}": {
+      "get": {
+        "operationId": "getDesignerRequest",
+        "summary": "Read Request progress and its resulting submission",
+        "tags": [
+          "Requests"
+        ],
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "description": "Request UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/submissions/{submissionId}/publish": {
+      "post": {
+        "operationId": "publishSubmission",
+        "summary": "Preflight, dry-run or queue an immutable submission",
+        "description": "Requires a current source publisher grant, checked again at pointer commit. preflight=true checks readiness; dryRun=true also merges/builds without writes. Otherwise reserves source FIFO order. Publication merges against current main when executed. A child submission cannot publish main.",
+        "tags": [
+          "Publication"
+        ],
+        "parameters": [
+          {
+            "name": "submissionId",
+            "in": "path",
+            "required": true,
+            "description": "Submission UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preflight or dry-run receipt.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted; poll the returned job/publication identity.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiVersion": {
+                    "type": "integer",
+                    "const": 1
+                  },
+                  "preflight": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "dryRun": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timds/publications/{publicationId}": {
+      "get": {
+        "operationId": "getPublication",
+        "summary": "Poll publication steps and queue position",
+        "tags": [
+          "Publication"
+        ],
+        "parameters": [
+          {
+            "name": "publicationId",
+            "in": "path",
+            "required": true,
+            "description": "Publication UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems/{source}/rollback": {
+      "post": {
+        "operationId": "rollbackVersion",
+        "summary": "Restore a previously published immutable version",
+        "description": "Requires a source publisher grant at request and pointer transaction. Rejects active or interrupted publication with staged bytes. Does not change source files or any consumer pin.",
+        "tags": [
+          "Publication"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation. Inspect stale/conflicts before assuming a change was accepted.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RollbackResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiVersion": {
+                    "type": "integer",
+                    "const": 1
+                  },
+                  "versionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "version": {
+                    "type": "string",
+                    "description": "Immutable published version label.",
+                    "maxLength": 100
+                  },
+                  "dryRun": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "anyOf": [
+                  {
+                    "required": [
+                      "versionId"
+                    ],
+                    "properties": {
+                      "versionId": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  },
+                  {
+                    "required": [
+                      "version"
+                    ],
+                    "properties": {
+                      "version": {
+                        "type": "string",
+                        "description": "Immutable published version label.",
+                        "maxLength": 100
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/design-system-previews/{source}/{ref}/tokens.css": {
+      "get": {
+        "operationId": "getPreviewTokens",
+        "summary": "Read a public token-only preview stylesheet",
+        "tags": [
+          "Consumer preview"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "description": "Open draft name or session UUID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "CSS custom properties only. No source, executable rules or private credentials.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "public, max-age=5, must-revalidate"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string",
+                  "const": "noindex, nofollow"
+                }
+              },
+              "Access-Control-Allow-Origin": {
+                "schema": {
+                  "type": "string",
+                  "const": "*"
+                }
+              }
+            },
+            "content": {
+              "text/css": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      },
+      "head": {
+        "operationId": "headPreviewTokens",
+        "summary": "Read a public token-only preview stylesheet",
+        "tags": [
+          "Consumer preview"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "description": "Source UUID or URL-encoded immutable system ID (encode the slash in organization/system).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "description": "Open draft name or session UUID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "CSS custom properties only. No source, executable rules or private credentials.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "public, max-age=5, must-revalidate"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string",
+                  "const": "noindex, nofollow"
+                }
+              },
+              "Access-Control-Allow-Origin": {
+                "schema": {
+                  "type": "string",
+                  "const": "*"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "identity": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Identity-bound TimDS CLI credential or authenticated application session. Consumer-only and legacy unbound tokens cannot author. Publication requires a separate source grant."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable error. Credentials are never included."
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Conflict"
+            }
+          },
+          "mainRevision": {
+            "type": "string",
+            "description": "Full immutable source revision.",
+            "pattern": "^[a-f0-9]{40}$"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "VersionedInput": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1,
+            "default": 1
+          }
+        }
+      },
+      "File": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Safe repository-relative path; no absolute paths, parent traversal or .git."
+          },
+          "encoding": {
+            "type": "string",
+            "const": "base64"
+          },
+          "content": {
+            "type": "string",
+            "description": "Canonical base64 bytes."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "100644",
+              "100755",
+              "120000"
+            ],
+            "default": "100644"
+          }
+        },
+        "required": [
+          "path",
+          "encoding",
+          "content"
+        ]
+      },
+      "Conflict": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "description": "Logical dotted key or JSON pointer identifying the conflicting key; absent for whole-file conflicts."
+          },
+          "base": {
+            "description": "Original value or file descriptor; null when absent."
+          },
+          "mine": {
+            "description": "Submitted value or file descriptor; null when deleted."
+          },
+          "theirs": {
+            "description": "Current target value or file descriptor; null when deleted."
+          }
+        },
+        "required": [
+          "path",
+          "base",
+          "mine",
+          "theirs"
+        ]
+      },
+      "ChangeSet": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "baseRevision": {
+            "type": "string",
+            "description": "Full immutable source revision.",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "changedFiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/File"
+            },
+            "maxItems": 4000
+          },
+          "deletedPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4000
+          },
+          "note": {
+            "type": "string",
+            "description": "Human instruction, required and nonempty for agent principals.",
+            "maxLength": 2000
+          },
+          "mainRevision": {
+            "type": "string",
+            "description": "Full immutable source revision.",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "resolvedPaths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "path#dotted.key=mine|theirs or path#/JSON/pointer=mine|theirs. A path alone chooses the local whole file. Requires mainRevision."
+            },
+            "uniqueItems": true,
+            "maxItems": 4000
+          },
+          "lastUpdateHash": {
+            "type": "string",
+            "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})?$",
+            "description": "Optional compare-and-swap hash from session.lastUpdateHash. Omit for older clients relying on baseRevision alone."
+          }
+        },
+        "required": [
+          "baseRevision",
+          "changedFiles",
+          "deletedPaths"
+        ],
+        "description": "At most 4,000 combined changed/deleted paths and 10 MiB decoded changed file content. Both baseRevision and optional lastUpdateHash protect shared writers."
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "systemId": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "baseRevision": {
+            "type": "string",
+            "description": "Full revision; empty only while starting."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "starting",
+              "open",
+              "closing",
+              "closed",
+              "expired"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "session",
+              "draft"
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "draftSessionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ownerPrincipalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "liveUrl": {
+            "type": "string",
+            "description": "Live preview URL, empty when unavailable."
+          },
+          "sandboxId": {
+            "type": "string"
+          },
+          "liveState": {
+            "type": "string"
+          },
+          "lastUpdateHash": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            }
+          },
+          "submissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Submission"
+            }
+          },
+          "canManage": {
+            "type": "boolean"
+          },
+          "canInvite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "systemId",
+          "sourceId",
+          "baseRevision",
+          "status",
+          "kind",
+          "expiresAt"
+        ]
+      },
+      "Member": {
+        "type": "object",
+        "properties": {
+          "principalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "member"
+            ]
+          },
+          "invitedBy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "user",
+              "agent"
+            ]
+          }
+        },
+        "required": [
+          "principalId",
+          "role",
+          "name",
+          "type"
+        ]
+      },
+      "Claim": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "principalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "patterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "advisory",
+              "changes"
+            ]
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id",
+          "principalId",
+          "patterns",
+          "kind"
+        ]
+      },
+      "Submission": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "baseRevision": {
+            "type": "string",
+            "description": "Full immutable source revision.",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "headCommit": {
+            "type": "string"
+          },
+          "reviewBranch": {
+            "type": "string"
+          },
+          "previewUrl": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "diff": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {}
+              }
+            ]
+          },
+          "note": {
+            "type": "string"
+          },
+          "targetDraftSessionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedBy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "publication": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Publication"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "sessionId",
+          "status"
+        ]
+      },
+      "Publication": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "submissionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "executionJobId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "conflicts": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Conflict"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "queuePosition": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "conflictRate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "autoRebaseSuccess": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "submitToPublishMs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "sourceId",
+          "submissionId",
+          "status",
+          "stage"
+        ]
+      },
+      "SessionResult": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "session": {
+            "$ref": "#/components/schemas/Session"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/File"
+            }
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Conflict"
+            }
+          },
+          "mainRevision": {
+            "type": "string",
+            "description": "Full immutable source revision.",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "rebasedChanges": {
+            "$ref": "#/components/schemas/ChangeSet"
+          },
+          "submission": {
+            "$ref": "#/components/schemas/Submission"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            }
+          },
+          "submissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Submission"
+            }
+          },
+          "canManage": {
+            "type": "boolean"
+          },
+          "canInvite": {
+            "type": "boolean"
+          },
+          "claim": {
+            "$ref": "#/components/schemas/Claim"
+          },
+          "overlaps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            }
+          },
+          "commits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          },
+          "publicationEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          }
+        },
+        "required": [
+          "apiVersion",
+          "session"
+        ]
+      },
+      "Event": {
+        "type": "object",
+        "description": "Append-only audit. Additional fields are forward compatible.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actor_principal_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "originating_request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "merged_keys": {
+            "type": "array",
+            "items": {}
+          },
+          "conflicted_keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Conflict"
+            }
+          },
+          "details_json": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "ActiveWork": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "canPublish": {
+            "type": "boolean"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            }
+          },
+          "drafts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          },
+          "publicationEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          }
+        },
+        "required": [
+          "apiVersion",
+          "sourceId",
+          "canPublish",
+          "sessions",
+          "drafts",
+          "events",
+          "publicationEvents"
+        ]
+      },
+      "DraftList": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "drafts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            }
+          }
+        },
+        "required": [
+          "apiVersion",
+          "drafts"
+        ]
+      },
+      "Submissions": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "canPublish": {
+            "type": "boolean"
+          },
+          "submissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Submission"
+            }
+          }
+        },
+        "required": [
+          "apiVersion",
+          "canPublish",
+          "submissions"
+        ]
+      },
+      "RequestResult": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "executionJobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "Execution job state; runner state tracks the active sandbox."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "submissionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Session"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runner": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "submissionId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "conflicts": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Conflict"
+                    }
+                  },
+                  "liveUrl": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId"
+        ]
+      },
+      "PublishResult": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "publication": {
+            "$ref": "#/components/schemas/Publication"
+          },
+          "preflight": {
+            "type": "object",
+            "description": "Authorization, merge and validation receipt; dryRun never moves source or published pointers.",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "apiVersion"
+        ]
+      },
+      "RollbackResult": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "action": {
+            "type": "string",
+            "const": "rollback"
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "apiVersion"
+        ]
+      }
+    },
+    "responses": {
+      "HostError": {
+        "description": "Error response. 400 invalid input/version; 401 authentication required; 403 grant required; 404 unavailable; 409 changed/busy/lifecycle conflict; 410 expired; 413 size limit; 429 capacity; 503 provider unavailable. Retry uncertain outcomes with the same idempotency identity.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}
