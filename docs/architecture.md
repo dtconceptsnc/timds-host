@@ -418,6 +418,65 @@ its session last submitted, else `tokens.json`, `tokens/**`, `src/**`, with the
 prompt's first 200 characters as its note). `GET .../principals` lists active
 principals with a grant on the source, plus the designer agent, for invitations.
 
+### Warm drafts and wake
+
+A session or draft somebody is looking at stays warm; one nobody watches sleeps
+on the normal idle rule (10 minutes after its last activity); waking is visible
+in the feed. Nothing here is persisted on the coordinator, and it gains no
+timers, so it still hibernates between messages.
+
+- **Client cadence.** On a session or draft page the Studio feed client sends
+  `{type:'viewing', sessionId|draftId}` when the page opens, again after every
+  feed reconnect (`ready`), and then **every 5 minutes** while it stays on the
+  page, hidden or not. Leaving sends `{type:'viewing', viewing:null}`. The raw
+  25-second `ping` stays auto-answered and never wakes the coordinator, so it is
+  not a keepalive.
+- **Coordinator.** Every `viewing` message refreshes the keepalive, changed or
+  not; only a change broadcasts presence. The feed calls
+  `live.watch(id,{watched:true,opened})` (`src/live/sessions.mjs`), which checks
+  that the session belongs to this source and is open, then calls
+  `LiveSession.watch({sessionId, watched:true, until: now + 30 min})`. When a
+  socket changes away from a session or closes, the feed recomputes the watched
+  set from `getWebSockets()` attachments and, if no other socket views it,
+  calls `watch({sessionId, watched:false})`. A release lost to a server-side
+  close lapses on its own after 30 minutes.
+- **LiveSession.** `watch` touches storage and alarms only and never starts a
+  container. `watched:true` stores `watchedUntil` (epoch ms, capped at now +
+  30 minutes) on the `live` KV record and, if the container runs, refreshes
+  `lastActivityAt` and the idle alarm. `watched:false` clears `watchedUntil` and
+  re-arms the alarm at the normal idle deadline. When the idle alarm finds the
+  deadline passed but `watchedUntil` in the future, it re-arms for
+  `min(watchedUntil, now + idle)` instead of sleeping. The reply is `status()`
+  plus `reported`, the last state the runtime reported.
+- **Visible wake.** The host writes `live_state` `waking` (deduplicated by
+  `setLiveState`) in two places. The designer writes it when `LiveSession.status()`
+  says `sleeping` just after its busy check, and writes `sleeping` again if the
+  start fails before the runtime is called. The feed writes it when a viewer
+  arrives (a changed `viewing`) at a session whose status is `sleeping`, and
+  then calls `LiveSession.resume(id)`. `resume` sets `wakeRequested` and an
+  immediate alarm and returns at once; the alarm runs the same `wake()` a frame
+  fetch or Request uses. A periodic re-send wakes only a session that slept
+  normally (`reported: 'sleeping'`); it never retries a failed wake, but a viewer
+  who reopens the page does. The runtime then reports `starting` and `ready` or
+  `failed`.
+- **Ready after wake.** While the live record says `starting` and the container
+  runs, `touch()` arms a 1-second alarm that probes `/__timds_live/version` and
+  reports `ready` or `failed`. A fresh or resumed container reports `ready`
+  without a frame open or a Request running. After a Request, the runtime syncs
+  the frame's checkout before it reports `ready`.
+
+Warm reload after a push stays inside the five-second budget without timers on
+the coordinator. A session push reaches `LiveSession.pushed` directly through
+the repository sandbox's `fork-pushed` notification; the Artifacts event Queue
+(`maxBatchSize:10, maxBatchTimeout:1`) is a fallback that the runtime
+deduplicates by revision. The `updated` row reaches sockets in the same
+microtask drain as its commit. Inside the container, `sync()` (credential
+callback, fetch, reset) is followed by a 100 ms file-batch debounce, and the
+dev server is either refreshed in place (`timds.json` `live.strategy: "hmr"`) or
+restarted, with readiness probed every 100 ms. The injected frame script polls
+`/__timds_live/version` every 500 ms and reloads when the version changes.
+Frame fetches refresh the idle deadline at most once every five seconds.
+
 ## Publication Workflow and failure recovery
 
 Use publication UUID as Workflow identity. The coordinator reserves one

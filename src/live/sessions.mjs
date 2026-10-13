@@ -1,5 +1,7 @@
 import { sessionIdPattern } from '../../runtime/policy.mjs';
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
+// One keepalive window; the Studio client re-sends `viewing` every five minutes.
+export const WATCH_MS = 30*60_000;
 
 /** Native DO transport only: no bearer credential or portal URL is involved. */
 export function createHostLiveSessions({sourceId, getLive, artifacts, store, hosts, subscriptions, clock = () => Date.now()}) {
@@ -11,6 +13,11 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
     if(session.fork_repository!==`session-${session.id}`)throw fail(409,'Live fork identity mismatch');
     if(open && (source.archived_at || source.lifecycle_status!=='ready' || store.eligible && !await store.eligible(source) || session.status!=='open' || session.expires_at && Date.parse(session.expires_at)<=clock()))throw fail(410,'Live session is closed or expired');
     return {session,source};
+  }
+  // Host-written wake marker. setLiveState dedupes it, and the runtime's own
+  // starting/ready/failed reports follow it. Never thrown to the caller.
+  async function mark(id,state = 'waking') {
+    try {const session=await store.get(id);if(session?.source_id===sourceId && session.status==='open')await store.setLiveState(id,state,{expectedStatus:'open'});}catch{}
   }
   async function configure(session) {
     if(session.source_id!==sourceId)throw fail(409,'Live source identity mismatch');
@@ -27,6 +34,24 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
       throw fail(400,'Unsupported native live operation');
     },
     async schedule(session) {if(configured)return configure(session);},
+    waking:id=>mark(id,'waking'),
+    // A viewer that waits for a wake which then never starts sees `sleeping` again.
+    slept:id=>mark(id,'sleeping'),
+    /** Feed keepalive. watched refreshes the LiveSession's idle deadline and its
+     * 30-minute watch; opened (a viewer arriving) or a lapsed watch on a session
+     * that slept normally also wakes it visibly. The coordinator never waits on
+     * a container start: resume() only arms the LiveSession's own alarm. */
+    async watch(id,{watched,opened = false}={}) {
+      if(!configured || !sessionIdPattern.test(id || ''))return {ignored:true};
+      const session=await store.get(id);
+      if(!session || session.source_id!==sourceId)return {ignored:true};
+      if(!watched)return native(id).watch({sessionId:id,watched:false});
+      try{await owned(id);}catch{return {ignored:true};}
+      const status=await native(id).watch({sessionId:id,watched:true,until:clock()+WATCH_MS});
+      // A failed wake is retried only by a viewer arriving, never by the periodic refresh.
+      if(status?.state==='sleeping' && (opened?status.reported!=='none':status.reported==='sleeping')){await mark(id,'waking');await native(id).resume(id);return {...status,waking:true};}
+      return status;
+    },
     async ensure(session,source) {
       if(!configured)return {live_url:'',sandbox_id:'',live_state:'unavailable'};
       if(source.id!==sourceId || session.source_id!==sourceId)throw fail(409,'Live source identity mismatch');

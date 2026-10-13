@@ -76,14 +76,15 @@ export class SystemCoordinator extends DurableObject {
     this.deletion=createSourceDeletion({sourceId,storage:ctx.storage,catalog:this.catalog,store:this.store,artifacts:this.artifacts,preview:this.preview,live:this.requests.live,stopMedia:options=>this.media.expire({fenced:true,...options}),mediaInventory:()=>this.media.inventory(),runMutation:this.engine.runMutation,env,origin:hostOrigin(env)});
     this.invitations=createSourceInvitations({sourceId,catalog:this.catalog,store:this.store,env});
     // Live feed: hibernatable sockets; raw `ping` heartbeats never wake the object.
-    this.feed=createSourceFeed({sourceId,ctx,store:this.store,catalog:this.catalog,authorize:(actor,reference)=>this.engine.invoke({operation:'sourceEvents',actor,args:[reference,{limit:1}]})});
+    this.feed=createSourceFeed({sourceId,ctx,store:this.store,catalog:this.catalog,authorize:(actor,reference)=>this.engine.invoke({operation:'sourceEvents',actor,args:[reference,{limit:1}]}),
+      watch:(id,options)=>this.requests.live.watch(id,options)});
     this.store.onEvent(row=>this.feed.onEvent(row));
     if(typeof WebSocketRequestResponsePair==='function')ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping','pong'));
   }
   async fetch(request){try{return await this.feed.accept(request);}catch(error){return errorResponse(error);}}
   async webSocketMessage(ws,message){try{await this.feed.message(ws,message);}catch{try{ws.close(1011,'Feed error');}catch{}}}
-  async webSocketClose(ws){this.feed.closed(ws);}
-  async webSocketError(ws){this.feed.closed(ws);}
+  async webSocketClose(ws){await this.feed.closed(ws);}
+  async webSocketError(ws){await this.feed.closed(ws);}
   async mediaOperation(input){try{return {ok:true,value:await this.media.invoke(input)};}catch(error){return {ok:false,error:safeError(error)};}}
   async mediaUpload(request,route){try{return await this.media.upload(request,route);}catch(error){return errorResponse(error);}}
   async mediaFetch(request,route){try{return await this.media.fetch(request,route);}catch(error){return errorResponse(error);}}
