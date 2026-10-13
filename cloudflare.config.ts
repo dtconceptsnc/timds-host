@@ -8,6 +8,10 @@ const artifactsNamespaces=JSON.parse(process.env.TIMDS_ARTIFACTS_BINDINGS||'{}')
 if(!artifactsNamespaces||Array.isArray(artifactsNamespaces)||typeof artifactsNamespaces!=='object'||new Set(Object.values(artifactsNamespaces)).size!==Object.keys(artifactsNamespaces).length)throw new Error('Use an explicit Artifacts namespace to binding map');
 for(const [namespace,binding] of Object.entries(artifactsNamespaces))if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(namespace)||typeof binding!=='string'||!/^ARTIFACTS_[A-Z0-9_]+$/.test(binding))throw new Error('Invalid Artifacts namespace binding');
 const artifactsBindings=Object.fromEntries(Object.entries(artifactsNamespaces).map(([namespace,binding])=>[binding,bindings.artifacts({namespace,dev:{remote:true}})]));
+const mediaLegacy=JSON.parse(process.env.TIMDS_MEDIA_LEGACY_BINDINGS||'{}') as Record<string,string>;
+if(!mediaLegacy||Array.isArray(mediaLegacy)||typeof mediaLegacy!=='object'||new Set(Object.values(mediaLegacy)).size!==Object.keys(mediaLegacy).length)throw new Error('Use an explicit legacy R2 bucket to media binding map');
+for(const [bucket,binding]of Object.entries(mediaLegacy))if(!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket)||typeof binding!=='string'||!/^MEDIA_LEGACY_[A-Z0-9_]+$/.test(binding))throw new Error('Invalid legacy media bucket binding');
+const mediaBindings=Object.fromEntries(Object.entries(mediaLegacy).map(([bucket,binding])=>[binding,bindings.r2({name:bucket})]));
 const repository=defineContainer({name:`${name}-repository`,schedulingPolicy:'durable-object',images:{repository:{dockerfile:'./runtime/Repository.Dockerfile'}}});
 const live=defineContainer({name:`${name}-live`,schedulingPolicy:'durable-object',images:{agent:{dockerfile:'./runtime/Dockerfile'}}});
 const build=defineContainer({name:`${name}-build`,schedulingPolicy:'durable-object',images:{build:{dockerfile:'./runtime/Build.Dockerfile'}}});
@@ -30,6 +34,10 @@ export default defineConfig({
     },
     env:{
       ...artifactsBindings,
+      ...mediaBindings,
+      MEDIA:bindings.r2({name:`${name}-media`}),
+      TIMDS_MEDIA_LEGACY_BINDINGS:bindings.text(JSON.stringify(mediaLegacy)),
+      TIMDS_MEDIA_ALLOWED_ORIGINS:bindings.text(process.env.TIMDS_MEDIA_ALLOWED_ORIGINS || '[]'),
       TIMDS_ARTIFACTS_BINDINGS:bindings.text(JSON.stringify(artifactsNamespaces)),
       TIMDS_ARTIFACTS_REST_FALLBACK:bindings.text(process.env.TIMDS_ARTIFACTS_REST_FALLBACK==='true'?'true':'false'),
       ASSETS:bindings.assets(),

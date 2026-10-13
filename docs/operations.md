@@ -62,6 +62,10 @@ operations use the native binding, not a developer OAuth token; the namespace
 can initialize on its first repository creation. Keep REST fallback disabled
 unless explicitly operating a separately validated Artifacts API credential.
 
+Native source media uses its own mutable bucket and source-bound transfer
+capabilities; see [media operations](api/media.md) for limits, imported bucket
+bindings, CORS, cancellation and scoped deletion.
+
 ## Create storage and the event queue
 
 These create commands are for a **new installation**. Record the resource IDs;
@@ -72,6 +76,7 @@ npx cf queues create --queue-name "${TIMDS_WORKER_NAME}-events"
 npx cf d1 create --name "${TIMDS_WORKER_NAME}-catalog"
 npx cf r2 buckets create --name "${TIMDS_WORKER_NAME}-snapshots"
 npx cf r2 buckets create --name "${TIMDS_WORKER_NAME}-releases"
+npx cf r2 buckets create --name "${TIMDS_WORKER_NAME}-media"
 ```
 
 Set `TIMDS_AGENT_PUSH_QUEUE_ID` to the returned `queue_id`, and

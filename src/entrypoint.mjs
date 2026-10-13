@@ -1,3 +1,4 @@
+import { createPublicMedia } from './media/public.mjs';
 import { createHostOAuth } from './auth/oauth.mjs';
 import { createApi } from './api.mjs';
 import { createProvisioner } from './provision.mjs';
@@ -41,7 +42,8 @@ function publishedServices(env,ctx) {
 const api=createApi({getCoordinator,provision:createProvisioner({getCoordinator}),mcp:(request,env,ctx,actor)=>publishedServices(env,ctx).mcp(request,env,ctx,actor)});
 export class PublicRoots extends WorkerEntrypoint {
   legacyFetch(request,sourceId) {return publishedServices(this.env,this.ctx).legacy.fetch(request,sourceId);}
-  fetch(request) {
+  async fetch(request) {
+    const media=await createPublicMedia({env:this.env,getCoordinator:id=>getCoordinator(this.ctx,id)})(request);if(media)return media;
     const services=publishedServices(this.env,this.ctx);
     return new URL(request.url).pathname==='/mcp'?services.mcp(request,this.env,this.ctx):services.roots.fetch(request);
   }
@@ -67,8 +69,14 @@ export default {
     try {
       if(new URL(request.url).pathname==='/health')return publicFetch(request,env,ctx);
       if(new URL(request.url).origin===env.TIMDS_PUBLIC_ORIGIN){
+        const media=await createPublicMedia({env,getCoordinator:id=>getCoordinator(ctx,id)})(request);if(media)return media;
         const services=publishedServices(env,ctx);
         return new URL(request.url).pathname==='/mcp'?services.mcp(request,env,ctx):services.roots.fetch(request);
+      }
+      // TimDS 0.1.x media follows the returned canonical child URLs. Keep its
+      // initial create path under the same OAuth authentication as the API.
+      if(request.method==='POST'&&new URL(request.url).pathname==='/api/operator/design-system-assets/uploads'){
+        const url=new URL(request.url);url.pathname='/api/timds/media/uploads';request=new Request(url,request);
       }
       return await createHostOAuth(env,{api,publicFetch,claimInvitations:(request,bindings)=>claimLoginInvitations({request,env:bindings,catalog:new Catalog(bindings.CATALOG),getCoordinator:id=>getCoordinator(ctx,id)})}).fetch(request,env,ctx);
     } catch(error) {return errorResponse(error);}

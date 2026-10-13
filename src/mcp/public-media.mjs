@@ -1,6 +1,19 @@
 const limit=1000;
 /** Imported catalogue rows are retained history, not public JSON wholesale. */
-export async function readImportedPublicMedia({catalog,storage,sourceId}){
+export async function readImportedPublicMedia({catalog,storage,sourceId,mediaStore}){
+  if(mediaStore){
+    const rows=await mediaStore.assets(limit),assets=[];
+    for(const row of rows.slice(0,limit)){
+      if(row.status!=='ready'||row.visibility!=='public')continue;
+      let url;try{url=new URL(row.public_url);}catch{continue;}
+      if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)continue;
+      const metadata=row.metadata||{},value={id:row.id,key:typeof metadata.key==='string'?metadata.key.slice(0,300):null,title:String(row.title||'').slice(0,500),kind:String(row.kind||'').slice(0,40),tags:Array.isArray(row.tags)?row.tags.slice(0,50).map(tag=>String(tag).slice(0,100)):[],publicUrl:url.href,contentType:String(row.content_type||'').slice(0,150),bytes:Number(row.bytes)||0,sha256:/^[a-f0-9]{64}$/.test(row.sha256||'')?row.sha256:null};
+      for(const key of ['durationSeconds','width','height','frameRate'])if(Number.isFinite(metadata[key])&&metadata[key]>=0)value[key]=metadata[key];
+      if(typeof metadata.codec==='string')value.codec=metadata.codec.slice(0,100);
+      assets.push(value);
+    }
+    return {schemaVersion:2,assets,truncated:rows.length>limit,limit};
+  }
   // A positive native provision receipt is sufficient to avoid the optional
   // import schema. Imported sources lack this receipt and still fail closed
   // when their active-stage authority is unavailable.

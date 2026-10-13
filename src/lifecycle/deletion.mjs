@@ -5,13 +5,13 @@ import { verifyDeletionConsumers } from './consumer-proof.mjs';
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const canonical=value=>JSON.stringify(value&&typeof value==='object'?Array.isArray(value)?value.map(item=>JSON.parse(canonical(item))):Object.fromEntries(Object.keys(value).sort().map(key=>[key,JSON.parse(canonical(value[key]))])):value);
 const hash=value=>createHash('sha256').update(canonical(value)).digest('hex');
-const retention={immutableReleaseBytes:'retained_inaccessible',audit:'retained'};
+const retention={immutableReleaseBytes:'retained_inaccessible',mediaOriginals:'removed_scoped',audit:'retained'};
 const view=row=>({apiVersion:1,operationId:row.id,sourceId:row.source_id,status:row.status,phase:row.phase,repository:row.inventory.repository,impactHash:row.impact_hash,counts:row.inventory.counts,retention,requiresConsumerProof:Boolean(row.portal_origin),awaitingConsumerProof:row.status==='awaiting_consumer_proof',error:row.error||null,createdAt:row.created_at,updatedAt:row.updated_at,completedAt:row.completed_at||null});
 
 /** A durable, source-local cleanup engine. External calls execute outside the
  * coordinator mutation queue; every step reacquires its fenced lease before
  * committing. An alarm resumes a crash from the last durable checkpoint. */
-export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,preview,live,runMutation,env,origin,clock=()=>Date.now()}) {
+export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,preview,live,stopMedia=async()=>{},mediaInventory=()=>({uploads:[]}),runMutation,env,origin,clock=()=>Date.now()}) {
   const sql=storage.sql,now=()=>new Date(clock()).toISOString();
   const readRows=table=>sql.exec(`SELECT row_json FROM ${table} ORDER BY id`).toArray().map(row=>JSON.parse(row.row_json));
   const get=id=>{const row=store.getLifecycleOperation(id);if(!row||row.kind!=='delete'||row.source_id!==sourceId)throw fail(404,'Deletion operation not found');return row;};
@@ -50,9 +50,10 @@ export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,p
     const grants=await catalog.all('SELECT principal_id,can_read,can_write FROM system_access WHERE source_id=? ORDER BY principal_id',sourceId);
     const publishers=await catalog.all('SELECT principal_id FROM publishers WHERE source_id=? ORDER BY principal_id',sourceId);
     const requests=readRows('request_jobs').map(row=>({id:row.id,status:row.status}));
-    const previewReceipt=await preview.inspectSourcePreview(source);
+    const previewReceipt=await preview.inspectSourcePreview(source),media=await mediaInventory();
     return {repository:{id:String(root.id),namespace:source.artifacts_namespace,name:source.artifacts_repository},sessions,forks,grants,publishers,requests,preview:previewReceipt,
-      counts:{sessions:sessions.filter(row=>!['closed','expired'].includes(row.status)).length,forks:forks.filter(row=>row.id).length,publishers:publishers.length,requests:requests.filter(row=>['queued','leased','running'].includes(row.status)).length}};
+      media,
+      counts:{mediaAssets:media.assets?.length||0,mediaUploads:media.uploads?.length||0,sessions:sessions.filter(row=>!['closed','expired'].includes(row.status)).length,forks:forks.filter(row=>row.id).length,publishers:publishers.length,requests:requests.filter(row=>['queued','leased','running'].includes(row.status)).length}};
   }
   function proofFresh(row){return !row.portal_origin||row.consumer_check?.expiresAt>Math.floor(clock()/1000);}
   function lease(row,token){if(row.status!=='running'||row.lease!==token||Date.parse(row.lease_expires_at)<=clock())throw fail(409,'Deletion cleanup lease is unavailable');return row;}
@@ -124,6 +125,7 @@ export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,p
       try{
         let source=await store.getSource(sourceId);
         if(!row.checkpoints_json.stopped){
+          await stopMedia({beforeDelete:()=>renew(row.id,token,{consumers:true})});
           for(const session of readRows('sessions'))if(session.status==='closing'||session.sandbox_id||session.live_state&&session.live_state!=='closed'){await renew(row.id,token);await live.close(session,source);}
           await runMutation(()=>{lease(get(row.id),token);store.finishDeletionSessions(row.id);});
           row=await checkpoint(row.id,token,{phase:'remove_repositories',checkpoints_json:{stopped:true}});

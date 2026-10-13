@@ -1,3 +1,4 @@
+import { mediaApi } from './media/api.mjs';
 import { Catalog } from './store/catalog.mjs';
 import { fail } from './store/errors.mjs';
 import { apiHeaders, assertApiVersion, readJson, jsonResponse } from './http.mjs';
@@ -19,6 +20,7 @@ export function createApi({ getCoordinator, provision, mcp }) {
     const input = method === 'POST' ? await readJson(request) : {};
     assertApiVersion(request,input);
     const source = async reference => { const row = typeof reference === 'string' && await catalog.source(reference); if (!row) throw fail(404,'Design System not found'); return row; };
+    const media=await mediaApi({path,method,input,actor,source,getCoordinator,context});if(media)return media;
     const located = async (kind,id) => { if (!uuid.test(id)) throw fail(404,'Resource not found'); const row=await catalog.resource(kind,id); if (!row) throw fail(404,'Resource not found'); return row.source_id; };
     let statusOverride;
     const call = async (sourceId,operation,args=[]) => {

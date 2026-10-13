@@ -1,3 +1,5 @@
+import { createSourceMedia } from '../media/service.mjs';
+import { errorResponse } from '../http.mjs';
 import { DurableObject } from 'cloudflare:workers';
 import { Catalog } from '../store/catalog.mjs';
 import { createCoordinator } from './coordinator.mjs';
@@ -60,15 +62,20 @@ export class SystemCoordinator extends DurableObject {
       onSessionReserved:(session,source)=>requestService.live.schedule(session,source),
       onSessionStarted:(session,source)=>requestService.live.ensure(session,source),
       cleanupAgentSession:(session,source)=>requestService.live.close(session,source),
-      nextLifecycleAlarm:()=>this.deletion?.nextAlarm()??null,
+      nextLifecycleAlarm:()=>{const due=[this.deletion?.nextAlarm(),this.media?.nextAlarm()].filter(Number.isFinite);return due.length?Math.min(...due):null;},
     });
     this.publicationApi=createPublicationApi({sourceId,store:this.store,authorization:this.authorization,repository:this.repository,publication:this.publication,
       metadata:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`metadata:${input.publicationId}`).metadata(input),input.operation),
       build:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`build:${input.publicationId}`).run(input),'build')});
     this.importer=createImporter({sourceId,storage:ctx.storage,catalog:this.catalog,store:this.store,artifacts:this.artifacts,releases:env,origin:hostOrigin(env),verifyPortalReceipt:createPortalReceiptVerifier(env)});
-    this.deletion=createSourceDeletion({sourceId,storage:ctx.storage,catalog:this.catalog,store:this.store,artifacts:this.artifacts,preview:this.preview,live:this.requests.live,runMutation:this.engine.runMutation,env,origin:hostOrigin(env)});
+    this.media=createSourceMedia({sourceId,storage:ctx.storage,catalog:this.catalog,sourceStore:this.store,authorization:this.authorization,runMutation:this.engine.runMutation,env,
+      schedule:async due=>{const prior=await ctx.storage.getAlarm();if(!prior||due<prior)await ctx.storage.setAlarm(due);}});
+    this.deletion=createSourceDeletion({sourceId,storage:ctx.storage,catalog:this.catalog,store:this.store,artifacts:this.artifacts,preview:this.preview,live:this.requests.live,stopMedia:options=>this.media.expire({fenced:true,...options}),mediaInventory:()=>this.media.inventory(),runMutation:this.engine.runMutation,env,origin:hostOrigin(env)});
     this.invitations=createSourceInvitations({sourceId,catalog:this.catalog,store:this.store,env});
   }
+  async mediaOperation(input){try{return {ok:true,value:await this.media.invoke(input)};}catch(error){return {ok:false,error:safeError(error)};}}
+  async mediaUpload(request,route){try{return await this.media.upload(request,route);}catch(error){return errorResponse(error);}}
+  async mediaFetch(request,route){try{return await this.media.fetch(request,route);}catch(error){return errorResponse(error);}}
   async importOperation(input){
     try{return {ok:true,value:await this.engine.runMutation(()=>this.importer(input))};}
     catch(error){return {ok:false,error:safeError(error)};}
@@ -126,7 +133,7 @@ export class SystemCoordinator extends DurableObject {
     if(!version||version.source_id!==source.id||!version.artifact_ref)return null;
     const firstEvent=this.ctx.storage.sql.exec("SELECT id FROM publication_events WHERE json_extract(row_json,'$.design_system_source_id')=? AND json_extract(row_json,'$.version_label')=? ORDER BY json_extract(row_json,'$.created_at'),id LIMIT 1",source.id,version.version_label).toArray()[0];
     if(!firstEvent)return null;
-    return {source,version,firstPublicationEventId:firstEvent.id,...(includeReadView?{readView:readSourceView({storage:this.ctx.storage,source,canRollback:false,canAdmin:false}),publicMedia:await readImportedPublicMedia({catalog:this.catalog,storage:this.ctx.storage,sourceId:source.id})}:{})};
+    return {source,version,firstPublicationEventId:firstEvent.id,...(includeReadView?{readView:readSourceView({storage:this.ctx.storage,source,canRollback:false,canAdmin:false}),publicMedia:await readImportedPublicMedia({catalog:this.catalog,storage:this.ctx.storage,sourceId:source.id,mediaStore:this.media.records})}:{})};
   }
   async provisionFiles(input) {
     const operation=await this.engine.publicationStore('getLifecycleOperation',[input.operationId]);
@@ -136,6 +143,7 @@ export class SystemCoordinator extends DurableObject {
   }
   async alarm() {
     const result=await this.engine.alarm();
+    await this.media.expire().catch(()=>{});
     if(this.store.deletionFence()){await this.deletion.advance();return result;}
     for(const job of await this.engine.requestStore('due',[2])) {
       const lease={jobId:job.id,leaseToken:crypto.randomUUID()};
