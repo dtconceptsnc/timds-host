@@ -1,5 +1,5 @@
 // Native Sandbox exports. Host HTTP authentication remains in src/index.ts.
-import { Files, SandboxFileError } from '@cloudflare/sandbox';
+import { Files, SandboxFileError, DirectoryBackup } from '@cloudflare/sandbox';
 import { DurableObject, WorkerEntrypoint } from 'cloudflare:workers';
 import { outboundCredential, sessionIdPattern } from './policy.mjs';
 import { RepositorySandboxRuntime, repositoryOutboundCredential, repositoryPushNotification } from './repository-service.mjs';
@@ -48,7 +48,7 @@ export class RepositorySandbox extends DurableObject {
   alarm(){return this.runtime.alarm();}
 }
 export class LiveSession extends DurableObject {
-  constructor(ctx,env){super(ctx,env);this.live=new LiveSessionRuntime(ctx,env,{Files,SandboxFileError,portalCall:coordinatorCallback(ctx)});}
+  constructor(ctx,env){super(ctx,env);this.live=new LiveSessionRuntime(ctx,env,{Files,SandboxFileError,DirectoryBackup,portalCall:coordinatorCallback(ctx)});}
   configure(id,input){
     if(!sessionIdPattern.test(id||'')||!sessionIdPattern.test(input?.sourceId||''))throw new Error('Invalid live authority');
     const prior=this.ctx.storage.kv.get('authority');

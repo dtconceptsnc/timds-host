@@ -85,8 +85,9 @@ activity, unless a feed viewer still watches it (`watch`, see "Warm drafts and
 wake" in `docs/architecture.md`). A Request to a sleeping session is not
 delayed or refused. After its busy check, the designer writes `live_state`
 `waking` when `LiveSession.status()` says `sleeping`, and the runtime's
-`start()` wakes the container (clone, `npm ci`, dev server) before running the
-model. The runtime then reports `starting`, then `running`, then `ready`. If
+`start()` wakes the container (clone, dependency restore or `npm ci`, dev
+server; see "Live dependency cache" in `docs/architecture.md`) before running
+the model. The runtime then reports `starting`, then `running`, then `ready`. If
 the start fails before the runtime is called, the designer writes `sleeping`
 again, so the session is never left showing `waking`. A viewer opening a
 sleeping session gets the same `waking` row and a `LiveSession.resume()`, which

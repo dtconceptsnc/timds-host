@@ -1,10 +1,13 @@
 import {portal} from './callback.mjs';
 import {validateRun,sessionIdPattern,safeTaskDiagnostics} from './policy.mjs';
+import {dependencyCacheKey,INSTALL_FLAGS} from '../src/build/cache.mjs';
 // watchMs bounds one coordinator keepalive: a viewer re-sends `viewing` every five minutes.
 const idleMs=10*60_000, taskMs=12*60_000, watchMs=30*60_000;
 const ca='/etc/cloudflare/certs/cloudflare-containers-ca.crt';
 const trust={NODE_EXTRA_CA_CERTS:ca,GIT_SSL_CAINFO:ca,CURL_CA_BUNDLE:ca,SSL_CERT_FILE:ca};
 const active=run=>run && ['starting','running','submitting'].includes(run.state);
+const text=value=>typeof value==='string'?value:new TextDecoder().decode(value||new Uint8Array());
+const runtimeIdentity='process.stdout.write(JSON.stringify({nodeVersion:process.version,nodeAbi:process.versions.modules,platform:process.platform,arch:process.arch}))';
 const commandFailureReason=bytes=>{
   const value=typeof bytes==='string'?bytes:new TextDecoder().decode(bytes||new Uint8Array());
   const patterns=[['authentication',/authentication failed|could not read username|access denied/i],['tls',/certificate|ssl connect|tls/i],['dns',/could not resolve|name or service not known/i],['ownership',/dubious ownership|unsafe repository/i],['permission',/permission denied|operation not permitted/i],['git-lock',/unable to create.*\.lock|another git process|cannot lock ref|unable to lock/i],['not-repository',/not a git repository/i],['remote-ref',/not our ref|couldn't find remote ref|could not find remote ref/i],['missing-object',/bad object|missing.*object|object.*missing|invalid object/i],['shallow',/shallow/i],['pack',/index-pack|unpack|packfile|pack has|bad pack/i],['protocol',/protocol error|expected.*(?:pack|ack|flush)|invalid.*(?:packet|response)|early eof|remote end hung up|rpc failed/i],['disk',/no space left|disk quota/i]];
@@ -23,8 +26,8 @@ function conflictResolution(prior){
   return resolvedPaths.length?{resolvedPaths,mainRevision:prior.mainRevision}:null;
 }
 export class LiveSessionRuntime {
-  constructor(ctx,env,{Files,SandboxFileError,portalCall=portal}) {
-    this.ctx=ctx;this.env=env;this.portal=portalCall;this.Files=Files;this.FileError=SandboxFileError;this.serial=Promise.resolve();
+  constructor(ctx,env,{Files,SandboxFileError,DirectoryBackup=null,portalCall=portal}) {
+    this.ctx=ctx;this.env=env;this.portal=portalCall;this.Files=Files;this.FileError=SandboxFileError;this.DirectoryBackup=DirectoryBackup;this.serial=Promise.resolve();
     if(ctx.container?.running) void ctx.blockConcurrencyWhile(()=>ctx.container.setInactivityTimeout(this.idleTimeout()));
   }
   locked(fn){const next=this.serial.then(fn);this.serial=next.catch(()=>{});return next;}
@@ -81,8 +84,11 @@ export class LiveSessionRuntime {
     this.assertOpen();const container=this.ctx.container;if(!container)throw new Error('Missing live container');
     if(container.running){if(this.record().pendingPush&&!active(this.run()))await this.sync();await this.ensureServer();return;}
     try {
-    this.save({startupError:null,restoredRevision:null,syncedRevision:null});await this.report('starting');const credential=await this.credential();
-    container.start({image:container.images.agent,instance:'standard-1',enableInternet:false});await container.setInactivityTimeout(this.idleTimeout());await this.intercept(credential);
+    this.save({startupError:null,restoredRevision:null,syncedRevision:null,dependencyCache:null});await this.report('starting');const credential=await this.credential();
+    container.start({image:container.images.agent,instance:'standard-1',enableInternet:false});await container.setInactivityTimeout(this.idleTimeout());
+    // The backup host must be registered before the catch-all intercept takes every later hostname.
+    const backup=this.dependencyBackup();if(backup)await backup.intercept();
+    await this.intercept(credential);
     // Artifacts forks retain the source repository's default HEAD, which may
     // name a historical publishing branch. Live work always follows main.
     await this.command(['git','-c','protocol.version=1','clone','--branch','main','--single-branch','--',''+credential.remote,'/workspace/repo']);
@@ -90,11 +96,41 @@ export class LiveSessionRuntime {
     const restoredRevision=(typeof head==='string'?head:new TextDecoder().decode(head)).trim();
     if(!/^[a-f0-9]{40}$/.test(restoredRevision))throw new Error('Invalid restored live head');
     this.save({restoredRevision,syncedRevision:restoredRevision});
-    await this.command(['npm','ci','--ignore-scripts','--no-audit','--no-fund'],'/workspace/repo');
+    await this.installDependencies(backup);
     await this.command(['mkdir','-p','/workspace/task']);
     await this.ensureServer();
     await this.touch();
     }catch(error){this.save({startupError:startupDiagnostic(error)});if(container.running)await container.destroy();await this.report('failed');throw error;}
+  }
+  dependencyBackup(){return this.DirectoryBackup&&this.ctx.exports?.DirectoryBackupGateway&&this.env?.SNAPSHOTS?new this.DirectoryBackup(this.ctx.container,this.ctx.exports.DirectoryBackupGateway,{binding:'SNAPSHOTS',prefix:'dependency-cache/objects/'}):null;}
+  // Live dependency cache: the lockfile-keyed R2 archive the publication build
+  // also uses, under this image's own key. A hit swaps node_modules in before
+  // any source program runs; a miss installs, then publishes the archive once.
+  // The cache only ever shortens a wake: every failure falls back to `npm ci`.
+  async installDependencies(backup){
+    const container=this.ctx.container,image=container.images.agent,install=()=>this.command(['npm',...INSTALL_FLAGS],'/workspace/repo'),note=state=>this.save({dependencyCache:{state}});
+    if(!backup){note('bypass');return install();}
+    let key,recordKey,runtime;
+    try{
+      const files=new this.Files(container);
+      const packageText=await(await files.readFile('/workspace/repo/package.json')).text(),lockText=await(await files.readFile('/workspace/repo/package-lock.json')).text();
+      runtime=JSON.parse(text((await(await container.exec(['node','-e',runtimeIdentity],{cwd:'/workspace',env:trust})).output()).stdout));
+      key=await dependencyCacheKey({packageText,lockText,image,...runtime});recordKey=`dependency-cache/records/${key}.json`;
+    }catch{note('bypass');return install();}
+    let receipt=null;try{const existing=await this.env.SNAPSHOTS.get(recordKey);receipt=existing?await existing.json():null;}catch{receipt=null;}
+    if(receipt){
+      if(receipt.key!==key||receipt.image!==image||!receipt.backup?.sha256){note('bypass');return install();}
+      // SDK verifies the archive SHA before the swap; on any error the target is untouched.
+      try{await backup.restore(receipt.backup,{dir:'/workspace/repo/node_modules',signal:AbortSignal.timeout(10*60_000)});this.save({dependencyCache:{state:'hit',key}});return;}
+      catch{note('restore-failed');return install();}
+    }
+    await install();
+    try{
+      const archive=await backup.backup({dir:'/workspace/repo/node_modules',name:key,signal:AbortSignal.timeout(10*60_000)});
+      const written=await this.env.SNAPSHOTS.put(recordKey,JSON.stringify({version:1,key,image,runtime,backup:archive}),{onlyIf:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'application/json'}});
+      if(!written)await backup.delete(archive);
+      this.save({dependencyCache:{state:'miss',key}});
+    }catch{this.save({dependencyCache:{state:'backup-failed',key}});}
   }
   async sync(revision){
     this.assertOpen();
@@ -143,7 +179,7 @@ export class LiveSessionRuntime {
       const probe={mode:input.fetchProbe,ok:output.exitCode===0,elapsedMs:Date.now()-started,exitCode:Number.isInteger(output.exitCode)?output.exitCode:null,...(output.exitCode===0?{}:{reason:commandFailureReason(output.stderr),packDetails:packFailureDetails(output.stderr)})};
       this.save({fetchProbe:probe});await this.touch();return this.diagnostics();
     });
-    const result={...this.status(),...(this.record()?.restoredRevision?{restoredRevision:this.record().restoredRevision}:{}),...(this.record()?.startupError?{startupError:this.record().startupError}:{}),...(this.record()?.commandFailure?{commandFailure:this.record().commandFailure}:{}),...(typeof this.record()?.originMatches==='boolean'?{originMatches:this.record().originMatches}:{})};if(!this.ctx.container?.running)return result;
+    const result={...this.status(),...(this.record()?.restoredRevision?{restoredRevision:this.record().restoredRevision}:{}),...(this.record()?.startupError?{startupError:this.record().startupError}:{}),...(this.record()?.commandFailure?{commandFailure:this.record().commandFailure}:{}),...(this.record()?.dependencyCache?{dependencyCache:this.record().dependencyCache}:{}),...(typeof this.record()?.originMatches==='boolean'?{originMatches:this.record().originMatches}:{})};if(!this.ctx.container?.running)return result;
     if(this.record()?.fetchProbe)result.fetchProbe=this.record().fetchProbe;
     if(this.record()?.commandFailure?.reason==='pack'&&!active(this.run())){const checked=await(await this.ctx.container.exec(['git','fsck','--connectivity-only','--no-reflogs'],{cwd:'/workspace/repo',env:trust})).output();result.connectivityOk=checked.exitCode===0;}
     try{const file=await new this.Files(this.ctx.container).readFile('/workspace/task/live-dev-status.json');if(file.size>16*1024)return result;const value=JSON.parse(await file.text());
