@@ -22,9 +22,12 @@ const viewingOf = input => {
   throw fail(400, 'viewing needs one sessionId or draftId UUID, or null');
 };
 
+const viewedId = viewing => viewing?.sessionId || viewing?.draftId || null;
+
 /** ctx is the SystemCoordinator's DurableObjectState. authorize(actor,reference)
- * performs the `active-work` read check without entering the writer queue. */
-export function createSourceFeed({ sourceId, ctx, store, catalog, authorize, clock = () => Date.now() }) {
+ * performs the `active-work` read check without entering the writer queue.
+ * watch(id,{watched,opened}) is the live keepalive (src/live/sessions.mjs). */
+export function createSourceFeed({ sourceId, ctx, store, catalog, authorize, watch = async () => {}, clock = () => Date.now() }) {
   const sql = ctx.storage.sql;
   sql.exec(schema);
   const timestamp = (offset = 0) => new Date(clock()+offset).toISOString();
@@ -67,6 +70,16 @@ export function createSourceFeed({ sourceId, ctx, store, catalog, authorize, clo
     }
     return [...seen.values()];
   };
+  // Keepalive without coordinator timers: each `viewing` message (the client
+  // re-sends it every five minutes) refreshes the viewed session, and the last
+  // socket leaving a session releases it. The watched set is read from socket
+  // attachments, so hibernation loses nothing; a lost release lapses in 30 minutes.
+  const watchedIds = (except = null) => new Set(sockets(except).map(ws => viewedId(attachment(ws)?.viewing)).filter(Boolean));
+  async function rewatch(ws,current,prior,opened) {
+    const id = viewedId(current), left = viewedId(prior);
+    if (id) try { await watch(id,{ watched: true, opened }); } catch {}
+    if (left && left !== id && !watchedIds(ws).has(left)) try { await watch(left,{ watched: false }); } catch {}
+  }
   const presence = (except = null) => { const message = JSON.stringify({ type: 'presence', viewers: viewers(except) }); for (const ws of sockets(except)) send(ws,message); };
   const live = async () => {
     if (store.deletionFence()) return false;
@@ -138,11 +151,14 @@ export function createSourceFeed({ sourceId, ctx, store, catalog, authorize, clo
       if (input.type === 'presence') return send(ws,{ type: 'presence', viewers: viewers() });
       if (input.type !== 'viewing') return send(ws,{ type: 'error', message: 'Unknown feed message type' });
       let viewing; try { viewing = viewingOf(input); } catch (error) { return send(ws,{ type: 'error', message: error.message }); }
-      if (JSON.stringify(viewing) === JSON.stringify(state.viewing || null)) return;
+      const prior = state.viewing || null;
+      // An unchanged viewing is the client's keepalive refresh: no presence broadcast.
+      if (JSON.stringify(viewing) === JSON.stringify(prior)) return rewatch(ws,viewing,null,false);
       ws.serializeAttachment({ ...state, viewing });
       presence();
+      await rewatch(ws,viewing,prior,true);
     },
-    closed(ws) { replaying.delete(ws); close(ws,1000,'Closed'); presence(ws); },
+    async closed(ws) { const prior = attachment(ws)?.viewing || null; replaying.delete(ws); close(ws,1000,'Closed'); presence(ws); await rewatch(ws,null,prior,false); },
     // Coordinator operations that end a socket's authorization.
     afterOperation(operation,args = []) {
       if (operation === 'archive') closeAll(FEED_CLOSE.gone,'This Design System is archived');

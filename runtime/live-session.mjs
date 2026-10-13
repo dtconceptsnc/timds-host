@@ -1,6 +1,7 @@
 import {portal} from './callback.mjs';
 import {validateRun,sessionIdPattern,safeTaskDiagnostics} from './policy.mjs';
-const idleMs=10*60_000, taskMs=12*60_000;
+// watchMs bounds one coordinator keepalive: a viewer re-sends `viewing` every five minutes.
+const idleMs=10*60_000, taskMs=12*60_000, watchMs=30*60_000;
 const ca='/etc/cloudflare/certs/cloudflare-containers-ca.crt';
 const trust={NODE_EXTRA_CA_CERTS:ca,GIT_SSL_CAINFO:ca,CURL_CA_BUNDLE:ca,SSL_CERT_FILE:ca};
 const active=run=>run && ['starting','running','submitting'].includes(run.state);
@@ -26,7 +27,20 @@ export class LiveSessionRuntime {
   run(){return this.ctx.storage.kv.get('task');}
   save(patch){const value={...this.record(),...patch};this.ctx.storage.kv.put('live',value);return value;}
   async schedule(at){const expires=Date.parse(this.record()?.expiresAt);await this.ctx.storage.setAlarm(Number.isFinite(expires)?Math.min(at,expires):at);}
-  async touch(){this.save({lastActivityAt:Date.now()});if(!active(this.run()))await this.schedule(Date.now()+this.idleTimeout());}
+  // While the dev server is still starting, the alarm polls it each second so a
+  // wake reports `ready` even when no frame or Request is probing it.
+  async touch(){const now=Date.now(),starting=this.record()?.state==='starting'&&this.ctx.container?.running;this.save({lastActivityAt:now});if(!active(this.run()))await this.schedule(starting?now+1000:now+this.idleTimeout());}
+  // Coordinator keepalive while a feed socket views this session. Storage and
+  // alarms only: it never starts a container (resume() requests that).
+  async watch({watched,until}={}){
+    const live=this.record();if(!live||['closed','closing'].includes(live.state))return{...this.status(),reported:live?.state||'none'};
+    const now=Date.now(),running=this.ctx.container?.running;
+    if(watched){this.save({watchedUntil:Math.min(Number.isFinite(until)?until:now+watchMs,now+watchMs)});if(running)await this.touch();}
+    else if(live.watchedUntil){this.save({watchedUntil:null});if(running&&!active(this.run())&&live.state!=='starting')await this.schedule(Math.max(now,(live.lastActivityAt||0)+this.idleTimeout()));}
+    return{...this.status(),reported:this.record().state};
+  }
+  // Viewer wake: returns at once; the alarm performs the same wake() a frame fetch or Request does.
+  async requestWake(){const live=this.record();if(!live||['closed','closing'].includes(live.state)||(live.expiresAt&&Date.parse(live.expiresAt)<=Date.now())||this.ctx.container?.running)return this.status();this.save({wakeRequested:true});await this.ctx.storage.setAlarm(Date.now());return this.status();}
   // requestId names the Request a running/failed task belongs to; the host verifies its binding.
   async report(state,requestId){this.save({state});try{await this.portal(this.env,'live-state',{sessionId:this.record().id,state,...(requestId?{requestId}:{})});}catch{}}
   assertOpen(){const live=this.record();if(!live || ['closed','closing'].includes(live.state) || (live.expiresAt && Date.parse(live.expiresAt)<=Date.now()))throw Object.assign(new Error('Live session is closed'),{status:410});return live;}
@@ -47,9 +61,9 @@ export class LiveSessionRuntime {
   }
   async credential(){const live=this.assertOpen();const response=await this.portal(this.env,'live-credentials',{sessionId:live.id});if(!response.ok)throw Object.assign(new Error('Live credential unavailable'),{status:response.status});const input=await response.json();const run=validateRun({...input,prompt:'Restore live session'});this.save({expiresAt:input.expiresAt??null});return run;}
   async intercept(run){const outbound=this.ctx.exports.Outbound({props:{remote:run.remote,repoToken:run.repoToken,allowDependencies:true}});await this.ctx.container.interceptAllOutboundHttp(outbound);await this.ctx.container.interceptOutboundHttps('*',outbound);}
+  async devState(){const response=await this.ctx.container.getTcpPort(8080).fetch('http://container/__timds_live/version',{signal:AbortSignal.timeout(1000)});const status=await response.json();return status.ready?'ready':status.state==='failed'?'failed':'starting';}
   async ensureServer(){
-    const port=this.ctx.container.getTcpPort(8080);
-    const probe=async()=>{const response=await port.fetch('http://container/__timds_live/version',{signal:AbortSignal.timeout(1000)});const status=await response.json(),state=status.ready?'ready':status.state==='failed'?'failed':'starting';if(!active(this.run())&&this.record()?.state!==state)await this.report(state);};
+    const probe=async()=>{const state=await this.devState();if(!active(this.run())&&this.record()?.state!==state)await this.report(state);};
     try{await probe();return;}catch{}
     // Keep the supervisor independent of the request's exec process group.
     await this.ctx.container.exec(['/bin/sh','-c','setsid node /usr/local/lib/timds-live-dev.mjs >/workspace/task/live-dev.log 2>&1'],{cwd:'/workspace/repo',env:{...trust,PORT:'4321'},stdout:'ignore',stderr:'ignore'});
@@ -148,7 +162,20 @@ export class LiveSessionRuntime {
       await this.ctx.storage.setAlarm(Date.now()+30_000);return;
     }
     return this.locked(async()=>{
-    const run=this.run();if(!active(run)){const live=this.record();if(live?.state==='closed')return;if(Date.now()-(live?.lastActivityAt||0)>=this.idleTimeout()){if(this.ctx.container?.running)await this.ctx.container.destroy();await this.report('sleeping');if(live?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(live.expiresAt));}else await this.schedule(live.lastActivityAt+this.idleTimeout());return;}
+    const run=this.run();
+    if(this.record()?.wakeRequested){
+      this.save({wakeRequested:false});
+      if(!active(run)&&!this.ctx.container?.running&&this.record().state!=='closed'){try{await this.wake();await this.touch();}catch{const expiresAt=this.record()?.expiresAt;if(expiresAt)await this.ctx.storage.setAlarm(Date.parse(expiresAt));}return;}
+    }
+    if(!active(run)){
+      const live=this.record();if(live?.state==='closed')return;
+      if(this.ctx.container?.running&&live?.state==='starting'){const state=await this.devState().catch(()=>null);if(state==='ready'||state==='failed')await this.report(state);else if(Date.now()-(live.lastActivityAt||0)<this.idleTimeout()){await this.schedule(Date.now()+1000);return;}}
+      const now=Date.now(),current=this.record(),deadline=(current?.lastActivityAt||0)+this.idleTimeout();
+      if(now<deadline){await this.schedule(deadline);return;}
+      // A watched session outlives the idle rule until its watch lapses.
+      if(current?.watchedUntil>now&&this.ctx.container?.running){await this.schedule(Math.min(current.watchedUntil,now+this.idleTimeout()));return;}
+      if(this.ctx.container?.running)await this.ctx.container.destroy();await this.report('sleeping');if(current?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(current.expiresAt));return;
+    }
     let taskDiagnostics;
     try{
       this.assertOpen();if(!this.ctx.container?.running||Date.now()-(run.state==='submitting'?run.completionStartedAt||run.startedAt:run.startedAt)>taskMs)throw new Error('Task stopped');
@@ -162,7 +189,7 @@ export class LiveSessionRuntime {
         try{response=await this.portal(this.env,'complete',{sessionId:this.record().id,requestId:run.requestId,changeSet:{...result.changeSet,note:run.note}});}
         catch{await this.schedule(Date.now()+1000);return;}
         if(response.status===410||response.status===404){await this.close();return;}
-        if(response.ok){const saved=await response.json();if(saved.state==='conflicted'){this.ctx.storage.kv.put('task',{...run,state:'conflicted',conflicts:saved.conflicts||[],error:'This Request overlaps a newer edit. Start a follow-up Request to resolve it.'});await this.report('ready');await this.touch();return;}this.ctx.storage.kv.put('task',{...run,state:'submitted',submissionId:saved.submissionId});await this.report('ready');try{await this.sync();}catch{this.save({pendingPush:true});await this.touch();}return;}
+        if(response.ok){const saved=await response.json();if(saved.state==='conflicted'){this.ctx.storage.kv.put('task',{...run,state:'conflicted',conflicts:saved.conflicts||[],error:'This Request overlaps a newer edit. Start a follow-up Request to resolve it.'});await this.report('ready');await this.touch();return;}this.ctx.storage.kv.put('task',{...run,state:'submitted',submissionId:saved.submissionId});try{await this.sync();}catch{this.save({pendingPush:true});await this.touch();}await this.report('ready');return;}
         if(response.status===409){
           const rejected=await response.json().catch(()=>null);
           if(rejected?.error==='This session is busy; retry when its current operation finishes'){await this.schedule(Date.now()+1000);return;}
@@ -175,7 +202,7 @@ export class LiveSessionRuntime {
   });}
   async fetch(request){
     let phase='wake';
-    try{await this.locked(async()=>{await this.wake();await this.touch();});phase='forward';const url=new URL(request.url);url.protocol='http:';url.host='container';const headers=new Headers(request.headers);headers.delete('host');headers.delete('authorization');headers.delete('cookie');headers.delete('x-timds-live-session');
+    try{await this.locked(async()=>{await this.wake();const live=this.record();if(live?.state==='starting'||Date.now()-(live?.lastActivityAt||0)>=5000)await this.touch();});phase='forward';const url=new URL(request.url);url.protocol='http:';url.host='container';const headers=new Headers(request.headers);headers.delete('host');headers.delete('authorization');headers.delete('cookie');headers.delete('x-timds-live-session');
       const response=await this.ctx.container.getTcpPort(8080).fetch(new Request(url,{method:request.method,headers,body:['GET','HEAD'].includes(request.method)?undefined:request.body,redirect:'manual'}));
       const safe=new Response(response.body,response);safe.headers.set('X-Robots-Tag','noindex, nofollow, noarchive');safe.headers.set('Cache-Control','no-store');return safe;
     }catch(error){if(error.status!==410)console.warn({stage:'live-fetch',phase,sessionId:this.record()?.id,error:phase==='forward'?String(error.message).slice(0,300):startupDiagnostic(error)});return new Response(error.status===410?'Live session is closed':'Live preview is starting; refresh shortly',{status:error.status===410?410:503,headers:{'X-Robots-Tag':'noindex, nofollow, noarchive','Retry-After':'2'}});}

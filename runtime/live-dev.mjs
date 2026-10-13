@@ -62,7 +62,7 @@ async function restart() {
   current.on('exit',(exitCode,signal)=>{if(child===current){ready=false;report({state:'failed',reason:status.reason==='startup_timeout'?'startup_timeout':'process_exited',exitCode,signal});}});
   const deadline=Date.now()+startupMs;
   while(Date.now()<deadline && status.state!=='failed') {
-    await pause(250);
+    await pause(100);
     try {const response=await fetch(`http://127.0.0.1:${devPort}/`,{signal:AbortSignal.timeout(500)});await response.body?.cancel();if(status.state==='failed')break;if(response.status>=500)continue;ready=true;generation=Date.now();report({state:'ready'});break;}catch{}
   }
   if(!ready && status.state!=='failed'){try{process.kill(-current.pid,'SIGKILL');}catch{}report({state:'failed',reason:'startup_timeout'});}
@@ -92,7 +92,7 @@ function changed(file){
 // A recursive fs.watch opens handles for node_modules before an event filter
 // runs. Enumerate source directories first so dependency trees consume none.
 watchSources();
-const reload = `<script>(()=>{let v;setInterval(async()=>{if(document.hidden)return;try{const r=await fetch('/__timds_live/version',{cache:'no-store'});const j=await r.json();if(!j.ready)return;if(v!==undefined&&v!==j.version)location.reload();v=j.version;}catch{}},1000)})();</script>`;
+const reload = `<script>(()=>{let v;setInterval(async()=>{if(document.hidden)return;try{const r=await fetch('/__timds_live/version',{cache:'no-store'});const j=await r.json();if(!j.ready)return;if(v!==undefined&&v!==j.version)location.reload();v=j.version;}catch{}},500)})();</script>`;
 createServer((incoming,outgoing)=>{
   outgoing.setHeader('X-Robots-Tag','noindex, nofollow, noarchive');
   outgoing.setHeader('Cache-Control','no-store');

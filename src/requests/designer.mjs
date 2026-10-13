@@ -28,7 +28,7 @@ export function createDesigner({designerPrincipalId, authorization, sessions, st
   return {
     configured,principalId:designerPrincipalId,
     async start(source,request,prompt,{sessionId,caller}={}) {
-      let stage='configuration';
+      let stage='configuration',waking=null;
       try {
         if(!configured)throw fail(503,'The designer runner is not configured');
         stage='identity';
@@ -55,6 +55,9 @@ export function createDesigner({designerPrincipalId, authorization, sessions, st
         stage='runtime-status';
         const current=await live.runner(session.id);
         if(current.runner?.requestId!==request.id && ['starting','running','submitting'].includes(current.runner?.state))throw fail(409,runnerBusy);
+        // A Request to a stopped container is visibly waking from here; the runtime's
+        // starting/ready reports follow. A start that never reaches it reverts to sleeping.
+        if(current.state==='sleeping' && current.runner?.requestId!==request.id && live.waking){await live.waking(session.id);waking=session.id;}
         // The designer declares its intent once per Request; a retry with the same claim writes nothing.
         stage='claim';
         const claimNote=prompt.trim().slice(0,200).trim(),claimPatterns=await designerClaimPatterns(store,session.id);
@@ -75,7 +78,10 @@ export function createDesigner({designerPrincipalId, authorization, sessions, st
         const run=await live.runner(session.id,'run','POST',{...credential,prompt:taskPrompt,note:prompt.slice(0,2000),requestId:request.id});
         await recordStart(run.runner || run);
         return {requestId:request.id,session:started.session,runner:run.runner || run};
-      } catch(error) { throw requestDiagnostic(error,stage,'designer-start'); }
+      } catch(error) {
+        if(waking && stage!=='runtime-start' && live.slept)await live.slept(waking);
+        throw requestDiagnostic(error,stage,'designer-start');
+      }
     },
     async status(id){const result=await live.runner(id);return result.runner || {state:result.state};},
     async complete({sessionId,requestId,changeSet}) {

@@ -61,6 +61,9 @@ export class LiveSession extends DurableObject {
   diagnostics(input){return this.live.diagnostics(input);}
   retryCompletion(input){return this.live.retryCompletion(input);}
   pushed(input){return this.live.pushed(input);}
+  // Feed keepalive and viewer wake. Neither starts a container in the caller's call.
+  watch(input){if(this.ctx.storage.kv.get('authority')?.sessionId!==input?.sessionId||typeof input?.watched!=='boolean')throw new Error('Live authority unavailable');return this.live.watch(input);}
+  resume(id){if(this.ctx.storage.kv.get('authority')?.sessionId!==id)throw new Error('Live authority unavailable');return this.live.requestWake();}
   close(id){return this.live.locked(()=>this.live.beginClose(id));}
   fetch(request){return this.live.fetch(request);}
   alarm(){return this.live.alarm();}

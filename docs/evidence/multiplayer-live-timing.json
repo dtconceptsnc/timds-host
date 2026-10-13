@@ -1,0 +1,73 @@
+{
+  "status": "template",
+  "host": null,
+  "hostCommit": null,
+  "deployedAt": null,
+  "method": "Deployed host, normal OAuth API, Studio feed and events?after= cursor; no test files or harness",
+  "identity": {
+    "sourceId": null,
+    "systemId": null,
+    "sessionId": null
+  },
+  "browsers": [],
+  "coldWake": {
+    "request": {
+      "requestId": null,
+      "sentAt": null,
+      "events": {
+        "waking": {"seq": null, "createdAt": null},
+        "starting": {"seq": null, "createdAt": null},
+        "running": {"seq": null, "createdAt": null},
+        "ready": {"seq": null, "createdAt": null}
+      },
+      "wakingAfterMs": null,
+      "wakingGateMs": 2000,
+      "readyAfterMs": null
+    },
+    "viewer": {
+      "openedAt": null,
+      "events": {
+        "waking": {"seq": null, "createdAt": null},
+        "starting": {"seq": null, "createdAt": null},
+        "ready": {"seq": null, "createdAt": null}
+      },
+      "readyAfterMs": null,
+      "frameReloadedOnReady": null
+    }
+  },
+  "warmReload": {
+    "liveStrategy": null,
+    "gateMs": 5000,
+    "pushes": [
+      {"updatedSeq": null, "updatedAt": null, "frameVisibleAt": null, "elapsedMs": null}
+    ],
+    "pass": null
+  },
+  "watchedIdle": {
+    "viewer": "background Studio tab | feed-only client",
+    "viewingRefreshSeconds": 300,
+    "cursor": null,
+    "startedAt": null,
+    "checkedAt": null,
+    "sleepingEvents": null,
+    "runnerState": null,
+    "pass": null
+  },
+  "unwatchedSleep": {
+    "cursor": null,
+    "releasedAt": null,
+    "sleepingSeq": null,
+    "sleepingAt": null,
+    "elapsedMs": null,
+    "gateMs": 660000,
+    "pass": null
+  },
+  "feedLatency": {
+    "browserClockOffsetMs": null,
+    "samples": [
+      {"seq": null, "eventType": null, "createdAt": null, "receivedAt": null, "latencyMs": null}
+    ],
+    "medianMs": null,
+    "maxMs": null
+  }
+}

@@ -80,6 +80,19 @@ prompt's first 200 characters as its note. An identical existing claim is not
 rewritten. `presence(view)` adds `runner` (`LiveSession.status()` only; no
 container start) and `queueLength` to `active-work` and session `status` views.
 
+Sessions sleep: `LiveSession` destroys its container 10 minutes after its last
+activity, unless a feed viewer still watches it (`watch`, see "Warm drafts and
+wake" in `docs/architecture.md`). A Request to a sleeping session is not
+delayed or refused. After its busy check, the designer writes `live_state`
+`waking` when `LiveSession.status()` says `sleeping`, and the runtime's
+`start()` wakes the container (clone, `npm ci`, dev server) before running the
+model. The runtime then reports `starting`, then `running`, then `ready`. If
+the start fails before the runtime is called, the designer writes `sleeping`
+again, so the session is never left showing `waking`. A viewer opening a
+sleeping session gets the same `waking` row and a `LiveSession.resume()`, which
+wakes from the session's own alarm. Neither path waits for the container in the
+coordinator's writer queue.
+
 Local validation uses real SQLite adapters for reservations, lease takeover,
 bounded retries and durable receipt recovery, with explicit native RPC tests:
 
