@@ -6,7 +6,7 @@ portal's source-owned Worker marker and exact Artifacts namespace/repository ID
 checks. Commands are `npm run build:preview`, `npx cf deploy` and
 `npx cf previews deploy`. Credentials come only from server configuration.
 
-The [live cf proof](../../docs/evidence/cf-preview-builds.md) established that
+The live cf proof (private operational record) established that
 creation can acknowledge `previews_enabled:true` but return a disabled legacy
 trigger. The adapter migrates only an owned, matching connection with the
 expected production settings, then rereads the configuration before accepting
@@ -29,7 +29,7 @@ The controller requires prepared `cf` configuration and a real npm lockfile.
 the known toolkit `.464` hosted standalone scaffold. The companion
 `scripts/prepare-preview-source.mjs` defaults to a plan; explicit `--apply`
 installs exact pins, runs the unchanged toolkit build/check, builds through cf,
-and compares every output path and byte. The [actual deployment proof](../../docs/evidence/cf-preview-source.md)
+and compares every output path and byte. The actual deployment proof (private operational record)
 verified all 40 servable files anonymously. Existing framework configurations
 and custom legacy bindings require separate review; imported sources are never
 rewritten by the controller.

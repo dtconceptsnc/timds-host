@@ -1,7 +1,7 @@
 # Operate a TimDS host
 
 These commands target the repository's pinned `cf@1.0.0-beta.14`. They reproduce
-the [isolated deployment](evidence/phase-3-deployment.md), whose authenticated
+the isolated deployment (private operational record), whose authenticated
 acceptance is still in progress. Use a fresh installation name and disposable
 source for initial acceptance. Existing-system import/cutover is separate;
 provisioning below does not adopt existing repositories.
@@ -127,7 +127,7 @@ CLI OAuth token is not a replacement for this registered runtime API token.
 Workers Scripts Write also authorizes event subscription creation/deletion, so
 a separate Queues Write grant is not required for those calls. No zone/DNS
 permissions are needed for workers.dev previews. See the exact
-[runtime authority inventory](evidence/runtime-cloudflare-auth.md).
+runtime authority inventory (private operational record).
 Do not paste credential-bearing Artifacts repository-create responses: creation
 issues a capability. The host captures and revokes that initial capability.
 
@@ -405,7 +405,7 @@ Keep source/release identity and event correlation intact; do not clear
 coordinator or catalog state to force a retry.
 
 For existing systems, recapture the
-[migration baseline](evidence/migration-baseline.md) immediately before migration,
+migration baseline (private operational record) immediately before migration,
 preserve historical first-event version bindings and public domains, and verify
 all required public bytes before cutover. The baseline is read-only evidence,
 not an import or cutover receipt.
@@ -442,8 +442,8 @@ Worker-list call. Node container programs retain Node's supported redirect mode.
   There is no `cf workers secrets put`. Bucket locks are a separate R2 API/CLI
   operation, not a property of the R2 binding configuration.
 
-See [native toolchain evidence](evidence/phase-0.md),
-[Builds evidence](evidence/cf-preview-builds.md), and the
+See native toolchain evidence (private operational record),
+Builds evidence (private operational record), and the
 [Cloudflare configuration documentation](https://developers.cloudflare.com/cf/projects/cloudflare-config/).
 
 

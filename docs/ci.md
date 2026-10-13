@@ -64,8 +64,8 @@ successful lifecycle.
 ## Local/deployed-host acceptance gate
 
 The issue's full `cf dev` and deployed-host conformance gate remains pending
-authenticated acceptance. The [production-portal baseline passed locally](evidence/phase-1-portal-conformance.md),
-and [the isolated native deployment is recorded](evidence/phase-3-deployment.md);
+authenticated acceptance. The production-portal baseline passed locally (private operational record),
+and the isolated native deployment is recorded (private operational record);
 neither is a GitHub Actions or new-host lifecycle acceptance claim. There is no
 simulated-host job advertised as live conformance. A local-host CI job must
 explicitly start the real backing services and disposable resources, run the

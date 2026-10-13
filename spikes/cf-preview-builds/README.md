@@ -3,7 +3,7 @@
 This disposable static-site fixture proved pinned `cf@1.0.0-beta.14` for both
 production and branch Preview deployments from an Artifacts repository. Both
 real push-triggered builds emitted `cf.workersBuilds.worker.build.succeeded`.
-See [sanitized receipt](./receipt.json) and [evidence](../../docs/evidence/cf-preview-builds.md).
+See [sanitized receipt](./receipt.json) and evidence (private operational record).
 Every remote resource from the recorded run has been deleted; its URLs now 404.
 
 The tested commands are `npm run build`, then `npx cf deploy` for `main`, and

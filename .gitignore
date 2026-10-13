@@ -17,3 +17,6 @@ dist/
 *.pfx
 worker-configuration.d.ts
 .DS_Store
+
+# Installation/customer operational receipts belong in private operator storage.
+/docs/evidence/
