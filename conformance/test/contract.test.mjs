@@ -24,6 +24,41 @@ test('Ajv validates nested OpenAPI refs, formats, conflicts, API versions and fo
   await assert.rejects(validate(url, {}, json({ message: 'not found' }, 404)), /required property/);
 });
 
+test('deletion blockers validate bounded recovery actions without provider metadata', async () => {
+  const validate = createContractValidator();
+  const url = `https://host.example/api/timds/admin/systems/${sourceId}/deletion`;
+  const blocked = deletionBlockers => validate(url, { method: 'POST' }, json({ apiVersion: 1, error: 'Session repositories require review', deletionBlockers }, 409));
+  const item = (index, status = 'open', reason = 'missing_creation_receipt', action = 'review_session') => ({ sessionId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, status, reason, action });
+  const valid = () => ({ sourceId, total: 4, sessions: [item(0), item(1, 'closed', 'missing_creation_receipt', 'operator_review'), item(2, 'open', 'fork_identity_changed', 'operator_review'), item(3, 'starting', 'missing_creation_receipt', 'operator_review')] });
+  assert.equal(await blocked(valid()), 'prepareSourceDeletion');
+  assert.equal(await blocked({ sourceId, total: 1, sessions: [item(0, 'closing')] }), 'prepareSourceDeletion');
+  assert.equal(await blocked({ sourceId, total: 51, sessions: Array.from({ length: 50 }, (_, index) => item(index)) }), 'prepareSourceDeletion', 'a bounded page retains the full blocker count');
+  assert.equal(await validate(url, { method: 'POST' }, json({ error: 'Deletion is unavailable' }, 409)), 'prepareSourceDeletion', 'older errors without blockers remain valid');
+  for (const mutate of [
+    value => { value.sourceId = 'not-a-source'; },
+    value => { value.sessions[0].sessionId = 'not-a-session'; },
+    value => { value.total = 0; },
+    value => { value.total = 1.5; },
+    value => { value.sessions = []; },
+    value => { value.total = 51; value.sessions = Array.from({ length: 51 }, (_, index) => item(index)); },
+    value => { value.sessions[0].status = 'unknown'; },
+    value => { value.sessions[0].reason = 'unverified'; },
+    value => { value.sessions[0].action = 'delete_repository'; },
+    value => { value.sessions[0].status = 'closed'; },
+    value => { value.sessions[0].status = 'expired'; },
+    value => { value.sessions[0].status = 'starting'; },
+    value => { value.sessions[0].reason = 'fork_identity_changed'; },
+    value => { value.repositoryName = 'fixture-repository'; },
+    value => { value.sessions[0].providerId = 'fixture-provider-id'; },
+    value => { value.sessions[0].token = 'test-only'; },
+    ...['sourceId', 'total', 'sessions'].map(key => value => { delete value[key]; }),
+    ...['sessionId', 'status', 'reason', 'action'].map(key => value => { delete value.sessions[0][key]; }),
+  ]) {
+    const value = valid(); mutate(value);
+    await assert.rejects(blocked(value), /deletionBlockers/);
+  }
+});
+
 test('OpenAPI public preview validates CSS headers and bodyless HEAD', async () => {
   const validate = createContractValidator();
   const url = `https://host.example/api/public/design-system-previews/${sourceId}/${sessionId}/tokens.css`;

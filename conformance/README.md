@@ -28,6 +28,12 @@ The host has since extended the vendored contract additively with
 (`getSourceEvents`, schema `EventFeed`) and an optional per-source `seq` on
 `Event`. Existing paths and response fields are unchanged.
 
+Administrative extensions also describe organization display-name changes and
+bounded deletion-blocker diagnostics. The local contract tests validate missing
+ownership receipts, changed repository identities, permitted recovery actions
+and the 50-workspace detail bound. These schema checks do not establish live
+cleanup or organization-renaming behavior.
+
 The contract also documents the live feed: `POST
 /api/timds/design-systems/{source}/feed/tickets` (`createFeedTicket`, schema
 `FeedTicket`) and the ticket-authorized WebSocket upgrade

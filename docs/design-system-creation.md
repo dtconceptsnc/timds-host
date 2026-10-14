@@ -1,9 +1,11 @@
 # Creating Design Systems
 
 An active host administrator can create a native standalone Design System from
-Studio's **Create Design System** action. Choose an active organization, a deployed
-Artifacts namespace, a display name and an immutable system ID. An installation
-with no organization can create its first one in the dialog. Namespace bindings
+Studio's **Create Design System** action. Enter a display name and an immutable
+system ID. Organization defaults to **New organization**, named after the system;
+an existing active organization can instead be selected. The repository namespace
+is automatic and hidden: Studio uses the first deployed namespace in the sorted
+administrative catalog and saves that choice before submitting. Namespace bindings
 remain an operator configuration task; creation never inventories or adopts
 other repositories in the account.
 
@@ -17,6 +19,7 @@ independently of scopes.
 | --- | --- |
 | `GET /api/timds/admin/organizations` | Active organization IDs and names, at most 200 per page. |
 | `POST /api/timds/admin/organizations` | Reserve `{id,name}`; retrying the UUID returns the existing organization. |
+| `POST /api/timds/admin/organizations/{organizationId}/name` | Rename an active organization with `{name,expectedName}`; current administrator authority is rechecked at the write. |
 | `GET /api/timds/admin/systems` | Minimal system metadata across lifecycle states and the configured creation namespaces. |
 | `POST /api/timds/admin/systems/create` | Initialize the built-in starter and grant its creator read/write/publish. |
 | `POST /api/timds/admin/systems` | Existing advanced provisioning with an exact caller-supplied file tree. |
@@ -29,6 +32,12 @@ by the current administrator, `creationInput`. This input contains the original
 form fields and starter version, never source files or credentials. It allows
 the same administrator to resume on another device. Ordinary discovery still
 lists only ready, unarchived systems.
+
+**Rename organization…** on the management page changes its display name only.
+An organization shared by multiple systems changes its name for all of them.
+The original organization UUID, system ID, source UUID, repository and namespace
+stay fixed. A stale `expectedName` returns HTTP 409; replaying a successful rename
+to the same name succeeds. Inactive organizations cannot be renamed.
 
 `creationPending` also covers a ready starter whose final creator grant has not
 committed. Studio offers **Finish setup** for that gap; retrying reuses the same
@@ -78,6 +87,11 @@ same operation, including a separately durable publisher grant. A different
 body or reuse of an existing system/source identity fails closed. Studio keeps
 an interrupted form in principal-scoped tab storage and also reads the saved
 server input from the administrator catalog.
+
+For **New organization**, Studio also saves its fresh UUID and initial name before
+the organization request. Retries reuse that record and the selected namespace;
+they do not create another organization or choose a different default. Choosing an
+existing organization saves only its ID and leaves its name unchanged.
 
 Repository creation and its exact provider receipt execute under the same
 coordinator queue as deletion review. File initialization runs outside that

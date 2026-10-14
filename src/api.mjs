@@ -116,6 +116,13 @@ export function createApi({ getCoordinator, provision, mcp }) {
         if(!uuid.test(input.id||'')||typeof input.name!=='string'||!input.name.trim()||input.name.length>200)throw fail(400,'Organization id and name are required');
         return jsonResponse({organization:await catalog.ensureOrganization({id:input.id,name:input.name})});
       }
+      match=path.match(/^\/api\/timds\/admin\/organizations\/([^/]+)\/name$/);
+      if(match) {
+        if(method!=='POST')throw fail(405,'Use POST to rename an organization');
+        const id=segment(match[1]);
+        if(!uuid.test(id)||Object.keys(input).some(key=>!['apiVersion','name','expectedName'].includes(key))||typeof input.name!=='string'||!input.name.trim()||input.name.length>200||typeof input.expectedName!=='string'||input.expectedName.length>200)throw fail(400,'An organization UUID, name and expected name are required');
+        return jsonResponse({organization:await catalog.renameOrganization({id,name:input.name.trim(),expectedName:input.expectedName,actor})});
+      }
       if(path==='/api/timds/admin/systems'&&method==='POST'&&provision)return respond(await provision({input,actor,env,context,catalog}));
       if(path==='/api/timds/admin/systems/create'&&method==='POST'&&provision)return respond(await createStarterSystem({input,actor,env,context,catalog,provision}));
       match=path.match(/^\/api\/timds\/admin\/systems\/([^/]+)\/provision\/([^/]+)$/);
