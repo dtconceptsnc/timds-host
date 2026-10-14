@@ -695,6 +695,16 @@ live systems' domain aliases and immutable release identities. Twelve public
 reads are the acceptance smoke check; the full manifest digest comparison is
 the migration integrity check.
 
+Public paths spell the system id as path segments, `/systems/<org>/<name>/`,
+and also accept it as one encoded segment. When both readings are possible the
+route tries the two-segment id first and falls back to the one-segment id with
+the remainder as a file path; a segment named `v` is always the version
+prefix. The release stamp `.timds-artifact.json` carries the identity fields
+plus `entry` and `files`, the artifact-relative locations of the derived
+documents, so toolkit readers (`fetchDerivedLayer`, `timds mcp read
+--published`) find them under a nested entry such as `design-system/`. The
+build container writes those two fields beside the toolkit's stamp.
+
 Publication response URLs, including previously committed results, are derived
 from the current `TIMDS_PUBLIC_ORIGIN` and system identity. Retained
 `public_root_url` values do not override the advertised origin; their historical

@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {checkWorkspace,loadWorkspace} from '/opt/timds/node_modules/@dtconcepts/timds/src/core.mjs';
 import {prepareMergeRelease} from '/opt/timds/node_modules/@dtconcepts/timds/templates/starter/scripts/prepare-merge-release.mjs';
 import {createPublicationStampFromFiles} from '/opt/timds/node_modules/@dtconcepts/timds/src/publication-snapshot.mjs';
+import {derivedLayerPaths} from '/opt/timds/node_modules/@dtconcepts/timds/src/derived.mjs';
 const command=process.argv[2];
 if(command==='check'){
  try{await checkWorkspace('/work');}
@@ -40,8 +41,11 @@ if(command==='check'){
   await fs.writeFile('/workspace/metadata-result.json',JSON.stringify({version:release.version,manifest:{version:1,totalBytes,files}}));
  }else{
   const artifacts=await load('artifact');
-  const stamp=createPublicationStampFromFiles({sourceCommit:input.sourceCommit,sourceFiles:source,artifactFiles:artifacts,systemId:input.systemId});
   const manifest=JSON.parse(source.find(file=>file.path==='timds.json').content.toString('utf8'));
-  await fs.writeFile('/workspace/metadata-result.json',JSON.stringify({stamp,artifact:{entryPath:manifest.artifact?.entry||manifest.viewer?.entry||manifest.artifactEntry||'index.html',fileCount:artifacts.length,totalBytes:artifacts.reduce((n,file)=>n+file.content.length,0)}}));
+  const entryPath=manifest.artifact?.entry||manifest.viewer?.entry||manifest.artifactEntry||'index.html';
+  // Remote readers (toolkit `fetchDerivedLayer`, `timds mcp read --published`)
+  // locate index.json, tokens.json and the rest from the stamp's entry and files.
+  const stamp={...createPublicationStampFromFiles({sourceCommit:input.sourceCommit,sourceFiles:source,artifactFiles:artifacts,systemId:input.systemId}),entry:entryPath,files:derivedLayerPaths(entryPath)};
+  await fs.writeFile('/workspace/metadata-result.json',JSON.stringify({stamp,artifact:{entryPath,fileCount:artifacts.length,totalBytes:artifacts.reduce((n,file)=>n+file.content.length,0)}}));
  }
 }else throw new Error('Unknown controlled build command');

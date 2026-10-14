@@ -1,6 +1,15 @@
 import { fail } from '../store/errors.mjs';
 
 const artifactOrigin='https://artifact.invalid';
+const idSegment=/^[a-z0-9][a-z0-9._-]*$/;
+/** `/systems/<org>/<name>` with each id segment its own path segment; ids with
+ * more than two segments, or callers that prefer it, use one encoded segment. */
+export function publicSystemPath(systemId,label) {
+  const segments=systemId.split('/');
+  const id=segments.length<=2&&segments.every(segment=>idSegment.test(segment))&&segments[1]!=='v'?segments.map(encodeURIComponent).join('/'):encodeURIComponent(systemId);
+  return `/systems/${id}${label?`/v/${encodeURIComponent(label)}`:''}`;
+}
+
 const encodePath=path=>path.split('/').map(encodeURIComponent).join('/');
 function artifactPath(value){
   if(typeof value!=='string'||!value||value.length>1000||/[\\\x00-\x1f\x7f]/.test(value)||value.startsWith('/')||value.split('/').some(part=>!part||part==='.'||part==='..'))throw fail(503,'Published bundle path is invalid');

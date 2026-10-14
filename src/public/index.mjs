@@ -1,6 +1,7 @@
 import { readPublishedArtifactFile } from '../publication/artifacts.mjs';
 import { fail } from '../store/errors.mjs';
 import { nativeViewerFile } from './native-base.mjs';
+import { publicSystemPath } from './urls.mjs';
 
 const mime = new Map(Object.entries({html:'text/html; charset=utf-8',htm:'text/html; charset=utf-8',css:'text/css; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',json:'application/json; charset=utf-8',txt:'text/plain; charset=utf-8',md:'text/markdown; charset=utf-8',svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',gif:'image/gif',ico:'image/x-icon',woff:'font/woff',woff2:'font/woff2',ttf:'font/ttf',otf:'font/otf',pdf:'application/pdf',mp4:'video/mp4',webm:'video/webm',mp3:'audio/mpeg',wav:'audio/wav',xml:'application/xml; charset=utf-8',webmanifest:'application/manifest+json'}));
 export const publicContentType = path => mime.get(path.split('.').at(-1)?.toLowerCase()) || 'application/octet-stream';
@@ -17,8 +18,9 @@ export function publicOrigins({hostOrigin,publicOrigin}) {
   if (host === published || (!local(new URL(host).hostname) && new URL(host).hostname === new URL(published).hostname)) throw fail(503,'Published files require a separate public origin');
   return {host,published};
 }
+const idSegment=/^[a-z0-9][a-z0-9._-]*$/;
 export function publicSystemUrls(publicOrigin,systemId,label) {
-  const root = `${origin(publicOrigin)}/systems/${encodeURIComponent(systemId)}/`;
+  const root = `${origin(publicOrigin)}${publicSystemPath(systemId)}/`;
   return {root,current:root,...(label?{version:`${root}v/${encodeURIComponent(label)}/`}:{})};
 }
 function decode(value) { try { return decodeURIComponent(value); } catch { throw fail(400,'Invalid public path'); } }
@@ -26,12 +28,27 @@ export function safePublicPath(path) {
   if (typeof path !== 'string' || path.length>1000 || /[\\\x00-\x1f\x7f]/.test(path) || path.startsWith('/') || path.split('/').some(part=>!part||part==='.'||part==='..'||part.toLowerCase()==='.git')) throw fail(400,'Invalid public path');
   return path;
 }
+/** Routes for one public path, most specific first. An id with an encoded
+ * slash is one candidate. Otherwise `/systems/a/b/...` names system `a/b`
+ * when it exists and system `a` with file `b/...` when it does not. */
+export function publicRoutes(pathname) {
+  const match = /^\/systems\/([^/]+)(?:\/([^/]*)(?:\/(.*))?)?$/.exec(pathname);
+  if (!match) return null;
+  const first=decode(match[1]);
+  const single=publicRoute(pathname);
+  if (!match[2] || first.includes('/') || !idSegment.test(first) || !idSegment.test(match[2]) || match[2]==='v') return [single];
+  const rest=match[3],pair=`${first}/${match[2]}`;
+  return [{systemId:pair,...route(rest,pathname)},single];
+}
 export function publicRoute(pathname) {
   const match = /^\/systems\/([^/]+)(?:\/(.*))?$/.exec(pathname);
   if (!match) return null;
   const systemId=decode(match[1]);
   if (!systemId || systemId.length>300 || /[\\\x00-\x1f\x7f]/.test(systemId)) throw fail(400,'Invalid system id');
-  let file=match[2] ?? '',label=null;
+  return {systemId,...route(match[2],pathname)};
+}
+function route(rest,pathname) {
+  let file=rest ?? '',label=null;
   if (file.startsWith('v/')) {
     const pinned=/^v\/([^/]+)(?:\/(.*))?$/.exec(file);
     if (!pinned) throw fail(404,'Published version not found');
@@ -40,7 +57,7 @@ export function publicRoute(pathname) {
     file=pinned[2] ?? '';
   }
   file=file.split('/').map(decode).join('/');
-  return {systemId,label,file,needsSlash:!pathname.endsWith('/') && !file};
+  return {label,file,needsSlash:!pathname.endsWith('/') && !file};
 }
 export async function publishedFile(readFile,bucket,version,path) {
   const result=await readFile(bucket,version,safePublicPath(path));
@@ -56,9 +73,13 @@ export function createPublicRoots({resolvePublished,bucket,hostOrigin,publicOrig
         const url=new URL(request.url);
         if (url.origin!==published) throw fail(404,'Public route not found');
         if (!['GET','HEAD'].includes(request.method)) return new Response('Method not allowed',{status:405,headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
-        const route=publicRoute(url.pathname);
-        if (!route) throw fail(404,'Public route not found');
-        const {source,version}=await resolvePublished(route.systemId,route.label);
+        const routes=publicRoutes(url.pathname);
+        if (!routes) throw fail(404,'Public route not found');
+        let route,source,version;
+        for (const [index,candidate] of routes.entries()) {
+          try { ({source,version}=await resolvePublished(candidate.systemId,candidate.label)); route=candidate; break; }
+          catch(error) { if (error?.statusCode!==404 || index===routes.length-1) throw error; }
+        }
         if (source.system_id!==route.systemId || version.source_id!==source.id || route.label && version.version_label!==route.label) throw fail(404,'Published version not found');
         if (route.needsSlash) return Response.redirect(`${published}${url.pathname}/${url.search}`,308);
         let path=route.file || version.artifact?.entryPath || 'index.html';

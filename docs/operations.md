@@ -503,10 +503,12 @@ Check anonymous responses after deployment:
 | `/README.md`, `/app.js` | 404 |
 
 The public companion rejects `/api/timds/*` with 404 and exposes anonymous read
-MCP at `/mcp`. Published roots are `/systems/<URL-encoded-system-id>/`, with
-`/v/<version>/` for immutable versions. Check `.timds-artifact.json` stamps and
-referenced asset digests after publication/rollback; a 200 health response is
-not publication acceptance.
+MCP at `/mcp`. Published roots are `/systems/<org>/<name>/`, one path segment
+per id segment, with `/v/<version>/` for immutable versions; the single
+URL-encoded form `/systems/<org>%2F<name>/` keeps working and is the only form
+for ids with more than two segments. Check `.timds-artifact.json` stamps
+(identity, `entry` and `files`) and referenced asset digests after
+publication/rollback; a 200 health response is not publication acceptance.
 
 A slow or failing live view is diagnosed from
 `GET /api/timds/sessions/<session-uuid>/diagnostics` with the session's
