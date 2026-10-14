@@ -58,6 +58,24 @@ test('the latest tag redirects to the immutable address of the current pointer',
   assert.equal((await handler.fetch(new Request(`${plain}v/latest/docs/%2F..%2Fprivate`))).status, 400);
 });
 
+test('the bundle manifest answers at the system root for a nested entry', async () => {
+  const fixture = await publishedFixture();
+  const handler = createPublicRoots({ ...config, ...fixture });
+  const plain = 'https://published.example/systems/example/core/';
+  const pinned = await handler.fetch(new Request(`${plain}v/1.0.0/bundle.json`));
+  assert.equal(pinned.status, 200, 'where timds consumer sync looks');
+  const manifest = await pinned.json();
+  assert.equal(manifest.url, `${plain}v/1.0.0/docs/bundle.json`, 'projected from the real manifest location');
+  assert.equal(manifest.directory, `${plain}v/1.0.0/docs/bundle`);
+  assert.equal(manifest.versioned, `${plain}v/1.0.0/docs/bundle`);
+  assert.equal(manifest.latest, `${plain}v/latest/docs/bundle`);
+  assert.equal(manifest.files[0].url, `${plain}v/1.0.0/docs/bundle/style.css`);
+  assert.equal(manifest.files[0].sha256, '0'.repeat(64), 'file identity is untouched');
+  const current = await (await handler.fetch(new Request(`${plain}bundle.json`))).json();
+  assert.equal(current.directory, `${plain}docs/bundle`);
+  assert.equal((await handler.fetch(new Request(`${plain}docs/bundle.json`))).status, 200, 'the real path still serves');
+});
+
 test('pinned version keeps serving after the current pointer moves', async () => {
   const fixture = await publishedFixture();
   const handler = createPublicRoots({ ...config, ...fixture });

@@ -714,6 +714,11 @@ and the assets it then loads come from one release and the consumer learns
 which version it received. The root keeps serving the current release in
 place for browsing. Bundle manifests carry `latest` beside `directory` and
 `versioned`; the read MCP accepts `version: "latest"` as omitting `version`.
+The toolkit's `consumer sync` reads the manifest at
+`/systems/<org>/<name>/v/<label>/bundle.json`; when the artifact keeps it
+beside a nested entry (`design-system/bundle.json`) the root path answers
+with that manifest, projected from its real directory, so the file URLs,
+digests and physical `bundle/*` objects are unchanged.
 
 Publication response URLs, including previously committed results, are derived
 from the current `TIMDS_PUBLIC_ORIGIN` and system identity. Retained

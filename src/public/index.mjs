@@ -107,6 +107,11 @@ export function createPublicRoots({resolvePublished,bucket,hostOrigin,publicOrig
           if(directory){await directory.body?.cancel();return new Response(null,{status:308,headers:{Location:`${published}${url.pathname}/${url.search}`,'Cache-Control':route.label?'public, max-age=31536000, immutable':'public, max-age=300, must-revalidate'}});}
           stored=await publishedFile(readFile,bucket,version,`${path}.html`);if(stored)path+='.html';
         }
+        // `timds consumer sync` reads <root>/v/<label>/bundle.json. A system whose
+        // entry sits below the artifact root keeps the manifest beside that entry;
+        // answer the root path with it, projected from its real directory so the
+        // file URLs stay correct.
+        if(!stored&&path==='bundle.json'){const entry=version.artifact?.entryPath||'';const directory=entry.includes('/')?entry.slice(0,entry.lastIndexOf('/')+1):'';if(directory){path=`${directory}bundle.json`;stored=await publishedFile(readFile,bucket,version,path);}}
         if (!stored) throw fail(404,'Published file not found');
         const type=publicContentType(path);
         const file=await nativeViewerFile(stored,{path,type,systemId:route.systemId,label:route.label,publicOrigin:published});
