@@ -12,6 +12,7 @@ import { createPublicRoots } from './public/index.mjs';
 import { createLegacyPublicRoots } from './public/legacy.mjs';
 import { UUID } from './public/host-routes.mjs';
 import { createHostMcp } from './mcp/index.mjs';
+import { createContributionService } from './mcp/contributions.mjs';
 import { fail } from './store/errors.mjs';
 import { studioFetch } from './studio.mjs';
 import { claimLoginInvitations } from './invitations/service.mjs';
@@ -26,7 +27,7 @@ function publishedServices(env,ctx) {
     return result;
   };
   const options={resolvePublished,bucket:env,hostOrigin:env.HOST_ORIGIN,publicOrigin:env.TIMDS_PUBLIC_ORIGIN};
-  const mcp=createHostMcp({...options,createRequest:async({sourceId,actor,input})=>{
+  const mcp=createHostMcp({...options,createContributions:({actor})=>createContributionService({env,getCoordinator:id=>getCoordinator(ctx,id),actor}),createRequest:async({sourceId,actor,input})=>{
     const response=await getCoordinator(ctx,sourceId).api({operation:'createRequest',actor,args:[sourceId,input]});
     if(!response.ok)throw fail(response.error.statusCode,response.error.message);
     return response.value;

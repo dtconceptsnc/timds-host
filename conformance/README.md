@@ -17,6 +17,12 @@ feed, and public CSS use the same validating transport because toolkit 0.1.464
 does not expose client methods for those operations. All other operations call
 `createHostProvider` from `@dtconcepts/timds/hosted`.
 
+The [designer MCP surface](../docs/api/designer-mcp.md) is exercised through a
+separate MCP transport against `/api/timds/mcp` using the same fixture and
+credentials. Its contribution receipts are checked alongside the HTTP flow;
+anonymous `/mcp` is checked on the publication's public origin. The harness
+does not require a local toolkit MCP server.
+
 The host has since extended the vendored contract additively with
 `GET /api/timds/design-systems/{source}/events?after=<seq>&limit=<n>`
 (`getSourceEvents`, schema `EventFeed`) and an optional per-source `seq` on
@@ -42,8 +48,8 @@ npm test
 ```
 
 The unit suite checks real toolkit request dispatch, version/auth headers,
-schema rejection, error handling, public reads without credentials, and the
-write guard. It does **not** establish live-host conformance.
+schema rejection, error handling, public reads without credentials, the MCP
+transport and the write guard. It does **not** establish live-host conformance.
 
 See [CI instructions](../docs/ci.md) for automatic foundation checks and the
 manual GitHub Actions run requiring an explicit disposable fixture and named
@@ -64,6 +70,9 @@ gates, or directly write a database.
 - Its owner identity must have a publisher grant for this fixture.
 - A second, distinct identity needs an identity token. The owner invites it to
   the disposable draft; no publisher grant is needed for that member.
+- Both credentials must permit authenticated MCP contribution. OAuth bearer
+  tokens need `timds:read` and `timds:write`; scopes do not replace the fixture
+  grants above.
 - There must be no other open sessions or drafts on the fixture. No other
   process may write it during the run.
 - The host URL, immutable source ID, and immutable system ID must be selected
@@ -128,6 +137,12 @@ ordinary approved lifecycle after examining the results.
    `request_received` once (despite the retry), then `member_joined`,
    `request_started`, `request_submitted` with its submission ID and
    `submitted`, and no `request_failed`. `active-work` events carry `seq`.
+9. Authenticated MCP discovers the fixture, starts and recovers a session,
+   lists and reads its source files, and closes it. MCP shares the existing
+   draft creation, member self-join, claims and stale-update checks, one main
+   submission and its retry, and the designer Request creation/polling flow.
+   Its receipts must agree with the same operations observed through HTTP.
+   Anonymous `/mcp` exposes published reads without contribution tools.
 
 Every created session is tracked for test teardown, including on failure.
 Publication attempts are recorded before transport, so a lost or malformed
@@ -163,3 +178,5 @@ baseline passed on October 13, 2026 (private operational record),
 with the exact deployed revision and redacted machine receipt recorded there.
 The new host still requires its own local and deployed runs. This receipt does
 not claim completion of the independent #60 acceptance or production migration.
+The MCP extension has not been accepted merely by passing this package's local
+unit suite; its authenticated deployed run is still owed.

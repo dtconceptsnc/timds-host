@@ -47,6 +47,21 @@
       "identity": []
     }
   ],
+  "x-timds-mcp": {
+    "description": "MCP is a separate JSON-RPC boundary over Streamable HTTP, not a v1 REST response envelope. Contribution tools reuse the v1 coordinator operations and authority checks. Tool schemas are discovered with tools/list.",
+    "documentation": "designer-mcp.md",
+    "authenticatedEndpoint": "/api/timds/mcp",
+    "publicEndpoint": "/mcp",
+    "publicEndpointOrigin": "configured public origin",
+    "oauthResource": "<request-origin>/api/timds",
+    "readScope": "timds:read",
+    "writeScope": "timds:write",
+    "maxRequestBytes": 16777216,
+    "publishedTools": ["describe_system", "get_tokens", "read_page", "read_derived_layer"],
+    "contributionReadTools": ["list_systems", "get_system", "get_active_work", "get_session", "get_session_history", "list_session_files", "read_session_file", "list_drafts", "list_submissions", "get_request", "get_events"],
+    "contributionWriteTools": ["start_session", "join_session", "claim_session", "update_session", "submit_session", "close_session", "create_draft", "create_request", "report_gap"],
+    "publication": "Use the explicit Studio or CLI publication and rollback operations; MCP submission does not publish."
+  },
   "paths": {
     "/api/timds/sessions": {
       "post": {

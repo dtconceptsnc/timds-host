@@ -659,12 +659,26 @@ live systems' domain aliases and immutable release identities. Twelve public
 reads are the acceptance smoke check; the full manifest digest comparison is
 the migration integrity check.
 
-Read MCP uses `createMcpHandler` with R2-backed `describe_system`, `get_tokens`
-and `read_page`; `report_gap` creates a Request with the caller/note recorded.
-Verify the exact Cloudflare Agents export and transport against the selected
-package before adding it. Existing Node read-MCP filesystem handlers cannot
-be imported wholesale into the Worker. Studio static assets consume the same
-host API and OAuth session and need actual phone/browser verification.
+MCP uses `createMcpHandler`. Anonymous `/mcp` exposes only published reads:
+`describe_system`, `get_tokens`, `read_page` and `read_derived_layer` select
+immutable release bytes. Authenticated `/api/timds/mcp` keeps those reads and
+adds source discovery, session and draft collaboration, bounded source-file
+reads, changeset update/submission, and designer Request creation/polling.
+`report_gap` also creates a Request with the caller/note recorded. Hosted
+contribution works before a system's first publication. The
+[designer MCP contract](api/designer-mcp.md) specifies tools, retries and the
+review workflow; publishing and rollback remain in Studio or the CLI.
+
+Every authenticated contribution tool uses the existing coordinator operations
+and current D1 authority. Each mutation enforces `timds:write` and dispatches
+with write access; the MCP HTTP endpoint itself admits `timds:read` so that
+read-only clients can connect. Scope never supplies a missing source grant or
+publisher grant. File reads validate safe source paths and bound their output;
+snapshot storage references stay internal. A fresh server per request keeps
+actor, source and release selection out of another caller's MCP session.
+Studio static assets consume the same host API and OAuth session. Deployed MCP
+client acceptance and phone/browser verification remain separate from local
+build and smoke checks.
 
 Studio is a steering console, not an editor: agents are the only writers.
 Humans direct through Requests and decide with publish, rollback, close and

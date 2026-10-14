@@ -22,6 +22,7 @@ work in the repository and which checks apply to a change.
 | [api/media.md](api/media.md) | You touch source media uploads, transfer capabilities, CORS, cancellation or scoped deletion. |
 | [api/provision-receipts.md](api/provision-receipts.md) | You touch the administrator read of a native provisioning receipt. |
 | [api/published-derived-layer.md](api/published-derived-layer.md) | You touch the `read_derived_layer` MCP tool over immutable releases. |
+| [api/designer-mcp.md](api/designer-mcp.md) | You connect an MCP client to contribute through hosted sessions or designer Requests, or change the authenticated MCP tools. |
 
 ## Features and procedures
 
