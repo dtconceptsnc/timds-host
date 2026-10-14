@@ -7,7 +7,7 @@ receipts are in deployment evidence (private operational record). Authenticated
 host authoring and publication acceptance, phone usage and production migration
 remain in progress. The health endpoint deliberately reports integration status.
 
-The design was reviewed against portal commit `2b0148c` and toolkit OAuth
+The design was reviewed against the legacy portal baseline and toolkit OAuth
 [PR #100](https://github.com/sticktrk/timds-toolkit/pull/100). The
 production portal baseline passed (private operational record), and
 the subsequent Request recovery and fixture cleanup are settled in that receipt.

@@ -1,4 +1,4 @@
-// Owned workers.dev LivePreview bindings from toperator 74bceaa.
+// Owned workers.dev LivePreview bindings from the legacy portal.
 import { sessionIdPattern } from '../../runtime/policy.mjs';
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
 import { designSystemPreviewPath } from './preview-path.mjs';
