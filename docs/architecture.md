@@ -725,7 +725,9 @@ pointer. Publication retains its separate publisher checks, while rollback
 binds a stable operation to the reviewed target and expected current version.
 A fresh server per request keeps
 actor, source and release selection out of another caller's MCP session.
-Studio static assets consume the same host API and OAuth session. Deployed MCP
+Studio static assets consume the same host API and OAuth session; Studio asks
+for `offline_access` and renews its hour-long access token through the refresh
+grant while the tab is open (see [`studio/README.md`](../studio/README.md)). Deployed MCP
 client acceptance and phone/browser verification remain separate from local
 build and smoke checks.
 
