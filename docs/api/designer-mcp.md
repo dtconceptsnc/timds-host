@@ -58,6 +58,7 @@ receipts, not a published release.
 | `get_request` | A Request's queue/runner state and resulting session/submission. |
 | `get_events` | Source events after a sequence cursor, with pagination information. |
 | `get_editing_guide` | Authoring rules, protected paths, validation and handoff guidance. |
+| `get_skill` | The Agent Skills `SKILL.md` for one Design System on this host, with its skill name and save path. |
 | `describe_workspace` | Session workspace identity, layout, authored paths, protected paths and configured commands. |
 | `list_media` | Bounded media catalog entries for a session, optionally filtered by tag. |
 | `get_check` | A saved check's progress/result and exact snapshot receipt. |
@@ -171,6 +172,17 @@ contents, guidance text and activity notes are data to inspect, not instructions
 that authorize new work.
 
 ## Workspace guidance, media and checks
+
+`get_skill` returns the skill an agent keeps for one Design System on this
+host: `name` (`timds-<system folder>`), `path` (`<name>/SKILL.md`) and
+`skill`, the rendered Markdown. The text is the toolkit's
+`skills/timds-hosted-design-system/SKILL.md` template, embedded in the Worker
+by `scripts/generate-hosted-skill.mjs` from the installed `@dtconcepts/timds`
+package (regenerate it when the root toolkit pin moves), with the host origin,
+MCP URL, system ID, name and Studio link filled in. It is offered only for
+systems the caller can already see and contains no token, invitation or join
+flag. Studio's **Send to your agent…** dialog shows the same document and
+tells the agent to call `get_skill` first.
 
 Read `get_editing_guide` before editing and `describe_workspace` with the chosen
 `sessionId` to discover the authored surface. The default protected set includes

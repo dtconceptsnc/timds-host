@@ -117,7 +117,7 @@ The quickest route is Studio's **Send to your agent…** button, on the Design
 System's Overview and in each session's Studio rail. Pick your client and it
 gives you the one-time connect command or install link for that client, a
 brief to paste into the agent that joins the session and submits for review,
-and the same instructions as a `SKILL.md` to keep. The
+and the `SKILL.md` the host serves through its `get_skill` tool. The
 [Studio specification](../studio/README.md#agent-handoff) lists exactly what
 it contains. By hand, choose your client's remote HTTP MCP connection and enter:
 
@@ -148,9 +148,10 @@ and authorize consistently on that origin. Tokens cannot be relabelled for
 another hostname, scheme or port. The public origin's `/mcp` is an anonymous
 published-guidance connection and does not expose hosted contribution tools.
 
-After connection, ask the agent to call `list_systems`, select the intended
-system, read `get_editing_guide`, and inspect `get_system` and
-`get_active_work`. A remote connection needs no local source checkout or local
+After connection, ask the agent to call `get_skill` for the intended system
+and save the result at the path it names in its skills folder; from then on
+every conversation knows how to work on that system. Then `list_systems`,
+`get_system`, `get_active_work` and `get_editing_guide` as the skill says. A remote connection needs no local source checkout or local
 toolkit MCP process. Tool schemas, byte limits and error receipts are in
 [designer MCP](api/designer-mcp.md).
 
