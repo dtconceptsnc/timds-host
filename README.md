@@ -1,109 +1,228 @@
 # TimDS Host
 
-An Apache-2.0 Cloudflare host for TimDS sessions, collaboration, previews,
-publication and Studio. The Apache-2.0 toolkit is maintained separately as
-`@dtconcepts/timds`.
+**GitHub for design systems.** Self-host it on Cloudflare.
 
-## Contribute to a Design System
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Foundation checks](https://github.com/dtconceptsnc/timds-host/actions/workflows/foundation.yml/badge.svg)](https://github.com/dtconceptsnc/timds-host/actions/workflows/foundation.yml)
+[![Node 22.18+](https://img.shields.io/badge/node-%3E%3D22.18-brightgreen.svg)](.nvmrc)
 
-Use Studio in your browser, the TimDS CLI, or an agent connected to the host's
-authenticated `/api/timds/mcp` endpoint. All three work with the same sessions,
-shared drafts, Previews, review submissions and releases. The
-[contributor guide](docs/contributing-design-systems.md) covers installation,
-OAuth connection, access, editing/checking, invitations, publication, rollback
-and cleanup. The [MCP contract](docs/api/designer-mcp.md) lists the remote tools
-and their retry/concurrency rules.
+TimDS Host gives a design system the things source code has had for years: a
+repository, branches of work, reviewable previews, versioned releases with
+rollback, and a published read endpoint that any consumer (a site, an app, an
+AI agent) can trust. It runs entirely on Cloudflare Workers, Containers, D1, R2,
+Queues and Workflows. There is no server to run.
 
-## Working in this repository
+The design-system toolkit itself is the separate Apache-2.0 package
+[`@dtconcepts/timds`](https://www.npmjs.com/package/@dtconcepts/timds). This
+repository is the host that toolkit talks to.
 
-[`AGENTS.md`](AGENTS.md) is the guide for contributors and coding agents: the
-repository map, the verified commands, which checks apply to which change, the
-public-boundary rules and the conventions the code follows.
-[`docs/README.md`](docs/README.md) indexes every document by the question it
-answers. `npm run check` runs the local checks in one go.
+## What you get
 
-## Run your own host
+- **Sessions and change sets.** Every piece of work on a design system happens in
+  a session with its own live preview, backed by a real Git repository in a
+  Cloudflare Container.
+- **Requests to a designer agent.** Humans steer; an agent does the editing.
+  Requests run in native live sessions and come back as reviewable submissions.
+- **Previews.** Each submission is frozen and deployed as its own Worker, so
+  reviewers look at a real URL instead of a screenshot.
+- **Publication with rollback.** A seven-stage Workflow builds, verifies and
+  copies releases into an object-locked R2 bucket. Releases are immutable; the
+  published pointer can move back to any earlier version.
+- **Public reads and MCP.** A separate public Worker serves the published
+  system, and a read-only MCP endpoint lets AI tools read the current release
+  with an exact source and version receipt.
+- **Studio.** A static steering console for sessions, Requests, Previews,
+  publish and rollback. It is served straight from the host and has no build
+  step.
+- **Real identity.** Cloudflare Access for people, OAuth for CLI and MCP
+  clients, and per-source grants checked in D1 on every mutation.
 
-Follow the [operations runbook](docs/operations.md) for resource creation,
-immutable release storage, credentials, API/public deployment, Access, first
-administrator bootstrap, organizations and source provisioning.
-Existing portal systems use the separate [inactive import and activation
-protocol](docs/migration/import-protocol.md); importing does not authorize an
-automatic production cutover.
+## Deploy on Cloudflare
 
-Node.js 22.18+, npm and a running local Docker engine are required. The project
-pins `cf@1.0.0-beta.14` and its Cloudflare Vite plugin in the lockfile. Container
-images build locally and run on Cloudflare; a VPS is not a runtime dependency.
+You need a Cloudflare account, Node.js 22.18 or newer, and a local Docker
+engine that can build Linux AMD64 images (the three container images build on
+your machine and run on Cloudflare). Python 3 runs the deploy helper.
 
-```sh
-npm ci
-npm run typecheck
-npm run build
+The deployment identity needs Workers, Containers, D1, R2, KV, Queues and
+Workflows in the account. The full procedure, with every setting explained, is
+the [operations runbook](docs/operations.md). The short version:
+
+**1. Install and sign in.**
+
+```bash
+git clone https://github.com/dtconceptsnc/timds-host.git && cd timds-host
 ```
 
-`npm run dev` starts `cf dev`. Artifacts has no local emulator; the host's
-Artifacts adapter still needs a disposable remote namespace and credentials.
-Local development is not a self-contained substitute for deployed acceptance.
-Deployment requires the environment and resources in the runbook.
+```bash
+npm ci && npm --prefix public-worker ci
+```
 
-## Runtime and contract
+```bash
+npx cf auth login
+```
 
-The API Worker owns OAuth, a D1 identity/grant catalog, per-system SQLite Durable
-Objects, native repository/live/build containers, Queues and publication
-Workflows. R2 holds source/build snapshots and locked immutable release objects.
-A separate public Worker receives only the public-read service binding. Studio
-is served from an explicit static-asset allowlist.
+**2. Describe your installation.** Copy the example environment file and fill
+in the required values. The file is gitignored and must stay owner-only.
 
-API v1 uses `X-TimDS-API-Version: 1` and `apiVersion: 1`; the toolkit selects the
-host through `provider: { kind: 'hosted', url }`. The vendored
-[OpenAPI contract](docs/api/timds-host.openapi.json),
-[architecture](docs/architecture.md) and [conformance package](conformance/README.md)
-describe these boundaries. The build and conformance baseline pin toolkit
-`0.1.464`. Contributor installation examples use the root's pinned toolkit
-`0.1.473`, with OAuth login, resumable commands, Studio-link joining and
-principal discovery. Use `timds auth login --oauth --portal-url <host-origin>`;
-the native merge/build container retains its `0.1.464` pin. The remote host MCP
-requires no local toolkit installation and preserves the same host authority
-and review lifecycle. Deployed client/lifecycle acceptance remains separate
-from local checks.
+```bash
+cp .env.example .env && chmod 600 .env
+```
 
-The additive source read at `GET /api/timds/design-systems/:source` returns the
-authoritative published pointer, current version, at most 100 rollback versions,
-and the caller's current publisher permission. It excludes provider/storage
-internals and keeps the current descriptor available outside the bounded list.
+The minimum is your account id, a Worker name such as `timds-example`, the two
+origins the Worker and its public companion will answer on, and the Artifacts
+namespace map. Leave the Access settings empty for now. The runtime secrets at
+the bottom of the file (a registered Workers Builds token, an OpenAI API key
+for the designer agent, and a fresh random bootstrap secret) are required
+before step 3.
 
-## Verification and limitations
+**3. Create resources and deploy.** The helper reads `.env`, creates the queue,
+D1 catalog and snapshot and release buckets, applies the catalog migration,
+locks the releases bucket as immutable, and deploys both Workers. Created
+resource ids are kept in a gitignored state file beside `.env`. The media
+bucket is created once by hand.
 
-Run `npm run typecheck`, `npm run build` and `npm test` for local validation.
-The [CI guide](docs/ci.md) distinguishes build checks from authenticated
-live-host acceptance. The [conformance package](conformance/README.md) describes
-the API checks and disposable resources required to run them.
+```bash
+python3 scripts/deploy-host.py resources
+```
 
-`npm test` runs a small smoke suite under `test/` with plain Node: every
-portable `src` module loads, the D1 migrations apply to a fresh SQLite database
-and the catalog bootstraps an administrator, a signed Access token verifies,
-the public origin serves a published fixture, and the public MCP endpoint
-answers the published SDK client. It needs no Workers runtime, Docker, network
-or credentials. Behavioural acceptance of the real host is the conformance
-suite, not this smoke suite.
+```bash
+npx cf r2 buckets create --name timds-example-media
+```
 
-Snapshot persistence and isolated build/metadata copies stream at most four
-files concurrently, draining pending transfers before cleanup and committing
-manifests only after all transfers succeed. Git operations and publication gates
-remain serialized.
+```bash
+python3 scripts/deploy-host.py catalog
+```
 
-Keep installation inventories, customer identities, domains, source and release
-IDs, operational receipts, and resumable production work records in private
-operator storage. Public examples must use synthetic names and reserved example
-domains. See [verification guidance](docs/verification.md).
+```bash
+python3 scripts/deploy-host.py lock
+```
 
-The pinned CF beta has specific [tooling limitations](docs/operations.md#pinned-cf-limitations),
-including preview migration/readback and a direct API exception for deletion.
+```bash
+python3 scripts/deploy-host.py deploy
+```
+
+```bash
+python3 scripts/deploy-host.py public
+```
+
+Your host answers at `https://timds-example.<subdomain>.workers.dev/health` as
+soon as the deploy finishes.
+
+**4. Let people sign in.** Create a Cloudflare Access application for the three
+paths `/authorize`, `/bootstrap` and `/service-auth` on the host origin (the
+runbook has a script that emits the application plan). Put its team domain and
+audience into `.env` and run the deploy step again. Then sign in with the
+pinned toolkit and claim the administrator seat:
+
+```bash
+node node_modules/@dtconcepts/timds/bin/timds.mjs auth login --portal-url https://timds-example.example.workers.dev --oauth
+```
+
+```bash
+node scripts/admin.mjs bootstrap --host https://timds-example.example.workers.dev --operation-id <uuid> --secret-file /private/path/bootstrap-secret
+```
+
+**5. Create your first design system.** Create an organization and a designer
+agent with `scripts/admin.mjs`, put the agent's principal id into `.env`, redeploy,
+then provision a source from a fresh toolkit seed. The runbook's
+["Organization, designer and fresh system"](docs/operations.md#organization-designer-and-fresh-system)
+section walks through it, and the [conformance package](conformance/README.md)
+can exercise the finished host against a disposable source.
+
+Open `https://timds-example.example.workers.dev/studio` to see Studio.
+
+### What gets created
+
+| Resource | Purpose |
+| --- | --- |
+| Worker `<name>` | The API: OAuth, API v1, Studio assets, event feed, MCP |
+| Worker `<name>-public` | Public reads only. It holds no secrets and one service binding |
+| D1 `<name>-catalog` | Principals, organizations, sources, grants, audit |
+| Durable Objects | One SQLite coordinator per design system; the publication pointer lives here |
+| R2 `<name>-snapshots`, `<name>-releases`, `<name>-media` | Source and build snapshots, object-locked releases, source media |
+| Queue `<name>-events` | Repository events pushed to coordinators |
+| Containers | Repository sandbox, live session, and ephemeral build sandbox |
+| Workflow | The seven-stage publication pipeline |
+
+Redeploy with the same `.env` and the deploy step. Cloudflare Access
+invitations, portal imports, custom Studio domains and legacy public hostnames
+are optional and documented in [`docs/`](docs/README.md).
+
+## Local development
+
+| Command | Does |
+| --- | --- |
+| `npm run typecheck` | Generates Worker types, then `tsc --noEmit` |
+| `npm run build` | Bundles the Worker and builds the three container images (needs Docker) |
+| `npm test` | Fast smoke suite: modules load, migrations apply, Access tokens verify, public serving and MCP answer |
+| `npm run check:docs` | Markdown links resolve and every document is indexed |
+| `npm run check:boundary` | Scans added lines for installation records and credentials |
+| `npm run check` | All of the above except `build` |
+| `npm run dev` | `cf dev`. Artifacts has no local emulator, so it still needs a disposable remote namespace |
+
+None of the checks need Cloudflare credentials. Local checks prove the code
+compiles and the in-process paths hold; they do not prove a deployed host
+behaves. [`docs/ci.md`](docs/ci.md) and
+[`docs/verification.md`](docs/verification.md) separate the two.
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  C[CLI / Studio / MCP clients] --> W[API Worker]
+  W --> D[(D1 catalog)]
+  W --> S[SystemCoordinator DO]
+  S --> R[Repository container]
+  S --> L[Live session container]
+  S --> P[Publish Workflow]
+  P --> B[Build container]
+  P --> O[(R2 releases)]
+  U[Public Worker] --> W
+  W --> O
+```
+
+The API Worker authenticates every request, resolves the source, and hands it
+to that source's coordinator. Request bodies never choose a source or an actor.
+Every mutation rechecks current authority in D1 at the moment it runs. API v1
+is additive only and vendored as an
+[OpenAPI 3.1 contract](docs/api/timds-host.openapi.json); clients send
+`X-TimDS-API-Version: 1`.
+
+The [architecture document](docs/architecture.md) covers the request path,
+SQLite and D1 invariants, publication stages, OAuth and Access policy, public
+serving and Studio in depth.
+
+## Documentation
+
+- [`docs/README.md`](docs/README.md) indexes every document by the question it answers.
+- [`docs/operations.md`](docs/operations.md) is the deployment and operations runbook.
+- [`docs/architecture.md`](docs/architecture.md) is the design.
+- [`docs/api/timds-host.openapi.json`](docs/api/timds-host.openapi.json) is the API contract.
+- [`conformance/README.md`](conformance/README.md) is the live API conformance harness.
+- [`studio/README.md`](studio/README.md), [`src/requests/README.md`](src/requests/README.md)
+  and [`src/preview/README.md`](src/preview/README.md) sit next to the code they specify.
+
+## Contributing
+
+[`AGENTS.md`](AGENTS.md) is the contract for any change: the repository map,
+which checks apply to which kind of change, code conventions, and the public
+boundary. Two rules matter most:
+
+- **Keep installation records out of the repository.** No customer names,
+  domains, account or source ids, release hashes or operational receipts in
+  code, docs, commits or pull requests. Use synthetic names and reserved
+  example domains. `npm run check:boundary` enforces this on every branch.
+- **Documents are the specification.** A runtime change is not finished until
+  the document that describes that area agrees with the code.
+
+Run `npm run check` before opening a pull request, and say in the description
+which checks ran and whether deployed acceptance is still owed.
+[`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) lists
+the questions a reviewer will ask.
 
 ## License
 
-Original host code is licensed under the Apache License 2.0. See
-[LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party dependencies retain their
-respective licenses. The toolkit source and the published
-[`@dtconcepts/timds@0.1.473`](https://www.npmjs.com/package/@dtconcepts/timds/v/0.1.473)
-package are Apache-2.0; that package's version/license were verified from npm.
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party
+dependencies keep their own licenses. The toolkit,
+[`@dtconcepts/timds`](https://www.npmjs.com/package/@dtconcepts/timds), is
+also Apache-2.0.
