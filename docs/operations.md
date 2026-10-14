@@ -55,6 +55,7 @@ export TIMDS_DESIGNER_PRINCIPAL_ID=''
 export TIMDS_DESIGNER_MODEL='gpt-6-sol'
 export TIMDS_STUDIO_FRAME_ORIGINS='https://*.<workers-subdomain>.workers.dev'
 export TIMDS_LIVE_INSTANCE_TYPE='standard-3' # optional live container size
+export TIMDS_BUILD_INSTANCE_TYPE='standard-2' # optional publication container size
 ```
 
 `TIMDS_LIVE_INSTANCE_TYPE` sizes each live session container: `standard-1`
@@ -64,6 +65,13 @@ or installs `node_modules` and starts the dev server on that CPU, so a smaller
 instance wakes slower. Every running session counts against the account's
 concurrent container vCPU and memory limits; the diagnostics route described
 under "Verify and operate" reports the instance each session last woke on.
+
+`TIMDS_BUILD_INSTANCE_TYPE` sizes the publication containers with the same
+values, default `standard-2`: the dependency install, the controlled build and
+the metadata (release-metadata and stamp) runs. The controlled build is CPU
+bound. A published result carries `timings` with the milliseconds each
+container phase took and whether the dependency cache hit, so compare them
+before and after changing the size. Unknown values fall back to `standard-2`.
 
 The Worker name must match `[a-z0-9][a-z0-9-]{0,48}`. Both origins are exact
 origins without a path. Use the full HTTPS Access team URL. Before Access exists,

@@ -57,6 +57,7 @@ export default defineConfig({
       TIMDS_STUDIO_FRAME_ORIGINS:bindings.text(process.env.TIMDS_STUDIO_FRAME_ORIGINS || ''),
       TIMDS_ACCESS_INVITATIONS_ENABLED:bindings.text(process.env.TIMDS_ACCESS_INVITATIONS_ENABLED==='true'?'true':'false'),
       TIMDS_LIVE_INSTANCE_TYPE:bindings.text(process.env.TIMDS_LIVE_INSTANCE_TYPE || 'standard-3'),
+      TIMDS_BUILD_INSTANCE_TYPE:bindings.text(process.env.TIMDS_BUILD_INSTANCE_TYPE || 'standard-2'),
       TIMDS_HOST_WORKER_NAME:bindings.text(name),
       ACCESS_TEAM_DOMAIN:bindings.text(process.env.TIMDS_ACCESS_TEAM_DOMAIN || ''),
       ACCESS_AUD:bindings.text(process.env.TIMDS_ACCESS_AUD || ''),

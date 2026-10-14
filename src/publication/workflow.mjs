@@ -6,6 +6,7 @@ import {createPublicationArtifactStore} from './artifacts.mjs';
 import {createPublicationSteps,PUBLICATION_STAGES} from './steps.mjs';
 import {publicUrls} from './urls.mjs';
 import {verifyPublishedRead} from './public-read.mjs';
+import {readTreeManifest} from '../repository/file-trees.mjs';
 import {unwrapNativeBuildResult,finishCleanup,safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 // Ordinary FIFO/lease waits do not spend the retry budget for a publication
@@ -14,7 +15,7 @@ const QUEUE_WAIT_LIMIT=720;
 export function publicationStoreProxy(coordinator){return new Proxy({}, {get:(_target,name)=>(...args)=>coordinator.publicationStore(name,args)});}
 export function publicationServices(ctx,env,coordinator,lease){
  const store=publicationStoreProxy(coordinator),repository=createRepositoryAdapter({store,getSandbox:id=>ctx.exports.RepositorySandbox.getByName(id),snapshotBucket:env.SNAPSHOTS});
- return createPublicationSteps({store,repository,lease,artifacts:createPublicationArtifactStore(env.SNAPSHOTS),metadata:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`metadata:${input.publicationId}`).metadata(input),input.operation),build:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`build:${input.publicationId}`).run(input),'build'),releaseArtifact:input=>publishReleaseTree({snapshots:env.SNAPSHOTS,releases:env.RELEASES},input),stageVersion:input=>coordinator.stageVersion(input),closePublishedSession:(_source,submission,publicationId)=>coordinator.closeForPublication(submission.session_id,publicationId),publicUrls:(source,version)=>publicUrls(env,source,version),verifyPublic:verifyPublishedRead});
+ return createPublicationSteps({store,repository,lease,artifacts:createPublicationArtifactStore(env.SNAPSHOTS),metadata:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`metadata:${input.publicationId}`).metadata(input),input.operation),build:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`build:${input.publicationId}`).run(input),'build'),artifactManifest:tree=>readTreeManifest(env.SNAPSHOTS,tree),releaseArtifact:input=>publishReleaseTree({snapshots:env.SNAPSHOTS,releases:env.RELEASES},input),stageVersion:input=>coordinator.stageVersion(input),closePublishedSession:(_source,submission,publicationId)=>coordinator.closeForPublication(submission.session_id,publicationId),publicUrls:(source,version)=>publicUrls(env,source,version),verifyPublic:verifyPublishedRead});
 }
 export class PublicationWorkflow extends WorkflowEntrypoint {
  async run(event,step){
