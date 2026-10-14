@@ -3,7 +3,7 @@
 **GitHub for design systems.** Self-host it on Cloudflare.
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Foundation checks](https://github.com/dtconceptsnc/timds-host/actions/workflows/foundation.yml/badge.svg)](https://github.com/dtconceptsnc/timds-host/actions/workflows/foundation.yml)
+[![Foundation checks](https://github.com/sticktrk/timds-host/actions/workflows/foundation.yml/badge.svg)](https://github.com/sticktrk/timds-host/actions/workflows/foundation.yml)
 [![Node 22.18+](https://img.shields.io/badge/node-%3E%3D22.18-brightgreen.svg)](.nvmrc)
 
 TimDS Host gives a design system the things source code has had for years: a
@@ -50,7 +50,7 @@ the [operations runbook](docs/operations.md). The short version:
 **1. Install and sign in.**
 
 ```bash
-git clone https://github.com/dtconceptsnc/timds-host.git && cd timds-host
+git clone https://github.com/sticktrk/timds-host.git && cd timds-host
 ```
 
 ```bash
