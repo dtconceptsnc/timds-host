@@ -29,8 +29,12 @@ repository is the host that toolkit talks to.
   copies releases into an object-locked R2 bucket. Releases are immutable; the
   published pointer can move back to any earlier version.
 - **Public reads and MCP.** A separate public Worker serves the published
-  system, and a read-only MCP endpoint lets AI tools read the current release
-  with an exact source and version receipt.
+  system at `/systems/<org>/<name>/`, every release immutably at
+  `/v/<label>/`, and `/v/latest/` as a redirecting tag for the current
+  pointer. A read-only MCP endpoint at `/mcp` on the same origin lets AI
+  tools read the current release with an exact source and version receipt,
+  and the toolkit's `timds mcp read --published <root>` serves the full
+  consumer tool set from those files.
 - **Studio.** A static steering console for sessions, Requests, Previews,
   publish and rollback. It is served straight from the host and has no build
   step.

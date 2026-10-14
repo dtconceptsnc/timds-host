@@ -148,6 +148,16 @@ and authorize consistently on that origin. Tokens cannot be relabelled for
 another hostname, scheme or port. The public origin's `/mcp` is an anonymous
 published-guidance connection and does not expose hosted contribution tools.
 
+A consumer that only reads a published system needs no sign-in. Point an
+agent at the public root, `https://public.example.com/systems/example/core/`,
+which serves the browsable guide, the derived documents beside the stamp
+`.timds-artifact.json`, and `/v/<label>/` for immutable releases with
+`/v/latest/` redirecting to the current one. The toolkit's
+`timds mcp read --published <root>` serves the full consumer tool set
+(`get_consumer_guide`, roles, brand, formats, designs, media) from those files
+over stdio, and `/mcp` on the public origin answers the published read tools
+over HTTP.
+
 After connection, ask the agent to call `get_skill` for the intended system
 and save the result at the path it names in its skills folder; from then on
 every conversation knows how to work on that system. Then `list_systems`,

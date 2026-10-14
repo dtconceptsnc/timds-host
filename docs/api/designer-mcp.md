@@ -10,7 +10,9 @@ OAuth authorization and existing Design System grants as Studio and the CLI.
 Read access uses `timds:read`; contribution tools additionally require
 `timds:write`. The host also accepts its explicitly configured Studio origin.
 The anonymous `/mcp` endpoint on the public origin exposes published reads
-only.
+only, with `systemId` as a tool argument; the same files are also readable
+without MCP at `/systems/<org>/<name>/` (see
+[published derived layer](published-derived-layer.md)).
 
 An agent can edit a hosted session directly or send an instruction to the
 host's designer runner. Both paths produce the same sessions, claims, activity,
@@ -29,8 +31,8 @@ remain shared.
 ## Tools
 
 The published tools remain available on both endpoints. They take an immutable
-`systemId` and optional published `version`; omitting `version` resolves the
-current publication on every call.
+`systemId` and optional published `version`; omitting `version`, or passing
+the tag `latest`, resolves the current publication on every call.
 
 | Tool | Result |
 | --- | --- |

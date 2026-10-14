@@ -63,6 +63,8 @@ there is no old-storage fallback.
 - Unpinned URLs select the coordinator's current pointer. `/v/<label>/` and the
   historical `/releases/<label>/` alias select the earliest publication event for
   the label. Both pinned forms rewrite internal root-relative URLs using `/v/`.
+  The native origin's `/v/latest/` tag and two-segment system paths are not
+  part of the portal URL space; legacy hostnames keep the portal's exact forms.
 - Lookup checks the original entry directory before the artifact root, with the
   portal's extensionless `.html` and `/index.html` candidates.
 - Consumer `bundle.json` and `bundle/*` bytes are never rewritten, including
