@@ -23,7 +23,7 @@ export async function publishedFixture({storageBucket}={}) {
     const entries=await Promise.all(Object.entries(files).map(async([path,value])=>{const data=typeof value==='string'?encoder.encode(value):value;return {path,data,sha256:await sha256(data),size:data.length,mode:'100644'};}));
     const manifest={version:1,totalBytes:entries.reduce((total,file)=>total+file.size,0),files:entries.map(({data,...file})=>file)};
     const tree=await persistContainerTree(bucket,{sourceId:source.id,operationId:id,role:'artifact',artifact:true,manifest,readFile:async index=>new Response(entries[index].data)});
-    const stamp={schemaVersion:1,systemId:source.system_id,version:label,sourceCommit:commit,contentDigest:tree.digest};
+    const stamp={schemaVersion:1,systemId:source.system_id,version:label,sourceCommit:commit,contentDigest:tree.digest,entry:'docs/index.html',files:{index:'docs/index.json',tokens:'docs/tokens.json',brand:'docs/brand.json',llms:'docs/llms.txt',llmsFull:'docs/llms-full.txt',formats:'docs/formats.json',designs:'docs/designs.json',changelog:'docs/changelog.json',bundle:'docs/bundle.json'}};
     versions.set(label,{id,source_id:source.id,version_label:label,source_commit:commit,content_digest:tree.digest,artifact_ref:tree.ref,stamp,artifact:{entryPath:'docs/index.html',fileCount:entries.length,totalBytes:manifest.totalBytes}});
   }
   let current='1.0.0';let unavailable=false;let resolutions=0;

@@ -1,4 +1,4 @@
-import { publishedBundle, rewriteNativeBrowser } from './urls.mjs';
+import { publicSystemPath, publishedBundle, rewriteNativeBrowser } from './urls.mjs';
 import { sha256 } from '../repository/file-trees.mjs';
 import { fail } from '../store/errors.mjs';
 
@@ -14,7 +14,7 @@ export async function nativeViewerFile(file,{path,type,systemId,label,publicOrig
     if(reader)for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>limit){await reader.cancel();throw fail(503,'Published viewer exceeds its rendering limit');}chunks.push(value);}
   }finally{reader?.releaseLock();}
   const original=new Uint8Array(size);let offset=0;for(const chunk of chunks){original.set(chunk,offset);offset+=chunk.byteLength;}
-  const prefix=`/systems/${encodeURIComponent(systemId)}${label?`/v/${encodeURIComponent(label)}`:''}`;
+  const prefix=publicSystemPath(systemId,label);
   const text=new TextDecoder('utf-8',{fatal:true}).decode(original);
   const body=new TextEncoder().encode(manifest
     ?JSON.stringify(publishedBundle(JSON.parse(text),{base:publicOrigin+prefix,manifestPath:path,versionBase:label?publicOrigin+prefix:null}),null,2)+'\n'

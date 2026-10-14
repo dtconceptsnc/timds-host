@@ -35,7 +35,8 @@ Approvals intake; it calls this public tool without forwarding the caller's bear
 or cookies. Human host draft authorization is a separate interface.
 
 Native browser HTML/CSS responses rebase standalone root-relative links beneath
-`/systems/<encoded-system>/` or its `/v/<label>/` prefix. That covers `href`,
+`/systems/<org>/<name>/` (the encoded single-segment form for ids with more than
+two segments) or its `/v/<label>/` prefix. That covers `href`,
 `src`, `action`, `poster` and `value` attributes (so `<option value="/...">`
 section switchers navigate within the release), `srcset`, meta refresh
 `content`, and `url()` or `@import` in CSS. Their ETag and length

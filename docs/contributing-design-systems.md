@@ -193,7 +193,7 @@ The local consumer read server is a different mode:
 
 ```sh
 timds mcp read --root ./design-session
-timds mcp read --published https://public.example.com/systems/example%2Fcore/
+timds mcp read --published https://public.example.com/systems/example/core/
 ```
 
 That mode consumes derived/published guidance; it does not replace an editing
