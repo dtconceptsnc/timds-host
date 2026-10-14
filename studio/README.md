@@ -333,7 +333,7 @@ areas (claims) are shown read-only; agents declare them as they edit.
   command signs in through the link's host origin if needed, calls the same
   join route as itself, and pulls the session into a new `./session-<id
   prefix>` folder. `timds join` takes a session id in every release and the
-  link from toolkit `0.1.473`, the release `TOOLKIT` names; an older pin
+  link from toolkit `0.1.476`, the release `TOOLKIT` names; an older pin
   would break this row. Membership grants session access, not
   publication. There is no principal picker; owners, publishers and host
   administrators can destroy sessions using the host's current permissions.
