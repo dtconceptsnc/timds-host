@@ -42,8 +42,9 @@ npm test
 ```
 
 The unit suite checks real toolkit request dispatch, version/auth headers,
-schema rejection, error handling, public reads without credentials, and the
-write guard. It does **not** establish live-host conformance.
+schema rejection, error handling, public reads without credentials, the
+write guard, and the separate lifecycle teardown guard. It does **not**
+establish live-host conformance.
 
 See [CI instructions](../docs/ci.md) for automatic foundation checks and the
 manual GitHub Actions run requiring an explicit disposable fixture and named
@@ -53,8 +54,9 @@ repository secrets. No live target or credential is configured by default.
 
 Create a **new dedicated** standalone source with the existing host's normal
 provisioning flow. Do not reuse a real design system or another agent's test
-source. This harness does not provision or delete sources, bypass review
-gates, or directly write a database.
+source. The `test:host` flow does not provision or delete sources, bypass review
+gates, or directly write a database. The separately acknowledged `test:lifecycle`
+flow below creates and deletes its own new fixture.
 
 - Its `timds.json` name must begin `TimDS conformance` (for example,
   `TimDS conformance 69`). This is checked before source files are changed.
@@ -148,6 +150,71 @@ contains operation/status counts, publication IDs/versions, phase names, and
 cleanup outcomes. It never records credentials, HTTP bodies or source files.
 Phase names in the evidence indicate phases entered; only `passed: true`
 indicates full acceptance.
+
+## Native creation and teardown acceptance
+
+`npm run test:lifecycle` exercises the built-in starter creation API and the
+[reviewed deletion protocol](../docs/lifecycle-deletion.md) on a **new** native
+source. Run it only after explicitly selecting and authorizing that disposable
+fixture. It requires an already active organization and already deployed
+Artifacts namespace. It does not create or remove either shared resource.
+
+| Variable | Value |
+| --- | --- |
+| `TIMDS_HOST_URL` | Explicit host origin, such as `https://host.example.com` |
+| `TIMDS_ADMIN_ACCESS_TOKEN` | Active host administrator credential with read/write scopes |
+| `TIMDS_LIFECYCLE_SOURCE_ID` | New lowercase source UUID that has never existed on the host |
+| `TIMDS_LIFECYCLE_SYSTEM_ID` | New system ID beginning `timds-conformance/` |
+| `TIMDS_LIFECYCLE_ORGANIZATION_ID` | Existing active organization UUID |
+| `TIMDS_LIFECYCLE_NAMESPACE` | Existing deployed Artifacts namespace |
+| `TIMDS_ALLOW_LIFECYCLE_TEARDOWN` | Exact `<new source UUID>:<new system ID>` acknowledgement |
+| `TIMDS_CONFORMANCE_TIMEOUT_MS` | Optional asynchronous-operation timeout, with the same bounds as `test:host` |
+
+```sh
+npm run test:lifecycle
+```
+
+The lifecycle flow has no default target and cannot be enabled by the ordinary
+`TIMDS_ALLOW_DISPOSABLE_WRITES` acknowledgement. It reads every administrator
+catalogue page, including deleted tombstones, and refuses either identity if it
+already exists. Its first write reserves a unique creation operation for that
+exact acknowledged source. It verifies the separate provisioning receipt binds
+the source, system, organization, namespace, repository, provider repository ID,
+file digest and initiating administrator to this run before admitting teardown.
+
+The live run proves:
+
+1. The built-in pinned starter becomes ready, exact creation retries preserve
+   its source commit and digest, and changed creation input is rejected.
+2. The new source is discoverable and supports a main session, an open draft,
+   anonymously readable draft CSS, and an authored frozen submission. The
+   frozen Preview must serve actual HTML before deletion begins.
+3. A reviewed impact receipt matches the exact native provider repository and
+   only tracked session work. The run refuses imported provenance, unexpected
+   publishers, Requests or media. A deliberately wrong typed repository name
+   leaves the operation awaiting confirmation. The correct reviewed name/hash
+   queues deletion, and completion and confirmation replay are verified.
+4. Both session histories and audit descriptors survive for the administrator;
+   the admin catalogue retains the deleted identity. Ordinary discovery,
+   session snapshots, new authoring, draft CSS and the frozen Preview become
+   unavailable. Reusing the original creation operation or reserving the same
+   retired identity under a new operation fails.
+
+The fixture remains exclusive to this run until teardown finishes. Failure
+cleanup independently rereads the exact provisioning receipt before preparing
+and reviewing a deletion; it never adopts an existing source or repository by
+name. If ownership cannot be proved, extra work appears, or an already confirmed
+cleanup pauses, the run fails and retains the operation IDs for operator review.
+It does not bypass the host's guards or automatically resume failed destructive
+steps. Redacted evidence is saved to ignored
+`artifacts/lifecycle-<run UUID>.json`, with credentials and source bytes omitted.
+Only `passed: true` means the whole lifecycle run passed.
+
+This run creates billable forks and a Preview. It does not publish an immutable
+release or create a designer Request or media upload; those surfaces retain
+their separate acceptance requirements. Local harness tests establish the
+guards and contract handling only. A deployed lifecycle run is still owed until
+the complete run above is observed.
 
 ## CI and acceptance order
 

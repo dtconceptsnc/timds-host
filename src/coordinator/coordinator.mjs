@@ -48,6 +48,7 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     sessionRepository:store.sessionRepository,recordSessionRepository:store.recordSessionRepository,
     sessionForRequest: store.sessionForRequest, requestReceipt: store.requestReceipt,
     appendEvent: store.appendEvent, eventForHead: store.eventForHead,
+    authorizeProvision: input => provisionState(input),
   });
   // A factory may capture this direct facade. It must not call a coordinator RPC
   // back into its own held serial queue while a repository operation is running.
@@ -60,6 +61,15 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     const principal = await catalog.principal(principalId(actor));
     if (principal?.status !== 'active') throw fail(403, 'An active TimDS identity is required');
     return {...actor,principalId:principal.id,type:principal.type,operator:principal.admin,system:false};
+  };
+  const provisionState = async ({operationId,lease}) => {
+    if(store.deletionFence())throw fail(409,'Provisioning is fenced by source deletion');
+    const operation=store.getLifecycleOperation(operationId),source=await store.getSource(sourceId);
+    if(!operation||operation.source_id!==sourceId||operation.lease!==lease||operation.status!=='running'||source?.lifecycle_status!=='provisioning')throw fail(409,'Provision lease is unavailable');
+    const facts=await catalog.readAuthority(sourceId,operation.actor_principal_id);
+    if(facts.principal?.status!=='active'||!facts.principal.admin)throw fail(403,'An active provisioning administrator is required');
+    if(facts.organizationStatus!=='active')throw fail(409,'Organization is unavailable');
+    return {operation,source};
   };
   const engine = {
     invoke: ({operation,actor,args = []}) => {
@@ -179,13 +189,24 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
       await store.flushOutbox(); return result;
     }),
     initializeSource: ({operationId,source,reservation}) => serialized(async () => {
+      if(store.deletionFence())throw fail(409,'Provisioning is fenced by source deletion');
       const receipt = await catalog.provisionReceipt(operationId);
       if (!receipt || receipt.sourceId !== sourceId || source.id !== sourceId || reservation?.operationId !== operationId || reservation?.sourceId !== sourceId) throw fail(409, 'Provision reservation does not match the coordinator');
       const provisionInput = receipt.provisionInput ?? null;
+      const facts=await catalog.readAuthority(sourceId,receipt.actorId);
+      if(facts.principal?.status!=='active'||!facts.principal.admin)throw fail(403,'An active provisioning administrator is required');
+      if(facts.organizationStatus!=='active'||!['provisioning','ready'].includes(facts.source?.lifecycle_status)||facts.source.archived_at)throw fail(409,'Source is unavailable for provisioning');
       if (!sameProvisionInput(provisionInput,reservation.provisionInput)) throw fail(409, 'Provision input does not match its reservation');
       const existing = store.getLifecycleOperation(operationId);
       if (existing) {
         const checkpoints = existing.checkpoints_json || {};
+        // D1 completion can commit immediately before an isolate is evicted.
+        // Recover only its exact authority receipt; never rerun Git on ready.
+        if(existing.status==='running'&&facts.source.lifecycle_status==='ready'){
+          const completed=await catalog.authorityOperation(`${operationId}:complete`),repository=checkpoints.repositoryReceipt,command=completed?.command;
+          if(!sameProvisionInput(checkpoints.provisionInput,provisionInput)||completed?.source_id!==sourceId||completed.actor_id!==receipt.actorId||command?.lifecycleStatus!=='ready'||!repository||command.repositoryId!==repository.id||facts.source.artifacts_repository_id!==repository.id||repository.namespace!==source.artifacts_namespace||repository.repository!==source.artifacts_repository||!/^[a-f0-9]{40}$/.test(command.sourcePatch?.source_commit||'')||JSON.stringify(command.sourcePatch?.manifest_json)!==JSON.stringify(source.manifest_json))throw fail(409,'Completed provisioning authority receipt is unavailable');
+          return store.saveLifecycle({...existing,status:'completed',repository_receipt:repository});
+        }
         if (sameProvisionInput(checkpoints.provisionInput,provisionInput)) return existing;
         // An older isolate may have reserved the local operation immediately
         // before the input checkpoint. Only that untouched operation can adopt
@@ -195,16 +216,20 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
       }
       return store.saveLifecycle({id:operationId,source_id:sourceId,actor_principal_id:receipt.actorId,status:'running',lease:ids(),checkpoints_json:{provisionInput},created_at:new Date(clock()).toISOString()});
     }),
-    checkpointProvision: ({operationId,lease,patch}) => serialized(() => {
-      const row = store.getLifecycleOperation(operationId);
-      if (!row || row.lease !== lease || row.status !== 'running') throw fail(409, 'Provision lease is unavailable');
+    provisionState,
+    checkpointProvision: ({operationId,lease,patch}) => serialized(async () => {
+      const {operation:row}=await provisionState({operationId,lease});
       if (Object.hasOwn(patch,'provisionInput') && !sameProvisionInput(row.checkpoints_json?.provisionInput,patch.provisionInput)) throw fail(409, 'Provision input is immutable');
+      if(patch.repositoryReceipt&&row.checkpoints_json?.repositoryReceipt&&JSON.stringify(patch.repositoryReceipt)!==JSON.stringify(row.checkpoints_json.repositoryReceipt))throw fail(409,'Provision repository receipt is immutable');
       return store.saveLifecycle({...row,checkpoints_json:{...row.checkpoints_json,...patch}});
     }),
     completeProvision: ({operationId,lease,repositoryReceipt,sourceCommit,manifest}) => serialized(async () => {
+      if(store.deletionFence())throw fail(409,'Provisioning is fenced by source deletion');
       const operation = store.getLifecycleOperation(operationId), source = await catalog.source(sourceId);
       if (!operation || operation.lease !== lease) throw fail(409, 'Provision lease is unavailable');
       if (operation.status === 'completed') return store.getSource(sourceId);
+      await provisionState({operationId,lease});
+      if(JSON.stringify(repositoryReceipt)!==JSON.stringify(operation.checkpoints_json?.repositoryReceipt))throw fail(409,'Provision repository receipt does not match its creation');
       if (!repositoryReceipt?.id || repositoryReceipt.namespace !== source.artifacts_namespace || repositoryReceipt.repository !== source.artifacts_repository || !/^[a-f0-9]{40}$/.test(sourceCommit || '') || manifest?.systemId !== source.system_id) throw fail(409, 'Provision repository receipt does not match the source');
       await store.mutateAuthority({operationId:`${operationId}:complete`,actor:{principalId:operation.actor_principal_id},command:{lifecycleStatus:'ready',repositoryId:repositoryReceipt.id,sourcePatch:{source_commit:sourceCommit,manifest_json:manifest}}});
       store.saveLifecycle({...operation,status:'completed',repository_receipt:repositoryReceipt});

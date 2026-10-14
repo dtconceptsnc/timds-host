@@ -8,6 +8,7 @@ import { verifyBootstrapSecret } from './auth/access.mjs';
 import { importApi } from './imports/api.mjs';
 import { requestDiagnostic } from './requests/diagnostics.mjs';
 import { createActiveWorkersUrlProjection } from './live/url-projection.mjs';
+import { createStarterSystem, provisionNamespaces } from './lifecycle/creation.mjs';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function segment(value) { try { return decodeURIComponent(value); } catch { throw fail(400,'Invalid route encoding'); } }
@@ -103,12 +104,20 @@ export function createApi({ getCoordinator, provision, mcp }) {
     if(path.startsWith('/api/timds/admin/')) {
       const principal=await catalog.principal(actor.principalId);
       if(!principal?.admin||principal.status!=='active')throw fail(403,'An active administrator is required');
+      if(method==='GET'&&['/api/timds/admin/organizations','/api/timds/admin/systems'].includes(path)) {
+        const after=url.searchParams.get('after')||'';
+        if(after&&!uuid.test(after))throw fail(400,'A UUID cursor is required');
+        if(path.endsWith('/organizations'))return jsonResponse(await catalog.organizationPage(after));
+        const page=await catalog.systemPage(after);
+        return jsonResponse({systems:page.systems.map(row=>({id:row.id,systemId:row.system_id,name:row.name||row.system_id,organizationId:row.organization_id,lifecycleStatus:row.lifecycle_status,archivedAt:row.archived_at||null,namespace:row.artifacts_namespace,repository:row.artifacts_repository,provisionOperationId:row.provision_operation_id||null,deletionOperationId:row.deletion_operation_id||null,creationInput:row.provision_actor_id===principal.id?row.creation_input||null:null,creationPending:Boolean(row.creation_input&&row.provision_actor_id===principal.id&&['provisioning','ready'].includes(row.lifecycle_status)&&(!row.provision_grant_completed||row.lifecycle_status==='provisioning'))})),nextSystemCursor:page.nextSystemCursor,namespaces:provisionNamespaces(env)});
+      }
       if(path==='/api/timds/admin/imports'||path.startsWith('/api/timds/admin/imports/'))return jsonResponse(await importApi({path,method,input,actor,context,catalog,getCoordinator}));
       if(path==='/api/timds/admin/organizations'&&method==='POST') {
-        if(!uuid.test(input.id||'')||typeof input.name!=='string'||input.name.length>200)throw fail(400,'Organization id and name are required');
+        if(!uuid.test(input.id||'')||typeof input.name!=='string'||!input.name.trim()||input.name.length>200)throw fail(400,'Organization id and name are required');
         return jsonResponse({organization:await catalog.ensureOrganization({id:input.id,name:input.name})});
       }
       if(path==='/api/timds/admin/systems'&&method==='POST'&&provision)return respond(await provision({input,actor,env,context,catalog}));
+      if(path==='/api/timds/admin/systems/create'&&method==='POST'&&provision)return respond(await createStarterSystem({input,actor,env,context,catalog,provision}));
       match=path.match(/^\/api\/timds\/admin\/systems\/([^/]+)\/provision\/([^/]+)$/);
       if(match){
         if(method!=='GET')throw fail(405,'Use GET for a provision receipt');

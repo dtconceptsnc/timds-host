@@ -18,11 +18,18 @@ export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,p
   const save=row=>store.saveLifecycle({...row,updated_at:now()});
   async function admin(actor){const row=await catalog.principal(principalId(actor));if(row?.status!=='active'||!row.admin)throw fail(403,'An active administrator is required');return row;}
   async function provenance(source){
-    const native=await catalog.first('SELECT id FROM provision_operations WHERE source_id=?',sourceId);
+    const native=await catalog.first('SELECT id,actor_id FROM provision_operations WHERE source_id=?',sourceId);
     if(native){
-      const operation=store.getLifecycleOperation(native.id),receipt=operation?.repository_receipt;
-      if(operation?.source_id!==sourceId||operation.status!=='completed'||receipt?.id!==source.artifacts_repository_id||receipt.namespace!==source.artifacts_namespace||receipt.repository!==source.artifacts_repository)throw fail(409,'Completed native provisioning provenance is unavailable');
-      return {kind:'native',portalOrigin:null,portalEpoch:null};
+      const operation=store.getLifecycleOperation(native.id),receipt=operation?.repository_receipt||operation?.checkpoints_json?.repositoryReceipt;
+      if(operation?.source_id!==sourceId||operation.actor_principal_id!==native.actor_id||typeof receipt?.id!=='string'||!receipt.id||(source.lifecycle_status==='ready'||source.artifacts_repository_id)&&receipt.id!==source.artifacts_repository_id||receipt.namespace!==source.artifacts_namespace||receipt.repository!==source.artifacts_repository)throw fail(409,'An exact native provisioning repository receipt is required for deletion');
+      if(source.lifecycle_status==='ready'&&operation.status!=='completed'){
+        // D1 may have committed ready immediately before eviction prevented the
+        // local completion checkpoint. Any current admin may delete from that
+        // exact receipt, even if the original creator is now inactive.
+        const completed=await catalog.authorityOperation(`${native.id}:complete`),command=completed?.command,patch=command?.sourcePatch;
+        if(operation.status!=='running'||completed?.source_id!==sourceId||completed.actor_id!==native.actor_id||command?.lifecycleStatus!=='ready'||command.repositoryId!==receipt.id||!/^[a-f0-9]{40}$/.test(patch?.source_commit||'')||patch.source_commit!==source.source_commit||!patch.manifest_json||canonical(patch.manifest_json)!==canonical(source.manifest_json||null))throw fail(409,'Completed native provisioning authority receipt is unavailable');
+      }
+      return {kind:'native',portalOrigin:null,portalEpoch:null,repositoryId:receipt.id};
     }
     // No native receipt means import proof is mandatory. A missing migration or
     // unknown source provenance fails closed instead of assuming no consumers.
@@ -30,13 +37,13 @@ export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,p
     let input;try{input=JSON.parse(imported?.input_json||'null');}catch{}
     if(!input||input.sourceId!==sourceId||input.manifest?.originalSource?.id!==sourceId||input.manifest?.source?.id!==sourceId||input.manifest?.repository?.id!==source.artifacts_repository_id)throw fail(409,'Source ownership provenance is unavailable');
     if(input.manifest.originalSource.source_path!=='.'||input.manifest.originalSource.dedicated_repository!==true)throw fail(409,'Only a dedicated standalone repository can be deleted');
-    return {kind:'portal',portalOrigin:input.manifest.portalOrigin,portalEpoch:input.epoch};
+    return {kind:'portal',portalOrigin:input.manifest.portalOrigin,portalEpoch:input.epoch,repositoryId:source.artifacts_repository_id};
   }
   async function inventory(source){
     if(!source?.artifacts_namespace||!source.artifacts_repository||!source.artifacts_repository_id)throw fail(409,'A verified hosted repository is required');
     if(store.pendingPublications().length)throw fail(409,'Finish outstanding publications before deleting this Design System');
     const root=await artifacts.getRepository(source.artifacts_namespace,source.artifacts_repository);
-    if(!root||String(root.id)!==String(source.artifacts_repository_id))throw fail(409,'Repository identity changed');
+    if(root&&String(root.id)!==String(source.artifacts_repository_id))throw fail(409,'Repository identity changed');
     const sessions=readRows('sessions').map(row=>({id:row.id,status:row.status,fork:row.fork_repository||`session-${row.id}`,live:Boolean(row.sandbox_id||row.live_state&&row.live_state!=='closed')}));
     if(sessions.length>10000)throw fail(409,'Deletion inventory exceeds the supported bound');
     const forks=[];
@@ -51,7 +58,7 @@ export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,p
     const publishers=await catalog.all('SELECT principal_id FROM publishers WHERE source_id=? ORDER BY principal_id',sourceId);
     const requests=readRows('request_jobs').map(row=>({id:row.id,status:row.status}));
     const previewReceipt=await preview.inspectSourcePreview(source),media=await mediaInventory();
-    return {repository:{id:String(root.id),namespace:source.artifacts_namespace,name:source.artifacts_repository},sessions,forks,grants,publishers,requests,preview:previewReceipt,
+    return {repository:{id:String(source.artifacts_repository_id),namespace:source.artifacts_namespace,name:source.artifacts_repository},repositoryPresent:Boolean(root),sessions,forks,grants,publishers,requests,preview:previewReceipt,
       media,
       counts:{mediaAssets:media.assets?.length||0,mediaUploads:media.uploads?.length||0,sessions:sessions.filter(row=>!['closed','expired'].includes(row.status)).length,forks:forks.filter(row=>row.id).length,publishers:publishers.length,requests:requests.filter(row=>['queued','leased','running'].includes(row.status)).length}};
   }
@@ -85,14 +92,14 @@ export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,p
       if(operation==='prepare'){
         const prior=store.getLifecycleOperation(input.operationId);if(prior)return view(get(input.operationId));
         if(store.deletionFence())throw fail(409,'Resume the existing deletion operation');
-        const source=await store.getSource(sourceId);if(source?.lifecycle_status!=='ready')throw fail(409,'Only an initialized source can be deleted');
-        const owner=await provenance(source),impact=await inventory(source);
+        const source=await store.getSource(sourceId);if(!['ready','provisioning'].includes(source?.lifecycle_status))throw fail(409,'Only an initialized or partially provisioned source can be deleted');
+        const owner=await provenance(source),impact=await inventory({...source,artifacts_repository_id:owner.repositoryId});
         const row={id:input.operationId,kind:'delete',source_id:sourceId,actor_principal_id:principal.id,portal_origin:owner.portalOrigin,portal_epoch:owner.portalEpoch,status:'awaiting_confirmation',phase:'inspect',inventory:impact,impact_hash:hash(impact),checkpoints_json:{},created_at:now(),updated_at:now()};
         return view(save(row));
       }
       let row=get(input.operationId);
       if(operation==='read')return view(row);
-      if(operation==='history')return {operation:view(row),sessions:readRows('sessions').slice(-100).map(item=>({id:item.id,status:item.status,kind:item.kind,createdAt:item.created_at})),events:readRows('events').slice(-100).map(item=>({id:item.id,eventType:item.event_type,sessionId:item.session_id,actorPrincipalId:item.actor_principal_id,createdAt:item.created_at})),retention};
+      if(operation==='history')return {apiVersion:1,operation:view(row),sessions:readRows('sessions').slice(-100).map(item=>({id:item.id,status:item.status,kind:item.kind,createdAt:item.created_at})),events:readRows('events').slice(-100).map(item=>({id:item.id,eventType:item.event_type,sessionId:item.session_id,actorPrincipalId:item.actor_principal_id,createdAt:item.created_at})),retention};
       if(operation!=='confirm')throw fail(404,'Unknown deletion operation');
       if(input.impactHash!==row.impact_hash||input.typedRepository!==row.inventory.repository.name)throw fail(409,'Type the reviewed repository name and use its current impact hash');
       if(row.status==='completed')return view(row);
@@ -100,34 +107,44 @@ export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,p
       const marker=store.deletionFence();
       if(marker&&marker.operationId!==row.id)throw fail(409,'Another deletion operation owns this source');
       if(!marker){
-        const source=await store.getSource(sourceId);if(source?.lifecycle_status!=='ready')throw fail(409,'Source is no longer available for deletion');
-        if(hash(await inventory(source))!==row.impact_hash)throw fail(409,'Deletion impact changed; prepare and review a new operation');
+        const source=await store.getSource(sourceId);if(!['ready','provisioning'].includes(source?.lifecycle_status))throw fail(409,'Source is no longer available for deletion');
+        const owner=await provenance(source);
+        if(hash(await inventory({...source,artifacts_repository_id:owner.repositoryId}))!==row.impact_hash)throw fail(409,'Deletion impact changed; prepare and review a new operation');
       }
       const consumerCheck=row.portal_origin?verifyDeletionConsumers({env,origin,proof:input.portalConsumerProof,operation:row,clock}):null;
-      row={...row,confirmed_by:principal.id,confirmed_at:row.confirmed_at||now(),consumer_check:consumerCheck,status:'queued',phase:row.phase==='inspect'?'stop_work':row.phase,lease:null,lease_expires_at:null,error:null,updated_at:now()};
+      row={...row,confirmed_by:principal.id,confirmed_at:row.confirmed_at||now(),consumer_check:consumerCheck,status:'queued',phase:row.phase==='inspect'?'stop_work':row.phase,lease:null,lease_expires_at:null,retry_at:null,error:null,updated_at:now()};
       // Local fence commits first and is overlaid on all source reads. D1 then
       // confirms the same source gate via the existing authority receipt/outbox.
       await store.beginDeletion({operationId:row.id,actor:{principalId:principal.id},confirmedOperation:row});
       await storage.setAlarm(clock()+1000);
       return view(row);
     },
-    nextAlarm(){const row=store.activeDeletion();return row&&['queued','running'].includes(row.status)?Math.max(clock()+1000,Date.parse(row.lease_expires_at)||0):null;},
+    nextAlarm(){const row=store.activeDeletion();return row&&['queued','running'].includes(row.status)?Math.max(clock()+1000,Date.parse(row.lease_expires_at)||0,Date.parse(row.retry_at)||0):null;},
     async advance(){
       let row=await runMutation(async()=>{
-        const candidate=store.activeDeletion();if(!candidate||!['queued','running'].includes(candidate.status)||candidate.lease_expires_at&&Date.parse(candidate.lease_expires_at)>clock())return null;
+        const candidate=store.activeDeletion();if(!candidate||!['queued','running'].includes(candidate.status)||candidate.lease_expires_at&&Date.parse(candidate.lease_expires_at)>clock()||candidate.retry_at&&Date.parse(candidate.retry_at)>clock())return null;
         try{await admin({principalId:candidate.confirmed_by});}
         catch(error){if(error.statusCode!==403)throw error;save({...candidate,status:'failed',lease:null,lease_expires_at:null,error:'An active administrator must confirm again to resume cleanup'});return null;}
         await store.beginDeletion({operationId:candidate.id,actor:{principalId:candidate.confirmed_by}});
-        return save({...candidate,status:'running',lease:randomUUID(),lease_expires_at:new Date(clock()+180000).toISOString()});
+        return save({...candidate,status:'running',lease:randomUUID(),lease_expires_at:new Date(clock()+180000).toISOString(),retry_at:null});
       });
       if(!row)return null;
       const token=row.lease;
       try{
-        let source=await store.getSource(sourceId);
+        const current=await store.getSource(sourceId);
+        if(!current||current.artifacts_namespace!==row.inventory.repository.namespace||current.artifacts_repository!==row.inventory.repository.name||current.artifacts_repository_id&&String(current.artifacts_repository_id)!==row.inventory.repository.id)throw fail(409,'Source repository identity changed during deletion');
+        const source={...current,artifacts_repository_id:row.inventory.repository.id};
         if(!row.checkpoints_json.stopped){
-          await stopMedia({beforeDelete:()=>renew(row.id,token,{consumers:true})});
-          for(const session of readRows('sessions'))if(session.status==='closing'||session.sandbox_id||session.live_state&&session.live_state!=='closed'){await renew(row.id,token);await live.close(session,source);}
-          await runMutation(()=>{lease(get(row.id),token);store.finishDeletionSessions(row.id);});
+          if(!row.checkpoints_json.liveStopped){
+            for(const session of readRows('sessions'))if(session.status==='closing'||session.sandbox_id||session.live_state&&session.live_state!=='closed'){await renew(row.id,token);await live.close(session,source);}
+            await runMutation(()=>{lease(get(row.id),token);store.finishDeletionSessions(row.id);});
+            row=await checkpoint(row.id,token,{phase:'remove_media',checkpoints_json:{liveStopped:true}});
+          }
+          const media=await stopMedia({beforeDelete:()=>renew(row.id,token,{consumers:true})});
+          if(media?.pending){
+            row=await checkpoint(row.id,token,{status:'queued',phase:'remove_media',lease:null,lease_expires_at:null,retry_at:new Date(Math.max(clock()+1000,Number(media.retryAt)||clock()+60_000)).toISOString()});
+            return view(row);
+          }
           row=await checkpoint(row.id,token,{phase:'remove_repositories',checkpoints_json:{stopped:true}});
         }
         for(const repository of [...row.inventory.forks,{...row.inventory.repository,sessionId:null}]){
@@ -138,17 +155,18 @@ export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,p
         row=await checkpoint(row.id,token,{phase:'remove_preview'});
         if(!row.checkpoints_json.preview){
           await renew(row.id,token,{consumers:true});
-          await preview.deleteSourcePreview(source,{expected:row.inventory.preview});
+          await preview.deleteSourcePreview(source,{expected:row.inventory.preview,beforeDelete:()=>renew(row.id,token,{consumers:true})});
           row=await checkpoint(row.id,token,{checkpoints_json:{preview:true}});
         }
         row=await checkpoint(row.id,token,{phase:'revoke_authority'});
         const principals=[...new Set([...row.inventory.grants,...row.inventory.publishers].map(item=>item.principal_id))];
-        for(const id of principals)await runMutation(async()=>{lease(get(row.id),token);await store.deletionAuthority({operationId:row.id,actor:{principalId:row.confirmed_by},suffix:`revoke:${id}`,command:{principalId:id,read:false,write:false,publish:false}});});
+        for(const id of principals){await renew(row.id,token);await runMutation(async()=>{lease(get(row.id),token);await store.deletionAuthority({operationId:row.id,actor:{principalId:row.confirmed_by},suffix:`revoke:${id}`,command:{principalId:id,read:false,write:false,publish:false}});});}
         row=await checkpoint(row.id,token,{phase:'verify'});
         for(const repository of [...row.inventory.forks,row.inventory.repository]){
           await renew(row.id,token);
           if(await artifacts.getRepository(row.inventory.repository.namespace,repository.name))throw fail(409,'Repository removal is not yet verified');
         }
+        await renew(row.id,token);
         if(await preview.inspectSourcePreview(source))throw fail(409,'Preview removal is not yet verified');
         const remaining=await catalog.first('SELECT (SELECT COUNT(*) FROM publishers WHERE source_id=?)+(SELECT COUNT(*) FROM system_access WHERE source_id=? AND (can_read=1 OR can_write=1)) AS n',sourceId,sourceId);
         if(remaining?.n!==0)throw fail(409,'Source grants are not fully revoked');

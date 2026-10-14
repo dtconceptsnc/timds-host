@@ -54,7 +54,14 @@ streams the full stored object through `crypto.DigestStream` and checks both
 length and SHA256 before marking it ready.
 
 The source alarm retries cancellation and archive cleanup. Cancellation waits
-for bounded in-flight transfers before deleting the owned key. A lost response
+for bounded in-flight transfers before deleting the owned key and verifies its
+absence before saving the purge receipt. Source deletion stops live work first,
+then automatically resumes media cleanup after bounded transfers drain; it stays
+queued in `remove_media` while waiting. Once fenced, only the deletion operation
+runs media cleanup, using its current administrator lease and any required fresh
+portal consumer proof. Multipart creation also has a 10-minute response bound;
+deletion drains that reservation before checking that upload cleanup finished.
+A lost response
 while creating an R2 multipart upload can leave an unrecorded provider upload;
 R2's native incomplete-multipart expiry remains the final cleanup for that
 provider boundary. No caller-selected bucket or key enters an API request.

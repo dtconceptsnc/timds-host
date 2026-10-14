@@ -261,6 +261,12 @@ keep it in memory, never logs. The identity still needs explicit source grants.
 
 ## Organization, designer and fresh system
 
+Studio administrators can use **Create Design System** to create a standalone
+system with the built-in starter, then manage reviewed teardown from **Manage
+Design Systems**. The [creation protocol](design-system-creation.md) covers
+namespace prerequisites, permissions, retries and partial provisioning cleanup.
+The file-tree provisioning procedure below remains available for custom seeds.
+
 Save administrative request bodies outside the source tree and keep their
 operation IDs and exact contents stable across interrupted retries. Examples
 use `apiVersion: 1`; `scripts/admin.mjs` supplies the API-version header.
@@ -493,7 +499,8 @@ Builds evidence (private operational record), and the
 
 The prepared administrator deletion API uses provider-read-only impact review,
 exact typed repository confirmation and a durable source fence before cleanup.
-It retains locked release/media bytes and audit history while removing mutable
+It retains immutable release/snapshot bytes and audit history, deletes scoped
+media originals after active transfers drain, and removes mutable
 repositories, previews, live work and grants. Imported systems additionally need
 the portal consumer attachment barrier migration and its short-lived server
 proof; a zero-consumer count alone is insufficient. See [the deletion protocol](lifecycle-deletion.md)

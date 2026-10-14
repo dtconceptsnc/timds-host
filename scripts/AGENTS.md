@@ -8,6 +8,13 @@ Safe to run at any time, read-only, no credentials:
 - `check-public-boundary.mjs`: scans added lines (or `--all`) for
   installation and customer records. Both are wired to `npm run check:*`.
 
+`generate-design-system-starter.mjs` reproduces the built-in standalone starter
+in disposable local directories using its checked-in npm lockfile, compares
+every source file, runs the toolkit build/check and verifies byte-identical cf
+packaging. It needs registry access and writes no cloud resources. `--write`
+replaces the generated starter bundle after those checks; keep existing starter
+revisions immutable once deployed so creation retries retain their exact bytes.
+
 Operational tools; each acts on real resources and needs a person's explicit
 request for a specific target in the current conversation:
 

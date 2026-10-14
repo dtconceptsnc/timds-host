@@ -12,6 +12,14 @@ specification for this package.
   run it unless the person you are working with supplied a disposable fixture
   and asked for the run in this conversation; see `README.md` for the fixture
   rules and `../docs/ci.md` for the GitHub Actions dispatch.
+- `npm run test:lifecycle` creates and permanently deletes a new native source,
+  including its session forks and Preview. Never run it unless the person you
+  are working with supplied the exact new source/system IDs, active organization
+  and deployed namespace and asked for that lifecycle run in this conversation.
+  It requires its own teardown acknowledgement and administrator credential;
+  ordinary `test:host` fixture configuration cannot authorize it. Existing and
+  retired identities are refused before any writes. Keep the independently
+  verified provisioning ownership and reviewed deletion receipt guards intact.
 - The toolkit pin `@dtconcepts/timds@0.1.464` is the conformance baseline. Do
   not bump it as part of another change.
 - Contract changes are additive. Change the OpenAPI file, the harness, and the

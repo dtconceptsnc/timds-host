@@ -32,11 +32,11 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
   return {archived:true,asset:mediaView(await asset(id))};
  }
  async function verifyObject(row){const object=await bucket().get(row.object_key);if(!object||object.size!==row.bytes){await object?.body?.cancel();throw fail(409,'Media byte count did not match');}const digest=new crypto.DigestStream('SHA-256');await object.body.pipeTo(digest,{signal:AbortSignal.timeout(10*60_000)});const actual=Buffer.from(await digest.digest).toString('hex');if(actual!==row.sha256)throw fail(409,'Media SHA256 did not match');return {etag:object.etag,bytes:object.size,sha256:actual};}
- async function cancel(id,actor,{fenced=false}={}){
+ async function cancel(id,actor,{fenced=false,beforeDelete=async()=>{}}={}){
   const row=await runMutation(async()=>{
    if(!fenced)await authorize(actor,true);
    const value=upload(id);if(value.status==='completed')throw fail(409,'Completed media cannot be cancelled');if(value.status==='cancelled')return value;
-   const until=Math.max(Date.now(),value.cleanup_after||0,...records.parts(id).filter(part=>part.status==='uploading').map(part=>part.lease_until+60_000),value.status==='completing'?(value.lease_until||0)+60_000:0);
+   const until=Math.max(Date.now(),value.cleanup_after||0,...records.parts(id).filter(part=>part.status==='uploading').map(part=>part.lease_until+60_000),value.status==='completing'?(value.lease_until||0)+60_000:0,value.status==='creating'?(value.creation_lease_until||value.expires_at)+60_000:0);
    const saved=records.putUpload({...value,status:'cancelling',cleanup_after:until,updated_at:now()});await schedule(until+1000);return saved;
   });
   if(row.status!=='cancelled'){
@@ -44,11 +44,14 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
    // the final delete; late callbacks also delete their cancelled object.
    if(row.cleanup_after>Date.now())return {ok:true,pending:true,asset:mediaView(await asset(row.asset_id))};
    if(row.multipart_id&&!row.multipart_aborted){
+    await beforeDelete();
     await bucket().resumeMultipartUpload(row.object_key,row.multipart_id).abort();
     await runMutation(()=>records.putUpload({...upload(id),multipart_aborted:true}));
    }
+   await beforeDelete();
    await bucket().delete(row.object_key);
-   await runMutation(async()=>{const current=upload(id);if(current.status!=='cancelling')throw fail(409,'Media cancellation changed');records.putUpload({...current,status:'cancelled',updated_at:now()});const value=await asset(row.asset_id);if(value.status!=='ready')records.putAsset({...value,status:'failed',updated_at:now()});});
+   if(await bucket().head(row.object_key))throw fail(409,'Media removal is not yet verified');
+   await runMutation(async()=>{const current=upload(id);if(current.status!=='cancelling')throw fail(409,'Media cancellation changed');records.putUpload({...current,status:'cancelled',updated_at:now()});const value=await asset(row.asset_id);if(value.status!=='ready')records.putAsset({...value,status:'failed',purged_at:now(),updated_at:now()});});
   }
   return {ok:true,asset:mediaView(await asset(row.asset_id))};
  }
@@ -70,15 +73,17 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
      if(existing&&records.activeUploads().some(row=>row.asset_id===existing.id))throw fail(409,'This media already has an active upload');
      const id=randomUUID(),assetId=randomUUID(),time=now(),object_key=`sources/${sourceId}/media/${id}/${normalized.sha256}/${normalized.safeFilename}`;
      const row={id:assetId,source_id:sourceId,client_id:current.client_id||null,bytes:normalized.bytes,sha256:normalized.sha256,content_type:normalized.contentType,filename:normalized.filename,safe_filename:normalized.safeFilename,title:normalized.title,kind:normalized.kind,metadata:normalized.metadata,rights:normalized.rights,tags:normalized.tags,visibility:'public',status:'uploading',created_at:time,updated_at:time,public_url:`${origin}/media/${sourceId}/${assetId}/${normalized.safeFilename}`,object_key};
-     records.putAsset(row);const transfer=records.putUpload({id,asset_id:assetId,source_id:sourceId,principal_id:actor.principalId,status:'creating',method:normalized.bytes>SINGLE_BYTES?'multipart':'single',bytes:normalized.bytes,sha256:normalized.sha256,object_key,created_at:time,updated_at:time,expires_at:Date.now()+3600000});await schedule(transfer.expires_at);return {row,transfer};
+     records.putAsset(row);const transfer=records.putUpload({id,asset_id:assetId,source_id:sourceId,principal_id:actor.principalId,status:'creating',creation_lease_until:Date.now()+TRANSFER_MS,method:normalized.bytes>SINGLE_BYTES?'multipart':'single',bytes:normalized.bytes,sha256:normalized.sha256,object_key,created_at:time,updated_at:time,expires_at:Date.now()+3600000});await schedule(transfer.expires_at);return {row,transfer};
     });
     if(prepared.reused)return prepared;
     const {row,transfer}=prepared;
-    let multipart;
+    let multipart,creationTimeout;
     try{
-     if(transfer.method==='multipart')multipart=await bucket().createMultipartUpload(row.object_key,{httpMetadata:{contentType:row.content_type},customMetadata:{sha256:row.sha256,sourceId,assetId:row.id}});
-     return await runMutation(async()=>{await authorize(actor,true);const current=upload(transfer.id);if(current.status!=='creating')throw fail(409,'Media upload reservation changed');const ready=records.putUpload({...current,status:'active',multipart_id:multipart?.uploadId||null});const token=ready.method==='single'?cap({kind:'upload',source_id:sourceId,upload_id:ready.id,part:0,principal_id:actor.principalId,expires_at:ready.expires_at}):null;await schedule(ready.expires_at);return {asset:mediaView(row),reused:false,upload:plan(ready,token)};});
-    }catch(error){await runMutation(async()=>{const current=upload(transfer.id);records.putUpload({...current,status:'cancelling',multipart_id:multipart?.uploadId||current.multipart_id||null,cleanup_after:Date.now(),updated_at:now()});records.putAsset({...row,status:'failed',updated_at:now()});await schedule(Date.now()+1000);});throw error;}
+     if(transfer.creation_lease_until<=Date.now())throw fail(410,'Media upload creation expired');
+     if(transfer.method==='multipart')multipart=await Promise.race([bucket().createMultipartUpload(row.object_key,{httpMetadata:{contentType:row.content_type},customMetadata:{sha256:row.sha256,sourceId,assetId:row.id}}),new Promise((_,reject)=>{creationTimeout=setTimeout(()=>reject(fail(504,'Media upload creation timed out')),Math.max(1,transfer.creation_lease_until-Date.now()));})]);
+     return await runMutation(async()=>{await authorize(actor,true);const current=upload(transfer.id);if(current.status!=='creating')throw fail(409,'Media upload reservation changed');const ready=records.putUpload({...current,status:'active',creation_lease_until:null,multipart_id:multipart?.uploadId||null});const token=ready.method==='single'?cap({kind:'upload',source_id:sourceId,upload_id:ready.id,part:0,principal_id:actor.principalId,expires_at:ready.expires_at}):null;await schedule(ready.expires_at);return {asset:mediaView(row),reused:false,upload:plan(ready,token)};});
+    }catch(error){await runMutation(async()=>{const current=upload(transfer.id);records.putUpload({...current,status:'cancelling',creation_lease_until:null,multipart_id:multipart?.uploadId||current.multipart_id||null,cleanup_after:Date.now(),updated_at:now()});records.putAsset({...row,status:'failed',updated_at:now()});await schedule(Date.now()+1000);});throw error;}
+    finally{clearTimeout(creationTimeout);}
    }
    if(operation==='part')return runMutation(async()=>{await authorize(actor,true);const row=upload(input.uploadId);active(row);const part=Number(input.partNumber),count=Math.ceil(row.bytes/PART_BYTES);if(row.method!=='multipart'||!Number.isInteger(part)||part<1||part>count)throw fail(400,'Invalid multipart part');const token=cap({kind:'upload',source_id:sourceId,upload_id:row.id,part,principal_id:actor.principalId,expires_at:Math.min(row.expires_at,Date.now()+900000)});return {partNumber:part,url:`${origin}/media/uploads/${sourceId}/${row.id}/${part}`,headers:{Authorization:`Bearer ${token}`}};});
    if(operation==='cancel')return cancel(input.uploadId,actor);
@@ -147,11 +152,12 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
   nextAlarm(){if(records.pendingArchives().some(row=>!row.purge_requires_lifecycle))return Date.now()+60_000;const rows=records.activeUploads();return rows.length?Math.max(Date.now()+1000,Math.min(...rows.map(row=>row.status==='cancelling'?(row.cleanup_after||Date.now()):row.expires_at))):null;},
   async expire({fenced=false,beforeDelete=async()=>{}}={}){
    try{
-    for(const row of records.activeUploads().filter(row=>fenced||row.status==='cancelling'||row.expires_at<=Date.now()).slice(0,20))await cancel(row.id,null,{fenced:true});
+    for(const row of records.activeUploads().filter(row=>fenced?row.status!=='cancelling'||!row.cleanup_after||row.cleanup_after<=Date.now():row.status==='cancelling'||row.expires_at<=Date.now()).slice(0,20))await cancel(row.id,null,{fenced:true,beforeDelete});
     if(fenced){const rows=await records.ownedAssets();if(rows.length>10000)throw fail(409,'Media deletion inventory exceeds its bound');for(const row of rows)if(['ready','archiving','archived'].includes(row.status)&&!row.purged_at){await beforeDelete();await archive(row.id,null,{fenced:true,deleting:true});}}
     else for(const row of records.pendingArchives().filter(row=>!row.purge_requires_lifecycle).slice(0,20))await archive(row.id,null,{fenced:true});
    }finally{const due=this.nextAlarm();if(due)await schedule(Math.max(Date.now()+60_000,due));}
-   if(fenced&&records.activeUploads().length)throw fail(409,'Media upload cleanup is still pending');
+   if(fenced){const pending=records.activeUploads();if(pending.length)return {pending:true,retryAt:Math.max(Date.now()+1000,Math.min(...pending.map(row=>row.status==='cancelling'?(row.cleanup_after||Date.now()):Date.now())))};}
+   return {pending:false};
   },
 
   async inventory(){const assets=await records.ownedAssets();if(assets.length>10000)throw fail(409,'Media deletion inventory exceeds its bound');return {assets:assets.filter(row=>!row.purged_at).map(row=>({id:row.id,status:row.status,bytes:row.bytes,sha256:row.sha256,legacy:Boolean(row.legacy)})),uploads:records.activeUploads().map(row=>({id:row.id,status:row.status,expiresAt:row.expires_at}))};},

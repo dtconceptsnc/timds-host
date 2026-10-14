@@ -45,6 +45,55 @@ otherwise know which host to call. Below the cards the
 Overview lists drafts and sessions, recent Requests and the last releases. The
 Request composer lives on the Sessions page.
 
+## Creating and deleting Design Systems
+
+Active host administrators see **Create Design System** and **Manage Design
+Systems** in the sidebar. The management page uses the paginated administrative
+system and organization catalogs; it includes provisioning, archived, deleting
+and permanently deleted systems that are absent from the ordinary workspace
+catalog. Non-administrators keep the existing access-only empty state. An
+administrator with no systems lands on the first-system creation state.
+
+Creation asks for a name, unique lowercase system ID, organization and one of
+the host's configured repository namespaces. When no active organization exists,
+the same flow first creates an organization with a stable UUID. The host creates
+the pinned starter and repository, then grants the creating administrator read,
+write and publish access. Studio does not upload or edit starter files. A
+successful creation selects the system and opens its Overview.
+
+Before submitting, Studio saves the exact operation UUID, source UUID and form
+input in this tab's `sessionStorage`, scoped to the principal. Retry and reload
+reuse those details, including a first-organization UUID; they do not generate
+another system after an ambiguous response. **Resume creation** shows status
+and retries the saved input. The admin catalog also supplies the creating
+administrator's starter input for recovery from another tab or device. **Finish
+setup** appears when the starter is ready but its initial access grant is still
+owed; the catalog distinguishes this from a later intentional grant revocation.
+Completion of the provision receipt alone does not imply that the final access
+grant succeeded, so the original creation request is retried before opening it.
+An explicit Disconnect clears the tab's saved inputs; server receipts remain.
+
+**Delete…** prepares a read-only inventory with a durable operation UUID. Studio
+shows its exact repository, affected sessions, forks, Requests, publishers and
+media counts, and explains retained immutable releases and audit history. Native
+systems require the exact repository name to be typed before confirmation.
+Confirmation immediately removes the system from ordinary navigation and the
+host finishes cleanup in the background. The dialog polls the receipt every
+three seconds until completion or a paused state. **Refresh status** reads the
+same operation; a failed native cleanup can be explicitly resumed with another
+typed confirmation. A changed impact requires **Prepare a new review** and a
+new confirmation. An ambiguous prepare or confirmation retains the operation ID.
+
+The admin catalog's deletion operation ID reopens confirmed cleanup after reload,
+including completed tombstones. Unconfirmed reviews remain resumable in the
+original tab. **Retained history** reads the bounded audit and session descriptors.
+Partial provisioning may be deleted only when the host has exact ownership
+receipts; unknown repository ownership stays blocked. Imported systems show that
+their original backend must fence consumers and supply signed verification.
+Studio offers no proof entry or unsigned override; the operator completes or
+resumes that workflow server-side and refreshes the receipt here. See
+[source deletion](../docs/lifecycle-deletion.md) for cleanup and retention details.
+
 ## The steering model
 
 Studio is a steering console, not an editor. **Agents are the only writers.**

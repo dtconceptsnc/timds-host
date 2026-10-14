@@ -95,7 +95,7 @@ export function createPreviews({ env = {}, fetchImpl = fetch } = {}) {
     if (!repo || repo.provider_type !== 'cloudflare_artifacts' || repo.provider_account_id !== source.artifacts_namespace || repo.repo_name !== source.artifacts_repository || repo.provider_account_name !== source.artifacts_namespace || String(repo.repo_id) !== String(source.artifacts_repository_id)) throw fail(409, 'The Preview build connection does not match this Design System');
     return config;
   }
-  async function deleteConnection(source, found) {
+  async function deleteConnection(source, found, beforeDelete) {
     const triggers = await request(`/builds/workers/${encodeURIComponent(found.tag)}/triggers`, { builds:true, missing:true }) || [];
     if (!Array.isArray(triggers)) throw fail(502, 'Cloudflare returned an invalid Preview trigger list');
     const connections = new Set();
@@ -116,7 +116,7 @@ export function createPreviews({ env = {}, fetchImpl = fetch } = {}) {
     }
     // Remove the connection while triggers still identify it, so a failed
     // delete can be retried without losing the cleanup identity.
-    for (const id of connections) await request(`/builds/repos/connections/${encodeURIComponent(id)}`, { method:'DELETE', builds:true, missing:true });
+    for (const id of connections) {await beforeDelete();await request(`/builds/repos/connections/${encodeURIComponent(id)}`, { method:'DELETE', builds:true, missing:true });}
   }
   async function prepareSource(source) {
     if (!configured) throw fail(503, 'Cloudflare Preview setup requires the server Workers Builds credential');
@@ -214,17 +214,19 @@ export function createPreviews({ env = {}, fetchImpl = fetch } = {}) {
       if(!ready)throw fail(503,'The submitted Preview is not ready');
       return {url,workerTag:found.tag,previewId:matches[0].preview_id};
     },
-    async deleteSourcePreview(source,{expected}={}) {
+    async deleteSourcePreview(source,{expected,beforeDelete=async()=>{}}={}) {
       const found = await worker(source);
       if (!found) return;
       if(expected!==undefined&&(!expected||expected.workerName!==designSystemPreviewWorker(source)||expected.workerTag!==found.tag))throw fail(409,'The Preview Worker identity changed after deletion review');
       const connected=await connection(source, found);
       if(expected&&connected&&expected.repositoryId!==String(connected.git_repository.repo_id))throw fail(409,'The Preview connection changed after deletion review');
-      await deleteConnection(source, found);
+      await deleteConnection(source, found, beforeDelete);
+      await beforeDelete();
       await request(`/builds/workers/${encodeURIComponent(found.tag)}`, { method:'DELETE', builds:true, missing:true });
       const current=await worker(source);
       if(current&&current.tag!==found.tag)throw fail(409,'The Preview Worker identity changed during deletion');
       if(!current)return;
+      await beforeDelete();
       await request(`/workers/scripts/${designSystemPreviewWorker(source)}`, { method:'DELETE', missing:true });
       // The shared Builds deployment token is operator-owned, never source-owned.
     },
