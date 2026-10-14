@@ -35,6 +35,8 @@ repository is the host that toolkit talks to.
   tools read the current release with an exact source and version receipt,
   and the toolkit's `timds mcp read --published <root>` serves the full
   consumer tool set from those files.
+  [Consuming a published system](docs/consuming/README.md) is the guide set
+  for people and agents building from one.
 - **Studio.** A static steering console for sessions, Requests, Previews,
   publish and rollback. It is served straight from the host and has no build
   step.
