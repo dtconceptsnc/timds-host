@@ -269,9 +269,27 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   const history = await client.history(draft.session.id);
   assert.ok(history.events.some(row => row.actor_principal_id === config.memberPrincipalId && row.note === `Conformance ${short}: reject stale shared write`));
   assert.ok((await mcp.call('get_session_history', { sessionId: draft.session.id })).events.some(row => row.actor_principal_id === config.memberPrincipalId && row.note === `Conformance ${short}: reject stale shared write`));
+
+  phase('Ordinary draft closure cascades to existing children and fences new work');
+  const draftChildren = [a, b, c].map(value => value.session.id);
+  for (const id of draftChildren) assert.equal((await client.status(id)).session.status, 'open', 'cascade must exercise a still-open child');
   assert.equal((await mcp.call('close_draft', { systemId: config.systemId, draft: draftName })).session.status, 'closed');
   const closedDraft = await client.draftClose(config.sourceId, draftName);
-  assert.equal(closedDraft.session.status, 'closed');
+  assert.equal(closedDraft.session.status, 'closed', 'ordinary draft close retries are idempotent');
+  for (const id of draftChildren) {
+    assert.equal((await client.status(id)).session.status, 'closed', 'closing the parent closes every existing child');
+    const retained = await client.history(id);
+    assert.equal(retained.session.status, 'closed');
+    assert.equal(retained.events.filter(row => row.session_id === id && row.event_type === 'closed').length, 1, 'cascade retains one child close event');
+    await assert.rejects(client.pull(id), error => error.status === 410, 'a cascaded child cannot reopen its source fork');
+  }
+  const afterDraftClose = await client.activeWork(config.sourceId), closedIds = new Set([draft.session.id, ...draftChildren]);
+  assert.ok(afterDraftClose.sessions.every(row => !closedIds.has(row.id)), 'active work omits the closed parent and children');
+  assert.ok(!(await client.draftList(config.sourceId)).drafts.some(row => row.id === draft.session.id), 'closed draft leaves the draft list');
+  await assert.rejects(openChild('draft-after-close'), error => error.status === 404, 'closed drafts refuse new child sessions');
+  await assert.rejects(client.update(c.session.id, change(resolved, [], `Conformance ${short}: refuse closed child edit`)), error => error.status === 410, 'a closed child refuses edits');
+  await assert.rejects(mcp.call('create_request', { systemId: config.systemId, requestId: randomUUID(), sessionId: draft.session.id, prompt: 'Conformance refusal probe: do not modify this closed draft.' }), error => error.status === 410, 'a closed draft refuses new Requests');
+  await assert.rejects(client.startRequest(config.sourceId, { requestId: randomUUID(), sessionId: c.session.id, prompt: 'Conformance refusal probe: do not modify this closed child.' }), /Host extension returned HTTP 410/, 'a cascaded child refuses new Requests');
   assert.equal((await client.previewTokens(config.sourceId, draft.session.id)).status, 404);
   assert.equal((await client.previewTokens(config.sourceId, draft.session.id, 'HEAD')).status, 404);
 
@@ -370,7 +388,7 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   assert.equal(requested.requestId, requestId);
   assert.equal((await client.startRequest(config.sourceId, request)).executionJobId, requested.executionJobId, 'Request retries preserve execution identity');
   assert.equal((await mcp.call('create_request', { systemId: config.sourceId, ...request })).executionJobId, requested.executionJobId, 'MCP Request retries share the HTTP Request identity');
-  const complete = await waitFor(`Request ${requestId}`, () => mcp.call('get_request', { systemId: config.systemId, requestId }), result => Boolean(result.submissionId), result => ['failed', 'dead_letter', 'cancelled'].includes(result.status) || ['failed', 'error', 'conflicted'].includes(result.runner?.state));
+  const complete = await waitFor(`Request ${requestId}`, () => mcp.call('get_request', { systemId: config.systemId, requestId }), result => result.status === 'succeeded' && Boolean(result.submissionId), result => ['failed', 'dead_letter', 'cancelled'].includes(result.status) || ['failed', 'error', 'conflicted'].includes(result.runner?.state));
   assert.equal((await client.requestStatus(config.sourceId, requestId)).submissionId, complete.submissionId);
   assert.equal(complete.sessionId, requestSession.session.id);
   const requestSnapshot = await client.pull(requestSession.session.id);
@@ -394,5 +412,16 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   await client.close(requestSession.session.id);
   assert.equal((await client.close(requestSession.session.id)).session.status, 'closed', 'close is idempotent');
   assert.equal((await client.history(requestSession.session.id)).session.status, 'closed', 'history survives fork cleanup');
+  const activeBeforeReplay = (await client.activeWork(config.sourceId)).sessions.map(row => row.id).sort();
+  assert.equal((await client.startRequest(config.sourceId, request)).executionJobId, requested.executionJobId, 'completed HTTP Request replay retains its execution identity after target closure');
+  assert.equal((await mcp.call('create_request', { systemId: config.systemId, ...request })).executionJobId, requested.executionJobId, 'completed MCP Request replay retains its execution identity after target closure');
+  await assert.rejects(client.startRequest(config.sourceId, { ...request, prompt: `${request.prompt} Changed retry.` }), /Host extension returned HTTP 409/, 'completed receipt replay rejects a changed prompt');
+  await assert.rejects(mcp.call('create_request', { systemId: config.systemId, ...request, sessionId: c.session.id }), error => error.status === 409, 'completed receipt replay rejects a different already-owned target');
+  assert.deepEqual((await client.activeWork(config.sourceId)).sessions.map(row => row.id).sort(), activeBeforeReplay, 'completed receipt replay creates no session and reopens no closed target');
+  const retainedRequest = await client.requestStatus(config.sourceId, requestId);
+  assert.equal(retainedRequest.status, 'succeeded');
+  assert.equal(retainedRequest.sessionId, requestSession.session.id);
+  assert.equal(retainedRequest.session.status, 'closed');
+  assert.equal(retainedRequest.submissionId, complete.submissionId, 'Request GET recovers the original completed receipt after closure');
   evidence.passed = true;
 });

@@ -118,7 +118,12 @@ ordinary approved lifecycle after examining the results.
    Rejected writes leave the fork unchanged.
 4. Status and retained history carry members, principal IDs and intent notes.
 5. Public CSS GET/HEAD expose the draft token value, cache/CORS/noindex headers,
-   and no credential. The preview disappears after the draft closes.
+   and no credential. Ordinary draft closure cascades to its three still-open
+   children, retaining their histories and one close event each. The parent
+   and children leave active work; the draft leaves its list and public CSS
+   disappears. Close retries remain idempotent. Closed children refuse source
+   reads and edits, closed drafts refuse new child sessions, and both refuse
+   new designer Requests.
 6. Two main submissions are frozen idempotently. A dry run checks the build
    without closing the session. FIFO acceptance positions and completion order
    produce consecutive dated `YYYY.MM.DD-N` releases (including UTC day rollover).
@@ -129,7 +134,11 @@ ordinary approved lifecycle after examining the results.
 7. A real designer Request, retried with the same request ID, produces a frozen
    submission with the original instruction and exact requested file bytes. It
    has no publication and leaves the public pointer untouched. Session close is
-   idempotent and history survives cleanup.
+   idempotent and history survives cleanup. Exact HTTP and MCP POST replays of
+   the succeeded Request return its original execution identity after closure,
+   without creating a session or reopening the target. Replays with a changed
+   prompt or target return 409. Request GET retains its succeeded status and
+   original completed submission receipt.
 8. The event feed rejects invalid cursors with 400, and every walk from a
    cursor returns consecutive `seq` values that replay identically. It records
    `draft_created`/`session_started`, `member_joined` (including the invited
@@ -177,6 +186,12 @@ contains operation/status counts, publication IDs/versions, phase names, and
 cleanup outcomes. It never records credentials, HTTP bodies or source files.
 Phase names in the evidence indicate phases entered; only `passed: true`
 indicates full acceptance.
+
+The ordinary-close assertions reuse only the parent, children and Request
+session already owned by this run. They exercise successful closure and
+closed-target refusals. They do not inject a cleanup crash or force a Request
+to remain queued during closure; recovery after interrupted cleanup and
+pending-job cancellation still require their separate deployed checks.
 
 ## Native creation and teardown acceptance
 

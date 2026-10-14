@@ -54,7 +54,7 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
   // back into its own held serial queue while a repository operation is running.
   const repo = typeof repository === 'function' ? repository(repositoryContext()) : repository;
   const auth = typeof authorization === 'function' ? authorization({store,catalog,sourceId}) : authorization;
-  const sessions = createDesignSystemSessions({store,repository:repo,authorization:auth,now:clock,onSessionReserved,onSessionStarted,cleanupAgentSession});
+  const sessions = createDesignSystemSessions({store,repository:repo,authorization:auth,now:clock,onSessionReserved,onSessionStarted,cleanupAgentSession,onSessionClosing:session=>requestService?.requestStore?.cancelSession?.(session)});
   const publisher = typeof publication === 'function' ? publication({store,sourceId,catalog}) : publication;
   const requestService = typeof requests === 'function' ? requests({storage,sourceId,store,sessions,catalog,authorization:auth,clock,runMutation:serialized}) : requests;
   const activeActor = async actor => {

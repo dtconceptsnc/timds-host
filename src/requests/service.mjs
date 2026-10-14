@@ -36,12 +36,13 @@ export function createDesignerRequests({sourceId, store, requestStore, authoriza
     if(!system?.artifacts_namespace || system.archived_at || system.lifecycle_status!=='ready' || store.eligible && !await store.eligible(system))throw fail(409,'An active hosted Design System is required');
     return system;
   }
-  async function target(actor,system,sessionId) {
+  async function target(actor,system,sessionId,{open = false} = {}) {
     if(!sessionId)return;
     if(!uuid.test(sessionId))throw fail(400,'Invalid target session');
     const view=await sessions.status(sessionActor(actor),sessionId);
     if(view.session.sourceId!==system.id)throw fail(404,'Session not found in this Design System');
     if(view.canInvite!==true)throw fail(403,'Only the owner or a publisher can start a Request in this session');
+    if(open && (['closing','closed','expired'].includes(view.session.status) || view.session.expiresAt && Date.parse(view.session.expiresAt)<=Date.now()))throw fail(410,'The target session is closed or expired');
   }
   async function boundSession(system,request) {
     const session=request.session_id ? await store.get(request.session_id) : await store.sessionForRequest(system.id,request.id);
@@ -73,7 +74,10 @@ export function createDesignerRequests({sourceId, store, requestStore, authoriza
         if(typeof body?.prompt!=='string' || !body.prompt.trim() || Buffer.byteLength(body.prompt)>32*1024)throw fail(400,'Describe the change in 1–32 KiB');
         if(!uuid.test(body.requestId || ''))throw fail(400,'A requestId is required for safe retries');
         stage='target';
-        await target(actor,system,body.sessionId);
+        const prior=await requestStore.get(body.requestId),accepted=prior && (await requestStore.jobForRequest(body.requestId))?.status==='succeeded';
+        // Exact accepted replays return their original receipt without dispatch.
+        // Reserve still checks every immutable input; new work must be open first.
+        await target(actor,system,body.sessionId,{open:!accepted});
         stage='reservation';
         const {request,job}=await requestStore.reserve({requestId:body.requestId,sourceId:system.id,requestedBy:principalId(actor),runnerPrincipalId:designer.principalId,prompt:body.prompt.trim(),sessionId:body.sessionId});
         const current=['failed','dead_letter','cancelled'].includes(job.status)?await requestStore.retry(job.id):job;
