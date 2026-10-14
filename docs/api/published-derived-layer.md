@@ -49,7 +49,11 @@ looking for imported media. They do not depend on optional import migrations.
 Imported sources have no native provision receipt and still require the exact
 active import-stage table; missing import authority fails closed.
 
-Native `bundle.json` has scoped absolute manifest/directory/file URL fields;
+`version: "latest"` reads the current pointer, the same as omitting `version`.
+
+Native `bundle.json` has scoped absolute manifest/directory/file URL fields
+(`directory` moves with the pointer, `versioned` is the immutable copy and
+`latest` is the redirecting tag);
 its declared file paths, byte counts and hashes are preserved. The physical
 `bundle/*` files are never rewritten. A pinned manifest advertises its immutable
 version directory; a current manifest does not claim that a same-label historical

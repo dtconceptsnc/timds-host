@@ -705,6 +705,16 @@ documents, so toolkit readers (`fetchDerivedLayer`, `timds mcp read
 --published`) find them under a nested entry such as `design-system/`. The
 build container writes those two fields beside the toolkit's stamp.
 
+`latest` is a tag in the version slot, `/systems/<org>/<name>/v/latest/<path>`,
+never a release label (labels are dated or semver). It names the current
+pointer, which publish moves forward and rollback moves back. The route
+resolves the pointer and answers 307 to the immutable `/v/<label>/<path>`
+with `public, max-age=300, must-revalidate` and `X-TimDS-Version`, so a page
+and the assets it then loads come from one release and the consumer learns
+which version it received. The root keeps serving the current release in
+place for browsing. Bundle manifests carry `latest` beside `directory` and
+`versioned`; the read MCP accepts `version: "latest"` as omitting `version`.
+
 Publication response URLs, including previously committed results, are derived
 from the current `TIMDS_PUBLIC_ORIGIN` and system identity. Retained
 `public_root_url` values do not override the advertised origin; their historical

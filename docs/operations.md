@@ -504,7 +504,8 @@ Check anonymous responses after deployment:
 
 The public companion rejects `/api/timds/*` with 404 and exposes anonymous read
 MCP at `/mcp`. Published roots are `/systems/<org>/<name>/`, one path segment
-per id segment, with `/v/<version>/` for immutable versions; the single
+per id segment, with `/v/<version>/` for immutable versions and `/v/latest/`
+redirecting (307) to the current pointer's immutable address; the single
 URL-encoded form `/systems/<org>%2F<name>/` keeps working and is the only form
 for ids with more than two segments. Check `.timds-artifact.json` stamps
 (identity, `entry` and `files`) and referenced asset digests after

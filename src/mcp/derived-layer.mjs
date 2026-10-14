@@ -64,7 +64,7 @@ export async function readPublicDerivedLayer({resolved,bucket,readFile,publicOri
   for(const name of ['index','brand','designs'])await rewrite(documents[name]);
   for(const name of ['index','brand','formats','designs','changelog'])publishedDocumentUrls(documents[name],base);
   if(documents.designs)documents.designs.base=base;
-  if(documents.bundle)documents.bundle=publishedBundle(documents.bundle,{base,manifestPath:`${directory}bundle.json`,versionBase:immutableBase?urls.version:null});
+  if(documents.bundle)documents.bundle=publishedBundle(documents.bundle,{base,manifestPath:`${directory}bundle.json`,versionBase:immutableBase?urls.version:null,latestBase:urls.latest});
   const layer={source:{kind:'published',base,artifact:{sourceId:source.id,contentDigest:version.content_digest}},
     system:{id:source.system_id,name:source.name||source.system_id,version:version.version_label},
     derived:Boolean(documents.index||documents.tokens||documents.brand),stale:false,
