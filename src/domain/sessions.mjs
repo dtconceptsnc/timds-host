@@ -1,4 +1,4 @@
-// Session domain adapted from dtconceptsnc/toperator at 74bceaa (domain unchanged since 2b0148c).
+// Session domain adapted from the legacy portal.
 // Portal identity/router/Supabase defaults removed; store, repository and authorization are injected.
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';

@@ -72,6 +72,36 @@ start, capability minting and close. This transitional compatibility does not
 weaken source deletion. Preview cleanup likewise requires the reviewed Worker
 tag, then checks it again before removing the script by name.
 
+An existing fork that cannot pass these checks returns HTTP 409 with bounded,
+administrator-only `deletionBlockers` details. The object contains `sourceId`,
+`total` (the count of all blocked forks), and at most 50 `sessions`. Each entry
+contains only `sessionId`, `status`, `reason` and `action`; provider repository
+names, opaque provider IDs and credentials are omitted. `reason` distinguishes
+`missing_creation_receipt` from `fork_identity_changed`, where an existing
+receipt disagrees with the current namespace, repository name or provider ID.
+An independently absent fork does not produce a blocker. Inventory remains
+read-only and no deletion plan or fence is saved when these blockers are found.
+
+For a missing receipt, `review_session` is offered only when an `open` or
+`closing` session already records its exact expected fork name. Review that
+session and explicitly use its existing **Destroy** action, then prepare a new
+Design System deletion review. This separate session cleanup preserves the
+pre-receipt compatibility contract; deletion review never silently closes work
+or creates an ownership receipt from the repository currently found by name.
+The action is a navigation hint, not an authority grant: ordinary session
+cleanup rechecks current permissions and publication protection.
+
+`operator_review` is required for receipt mismatches, terminal sessions and
+sessions without accepted fork metadata. A missing receipt on a `starting`
+session may mean the provider creation response was lost; it is not proof of
+historical accepted work and has no cleanup shortcut. Closing an already
+`closed` or `expired` session returns its existing receipt without removing an
+orphaned repository. An operator must recover independently trusted original
+creation evidence and verify its exact source/session/namespace/name/provider
+identity, or independently verify repository absence. Matching names, fork
+ancestry strings, timestamps, or Git content alone cannot recover ownership;
+existing immutable receipts must never be overwritten to match a replacement.
+
 ## Imported consumer authority
 
 Portal consumer relationships remain canonical for imported systems. The portal

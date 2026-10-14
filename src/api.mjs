@@ -57,12 +57,12 @@ export function createApi({ getCoordinator, provision, mcp }) {
     }
     const sourceRoute=path.match(/^\/api\/timds\/design-systems\/([^/]+)$/);
     if(sourceRoute&&method==='GET'){const row=await source(segment(sourceRoute[1]));return respond(await call(row.id,'sourceView'));}
-    let match=path.match(/^\/api\/timds\/sessions\/([^/]+)(?:\/(status|history|submit|update|close|join|claims))?$/);
+    let match=path.match(/^\/api\/timds\/sessions\/([^/]+)(?:\/(status|history|submit|update|close|join|claims|diagnostics))?$/);
     if (match) {
       const id=segment(match[1]), action=match[2] || 'snapshot';
-      const expected=['snapshot','status','history'].includes(action)?'GET':'POST';
+      const expected=['snapshot','status','history','diagnostics'].includes(action)?'GET':'POST';
       if(method!==expected)throw fail(405,`Use ${expected}`);
-      const operation=action==='claims'?'claim':action;
+      const operation=action==='claims'?'claim':action==='diagnostics'?'liveDiagnostics':action;
       return respond(await call(await located('session',id),operation,[id,...(method==='POST'&&action!=='close'?[input]:[])]));
     }
     match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/principals$/);
@@ -115,6 +115,13 @@ export function createApi({ getCoordinator, provision, mcp }) {
       if(path==='/api/timds/admin/organizations'&&method==='POST') {
         if(!uuid.test(input.id||'')||typeof input.name!=='string'||!input.name.trim()||input.name.length>200)throw fail(400,'Organization id and name are required');
         return jsonResponse({organization:await catalog.ensureOrganization({id:input.id,name:input.name})});
+      }
+      match=path.match(/^\/api\/timds\/admin\/organizations\/([^/]+)\/name$/);
+      if(match) {
+        if(method!=='POST')throw fail(405,'Use POST to rename an organization');
+        const id=segment(match[1]);
+        if(!uuid.test(id)||Object.keys(input).some(key=>!['apiVersion','name','expectedName'].includes(key))||typeof input.name!=='string'||!input.name.trim()||input.name.length>200||typeof input.expectedName!=='string'||input.expectedName.length>200)throw fail(400,'An organization UUID, name and expected name are required');
+        return jsonResponse({organization:await catalog.renameOrganization({id,name:input.name.trim(),expectedName:input.expectedName,actor})});
       }
       if(path==='/api/timds/admin/systems'&&method==='POST'&&provision)return respond(await provision({input,actor,env,context,catalog}));
       if(path==='/api/timds/admin/systems/create'&&method==='POST'&&provision)return respond(await createStarterSystem({input,actor,env,context,catalog,provision}));

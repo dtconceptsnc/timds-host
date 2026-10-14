@@ -499,6 +499,17 @@ MCP at `/mcp`. Published roots are `/systems/<URL-encoded-system-id>/`, with
 referenced asset digests after publication/rollback; a 200 health response is
 not publication acceptance.
 
+A slow or failing live view is diagnosed from
+`GET /api/timds/sessions/<session-uuid>/diagnostics` with the session's
+normal credentials. It returns the last wake's `wakePhases` (milliseconds for
+`credential`, `boot`, `clone`, `dependencies`, `server` and `total`), the
+`dependencyCache` outcome (`hit`, `miss`, `bypass`, `restore-failed`,
+`backup-failed`), any `startupError` and the dev server state. It never starts
+a container, so it is safe to read while a session sleeps. The `live_state`
+rows in the source event feed give the same wake its `waking`, `starting` and
+`ready` timestamps. See [`architecture.md`](architecture.md) "Warm drafts and
+wake" for what each phase covers.
+
 Workflows checkpoint source/build/release receipts and commit the pointer once.
 An interrupted post-pointer verification resumes verification/cleanup; it does
 not rerun publication. Use the original publication ID when diagnosing recovery.

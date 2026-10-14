@@ -111,6 +111,18 @@ export class Catalog {
     await this.run('INSERT INTO organizations(id,name) VALUES(?,?) ON CONFLICT(id) DO NOTHING', id, name);
     return this.organization(id);
   }
+  async renameOrganization({ id, name, expectedName, actor }) {
+    const actorId=principalId(actor);
+    const renamed=await this.first(`UPDATE organizations SET name=? WHERE id=? AND status='active' AND (name=? OR name=?)
+      AND EXISTS(SELECT 1 FROM principals WHERE id=? AND status='active' AND admin=1) RETURNING id,name`,name,id,expectedName,name,actorId);
+    if(renamed)return renamed;
+    const principal=await this.principal(actorId);
+    if(!principal?.admin||principal.status!=='active')throw fail(403,'An active administrator is required');
+    const organization=await this.organization(id);
+    if(!organization)throw fail(404,'Organization not found');
+    if(organization.status!=='active')throw fail(409,'Organization is unavailable');
+    throw fail(409,'The organization name changed. Refresh the catalog before renaming it');
+  }
   async source(reference) { return materialize(await this.first('SELECT * FROM systems WHERE id=? OR system_id=? ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END LIMIT 1', reference, reference, reference)); }
   async resource(kind, id) { const row = await this.first('SELECT source_id,tombstone FROM resource_index WHERE kind=? AND id=?', kind, id); return row && { ...row, tombstone: Boolean(row.tombstone) }; }
   async sourcesForPrincipal(id) {

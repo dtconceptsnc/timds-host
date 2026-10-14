@@ -74,6 +74,9 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
   const engine = {
     invoke: ({operation,actor,args = []}) => {
       if(store.deletionFence())throw fail(409,'This Design System is deleting or deleted');
+      // Live runtime diagnostics: the session status read establishes the
+      // caller's authority, then the LiveSession reports its own record.
+      if (operation === 'liveDiagnostics') return activeActor(actor).then(async verified => {await sessions.status(verified,...args);if(!requestService?.live)throw fail(503,'The live session runner is not configured');return requestService.live.diagnostics(...args);});
       if (!domainOperations.has(operation)) throw fail(404, 'Unknown coordinator operation');
       if (metadataOperations.has(operation)) return activeActor(actor).then(verified => sessions[operation](verified,...args));
       return serialized(async () => {

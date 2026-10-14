@@ -365,6 +365,64 @@
         }
       }
     },
+    "/api/timds/sessions/{sessionId}/diagnostics": {
+      "get": {
+        "operationId": "getSessionLiveDiagnostics",
+        "summary": "Get live runtime diagnostics for a session: last wake phase timings, dependency cache outcome, startup error and dev server state",
+        "description": "Reads the LiveSession record for a session the caller may read. It never starts a container; a sleeping or closed session still reports its last wake. Timings are durations in milliseconds; no command output, source content or credentials are returned.",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Session or draft UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current live runtime diagnostics.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveDiagnostics"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
     "/api/timds/sessions/{sessionId}/history": {
       "get": {
         "operationId": "getSessionHistory",
@@ -1476,7 +1534,7 @@
                   },
                   "prompt": {
                     "type": "string",
-                    "description": "1–32 KiB UTF-8 instruction.",
+                    "description": "1\u201332 KiB UTF-8 instruction.",
                     "minLength": 1
                   },
                   "requestId": {
@@ -2643,7 +2701,7 @@
       "post": {
         "operationId": "prepareSourceDeletion",
         "summary": "Read deletion impact and prepare confirmation",
-        "description": "Active host administrator required. Source UUID remains permanently reserved after confirmed deletion.",
+        "description": "Active host administrator required. Source UUID remains permanently reserved after confirmed deletion. Existing forks without creation evidence or with a changed identity return HTTP 409 with bounded deletionBlockers. This response does not authorize deletion or adopt a repository.",
         "tags": [
           "Administration"
         ],
@@ -2749,7 +2807,7 @@
       "post": {
         "operationId": "confirmSourceDeletion",
         "summary": "Confirm or resume permanently fenced source deletion",
-        "description": "Active host administrator required. Source UUID remains permanently reserved after confirmed deletion.",
+        "description": "Active host administrator required. Source UUID remains permanently reserved after confirmed deletion. Existing forks without creation evidence or with a changed identity return HTTP 409 with bounded deletionBlockers. This response does not authorize deletion or adopt a repository.",
         "tags": [
           "Administration"
         ],
@@ -3105,7 +3163,7 @@
       },
       "post": {
         "operationId": "reserveAccessInvitation",
-        "summary": "Reserve explicit source permissions for the invited human’s own Access sign-in",
+        "summary": "Reserve explicit source permissions for the invited human\u2019s own Access sign-in",
         "description": "Active administrator only; ready or importing source. No grant at reservation time. Configured Access issuer and explicit email required. Write requires read. Default disabled; see docs/access-invitations.md. Never merges historical identities or sends email.",
         "parameters": [
           {
@@ -4053,6 +4111,111 @@
           }
         }
       }
+    },
+    "/api/timds/admin/organizations/{organizationId}/name": {
+      "post": {
+        "operationId": "renameOrganization",
+        "summary": "Rename an active organization without changing its identity",
+        "description": "Active host administrator required at the time of the write. Only the display name changes; organization, source, system and repository identifiers remain immutable. expectedName must match the current name; retrying an already-applied name succeeds. A concurrent different rename returns HTTP 409. A shared organization name applies to every system in that organization.",
+        "tags": [
+          "Administration"
+        ],
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "expectedName"
+                ],
+                "properties": {
+                  "apiVersion": {
+                    "const": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "expectedName": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful administrator operation",
+            "headers": {
+              "X-TimDS-API-Version": {
+                "schema": {
+                  "const": "1"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "organization"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "organization": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4081,6 +4244,10 @@
             "type": "string",
             "description": "Full immutable source revision.",
             "pattern": "^[a-f0-9]{40}$"
+          },
+          "deletionBlockers": {
+            "$ref": "#/components/schemas/DeletionBlockers",
+            "description": "Bounded administrator-only session repository blockers on deletion preparation or confirmation HTTP 409. No cleanup or ownership adoption occurs."
           }
         },
         "required": [
@@ -4751,6 +4918,83 @@
           "apiVersion",
           "session"
         ]
+      },
+      "LiveDiagnostics": {
+        "type": "object",
+        "description": "Live runtime diagnostics. Additional fields may be added.",
+        "properties": {
+          "state": {
+            "type": "string",
+            "description": "Runtime state: none, sleeping, starting, ready, running, failed, closing or closed."
+          },
+          "runner": {
+            "description": "The current or last Request run, or null."
+          },
+          "wakeStartedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the last cold wake began."
+          },
+          "wakePhases": {
+            "type": "object",
+            "description": "Milliseconds spent in each phase of the last cold wake. A failed wake keeps the phases it completed.",
+            "properties": {
+              "credential": {
+                "type": "integer"
+              },
+              "boot": {
+                "type": "integer"
+              },
+              "clone": {
+                "type": "integer"
+              },
+              "dependencies": {
+                "type": "integer"
+              },
+              "server": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer",
+                "description": "Wake start until the runtime reported ready or failed."
+              }
+            },
+            "additionalProperties": false
+          },
+          "dependencyCache": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "hit",
+                  "miss",
+                  "bypass",
+                  "restore-failed",
+                  "backup-failed"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Cache key digest."
+              }
+            }
+          },
+          "restoredRevision": {
+            "type": "string"
+          },
+          "startupError": {
+            "type": "string"
+          },
+          "commandFailure": {
+            "type": "object"
+          },
+          "dev": {
+            "type": "object",
+            "description": "Dev server supervisor status while the container runs."
+          }
+        },
+        "additionalProperties": true
       },
       "Event": {
         "type": "object",
@@ -6186,6 +6430,95 @@
               "artifacts_repository_id": {
                 "type": "string"
               }
+            }
+          }
+        }
+      },
+      "DeletionBlockers": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sourceId",
+          "total",
+          "sessions"
+        ],
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Total blocked session repositories, including any beyond the detail limit."
+          },
+          "sessions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sessionId",
+                "status",
+                "reason",
+                "action"
+              ],
+              "properties": {
+                "sessionId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "starting",
+                    "open",
+                    "closing",
+                    "closed",
+                    "expired"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "missing_creation_receipt",
+                    "fork_identity_changed"
+                  ]
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "review_session",
+                    "operator_review"
+                  ]
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "action": {
+                        "const": "review_session"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "reason": {
+                        "const": "missing_creation_receipt"
+                      },
+                      "status": {
+                        "enum": [
+                          "open",
+                          "closing"
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
             }
           }
         }

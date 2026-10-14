@@ -51,7 +51,15 @@ export class LiveSessionRuntime {
   // Viewer wake: returns at once; the alarm performs the same wake() a frame fetch or Request does.
   async requestWake(){const live=this.record();if(!live||['closed','closing'].includes(live.state)||(live.expiresAt&&Date.parse(live.expiresAt)<=Date.now())||this.ctx.container?.running)return this.status();this.save({wakeRequested:true});await this.ctx.storage.setAlarm(Date.now());return this.status();}
   // requestId names the Request a running/failed task belongs to; the host verifies its binding.
-  async report(state,requestId){this.save({state});try{await this.portal(this.env,'live-state',{sessionId:this.record().id,state,...(requestId?{requestId}:{})});}catch{}}
+  // Wake phase durations in milliseconds for diagnostics(): credential, boot,
+  // clone, dependencies, server (supervisor answering) and total (wake start
+  // until the runtime reported ready or failed). Durations only, never output.
+  phase(name,since){this.save({wakePhases:{...this.record()?.wakePhases,[name]:Date.now()-since}});}
+  async report(state,requestId){
+    this.save({state});const live=this.record();
+    if(['ready','failed'].includes(state)&&live.wakeStartedAt&&live.wakePhases&&live.wakePhases.total==null)this.phase('total',live.wakeStartedAt);
+    try{await this.portal(this.env,'live-state',{sessionId:live.id,state,...(requestId?{requestId}:{})});}catch{}
+  }
   assertOpen(){const live=this.record();if(!live || ['closed','closing'].includes(live.state) || (live.expiresAt && Date.parse(live.expiresAt)<=Date.now()))throw Object.assign(new Error('Live session is closed'),{status:410});return live;}
   status(){const live=this.record(),run=this.run();return{state:['closed','closing'].includes(live?.state)?live.state:!this.ctx.container?.running?'sleeping':live?.state||'none',runner:run?{requestId:run.requestId,state:run.state,...(run.submissionId?{submissionId:run.submissionId}:{}),...(run.error?{error:run.error}:{}),...(run.diagnostics?{diagnostics:safeTaskDiagnostics(run.diagnostics)}:{}),...(run.conflicts?{conflicts:run.conflicts}:{})}:null};}
   async configure(id,{expiresAt=null,idleTimeoutMs,interruptCleanupOnce}={}){if(!sessionIdPattern.test(id))throw new Error('Invalid session');if(['closed','closing'].includes(this.record()?.state))throw Object.assign(new Error('Closed'),{status:410});if(expiresAt!==null&&!Number.isFinite(Date.parse(expiresAt)))throw new Error('Invalid expiry');if(idleTimeoutMs!==undefined&&(!Number.isInteger(idleTimeoutMs)||idleTimeoutMs<60_000||idleTimeoutMs>idleMs))throw new Error('Idle timeout must be between one and ten minutes');if(interruptCleanupOnce!==undefined&&typeof interruptCleanupOnce!=='boolean')throw new Error('Invalid cleanup interruption');if(interruptCleanupOnce&&(!expiresAt||!this.ctx.container?.running))throw new Error('Cleanup interruption requires a running finite session');this.save({id,expiresAt,...(idleTimeoutMs===undefined?{}:{idleTimeoutMs}),...(interruptCleanupOnce===undefined?{}:{interruptCleanupOnce}),state:this.record()?.state||'sleeping'});if(this.ctx.container?.running)await this.ctx.container.setInactivityTimeout(this.idleTimeout());if(active(this.run())||this.ctx.container?.running||expiresAt)await this.schedule(active(this.run())?Date.now()+1000:this.ctx.container?.running?Date.now()+this.idleTimeout():Date.parse(expiresAt));else await this.ctx.storage.deleteAlarm();return this.status();}
@@ -84,21 +92,25 @@ export class LiveSessionRuntime {
     this.assertOpen();const container=this.ctx.container;if(!container)throw new Error('Missing live container');
     if(container.running){if(this.record().pendingPush&&!active(this.run()))await this.sync();await this.ensureServer();return;}
     try {
-    this.save({startupError:null,restoredRevision:null,syncedRevision:null,dependencyCache:null});await this.report('starting');const credential=await this.credential();
-    container.start({image:container.images.agent,instance:'standard-1',enableInternet:false});await container.setInactivityTimeout(this.idleTimeout());
+    const wakeStartedAt=Date.now();let since=wakeStartedAt;
+    this.save({startupError:null,restoredRevision:null,syncedRevision:null,dependencyCache:null,wakeStartedAt,wakePhases:{}});await this.report('starting');const credential=await this.credential();this.phase('credential',since);
+    since=Date.now();container.start({image:container.images.agent,instance:'standard-1',enableInternet:false});await container.setInactivityTimeout(this.idleTimeout());
     // The backup host must be registered before the catch-all intercept takes every later hostname.
     const backup=this.dependencyBackup();if(backup)await backup.intercept();
     await this.intercept(credential);
+    // The first command answers once the container has booted, so platform
+    // start time is measured apart from the clone.
+    await this.command(['git','--version']);this.phase('boot',since);
     // Artifacts forks retain the source repository's default HEAD, which may
     // name a historical publishing branch. Live work always follows main.
-    await this.command(['git','-c','protocol.version=1','clone','--branch','main','--single-branch','--',''+credential.remote,'/workspace/repo']);
+    since=Date.now();await this.command(['git','-c','protocol.version=1','clone','--branch','main','--single-branch','--',''+credential.remote,'/workspace/repo']);
     const head=(await this.command(['git','rev-parse','HEAD'],'/workspace/repo')).stdout;
     const restoredRevision=(typeof head==='string'?head:new TextDecoder().decode(head)).trim();
     if(!/^[a-f0-9]{40}$/.test(restoredRevision))throw new Error('Invalid restored live head');
-    this.save({restoredRevision,syncedRevision:restoredRevision});
-    await this.installDependencies(backup);
-    await this.command(['mkdir','-p','/workspace/task']);
-    await this.ensureServer();
+    this.save({restoredRevision,syncedRevision:restoredRevision});this.phase('clone',since);
+    since=Date.now();await this.installDependencies(backup);this.phase('dependencies',since);
+    since=Date.now();await this.command(['mkdir','-p','/workspace/task']);
+    await this.ensureServer();this.phase('server',since);
     await this.touch();
     }catch(error){this.save({startupError:startupDiagnostic(error)});if(container.running)await container.destroy();await this.report('failed');throw error;}
   }
@@ -179,7 +191,7 @@ export class LiveSessionRuntime {
       const probe={mode:input.fetchProbe,ok:output.exitCode===0,elapsedMs:Date.now()-started,exitCode:Number.isInteger(output.exitCode)?output.exitCode:null,...(output.exitCode===0?{}:{reason:commandFailureReason(output.stderr),packDetails:packFailureDetails(output.stderr)})};
       this.save({fetchProbe:probe});await this.touch();return this.diagnostics();
     });
-    const result={...this.status(),...(this.record()?.restoredRevision?{restoredRevision:this.record().restoredRevision}:{}),...(this.record()?.startupError?{startupError:this.record().startupError}:{}),...(this.record()?.commandFailure?{commandFailure:this.record().commandFailure}:{}),...(this.record()?.dependencyCache?{dependencyCache:this.record().dependencyCache}:{}),...(typeof this.record()?.originMatches==='boolean'?{originMatches:this.record().originMatches}:{})};if(!this.ctx.container?.running)return result;
+    const result={...this.status(),...(this.record()?.restoredRevision?{restoredRevision:this.record().restoredRevision}:{}),...(this.record()?.startupError?{startupError:this.record().startupError}:{}),...(this.record()?.commandFailure?{commandFailure:this.record().commandFailure}:{}),...(this.record()?.dependencyCache?{dependencyCache:this.record().dependencyCache}:{}),...(this.record()?.wakeStartedAt?{wakeStartedAt:new Date(this.record().wakeStartedAt).toISOString()}:{}),...(this.record()?.wakePhases?{wakePhases:this.record().wakePhases}:{}),...(typeof this.record()?.originMatches==='boolean'?{originMatches:this.record().originMatches}:{})};if(!this.ctx.container?.running)return result;
     if(this.record()?.fetchProbe)result.fetchProbe=this.record().fetchProbe;
     if(this.record()?.commandFailure?.reason==='pack'&&!active(this.run())){const checked=await(await this.ctx.container.exec(['git','fsck','--connectivity-only','--no-reflogs'],{cwd:'/workspace/repo',env:trust})).output();result.connectivityOk=checked.exitCode===0;}
     try{const file=await new this.Files(this.ctx.container).readFile('/workspace/task/live-dev-status.json');if(file.size>16*1024)return result;const value=JSON.parse(await file.text());
