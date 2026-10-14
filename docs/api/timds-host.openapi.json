@@ -4760,6 +4760,11 @@
                     "items": {
                       "$ref": "#/components/schemas/Conflict"
                     }
+                  },
+                  "timings": {
+                    "type": "object",
+                    "description": "Container phase durations in milliseconds for the attempt that ran each operation (releaseMetadata, build, stamp), each as {phases: {label: ms}} with dependencyCache 'hit' or 'miss' on the build. Present on published results; an operation whose artifact was reused is absent.",
+                    "additionalProperties": true
                   }
                 }
               },

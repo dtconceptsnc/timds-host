@@ -562,7 +562,7 @@ The portable six-step implementation must become these seven stages:
 | `merge` | publication ID → `sourceRef`, source commit, parent revision | Reuse the immutable prepared source and pinned `releasePreparedAt`; CAS against current main. |
 | `build` | publication ID + sourceRef → artifactRef + sourceRef | Build exact saved source using controlled toolkit; retain named failed checks. |
 | `prepare` | publication ID + artifactRef → artifactRef + stamp | Validate system/source/submission/version/digest identity; write immutable stamp receipt. |
-| `release` | publication ID + artifactRef + stamp → released Git/R2 receipt | Idempotent main/published pushes and write-once objects. Never advances current pointer. |
+| `release` | publication ID + artifactRef + stamp → released Git/R2 receipt | Re-read the digest-checked artifact manifest against the prepared receipt (no second stamp container); idempotent main/published pushes and write-once objects. Never advances current pointer. |
 | `flip` | publication ID + release receipt → pointer event/generation/result | Coordinator's grant-serialized commit described above. |
 | `close` | publication ID + committed receipt → published result | Finish audit, session/token/fork/preview cleanup; never rerun a committed release. |
 
@@ -573,6 +573,37 @@ midnight cannot select a new date version. Missing staged bytes or mismatched
 identity require recovery, not silently rebuilding another release under the
 same receipt. Store receipts, hashes and object references in Workflow state;
 large file arrays and container handles are not step outputs.
+
+Three container runs serve a publication: `release-metadata` in `merge`, the
+controlled build in `build` and `stamp` in `prepare`. `release` does not stamp
+again. The prepared stamp came from two immutable, content-addressed trees, so
+`release` checks that the artifact receipt still names the checkpointed source,
+that the stamp's commit and system match them, and that the artifact tree's
+manifest (digest-verified on read) still has the prepared file count, byte
+total and entry path. A toolkit change between `prepare` and `release` is not
+re-detected by this check; it would surface as a different stamp on the next
+publication.
+
+- **Metadata inputs.** A metadata container receives only the files its
+  toolkit operation reads, selected by `src/build/metadata-inputs.mjs`:
+  `release-metadata` gets `timds.json`, `package.json`, `package-lock.json`
+  and `CHANGELOG.md` from the source plus the prior `timds.json`; `stamp` gets
+  the snapshot schema 1 source contract (`timds.json`, `tokens.json`,
+  `media.json`, `docs/`, `components/`, `assets/`) and every artifact file.
+  Symbolic links are never copied because the toolkit skips them. The driver
+  indexes `/input/<tree>/<i>` by the filtered list. The selection mirrors the
+  pinned runtime toolkit and must move with it.
+- **Timings.** Each container run returns `phases`, the milliseconds spent in
+  every diagnostic stage label (`manifest`, `copy`, `dependencies`, `restore`,
+  `source`, `check`, `persist` and so on; a label repeated per tree
+  accumulates), and the build also reports whether the dependency cache was a
+  `hit` or a `miss`. The stage stores them on the checkpoint as
+  `timings.releaseMetadata`, `timings.build` and `timings.stamp`, keyed by the
+  attempt that ran the container (a reused artifact records nothing), and
+  `flip` copies `timings` into the published result. Stage wall time is on the
+  `publication_stage` feed rows. The container size for all three runs is
+  `TIMDS_BUILD_INSTANCE_TYPE` (default `standard-2`), see
+  [`operations.md`](operations.md).
 
 Configure explicit bounded transient retries/backoff and timeouts per step.
 Treat deterministic validation, grant denial, CAS and named check failures as

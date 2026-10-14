@@ -2,12 +2,25 @@ import {Files,DirectoryBackup,DirectoryBackupGateway} from '@cloudflare/sandbox'
 import {DurableObject,WorkerEntrypoint} from 'cloudflare:workers';
 import {readTreeManifest,readTreeFile,persistContainerTree,sha256,transferFiles} from '../src/repository/file-trees.mjs';
 import {dependencyCacheKey,INSTALL_FLAGS} from '../src/build/cache.mjs';
+import {metadataInputFiles} from '../src/build/metadata-inputs.mjs';
 import {nativeBuildResult,unwrapNativeBuildResult,safeRequestDiagnostic} from '../src/requests/diagnostics.mjs';
 export {DirectoryBackupGateway};
 const ca='/etc/cloudflare/certs/cloudflare-containers-ca.crt';
 const cleanEnv={HOME:'/tmp/home',NPM_CONFIG_USERCONFIG:'/dev/null',NPM_CONFIG_GLOBALCONFIG:'/tmp/empty-global.npmrc',NPM_CONFIG_CACHE:'/tmp/npm-cache',NODE_EXTRA_CA_CERTS:ca};
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail=message=>Object.assign(new Error(message),{statusCode:409});
+const instanceTypes=new Set(['standard-1','standard-2','standard-3','standard-4']);
+// Dependency, build and metadata containers share one size. The controlled
+// build is CPU bound; TIMDS_BUILD_INSTANCE_TYPE overrides the default.
+const instanceType=env=>instanceTypes.has(env?.TIMDS_BUILD_INSTANCE_TYPE)?env.TIMDS_BUILD_INSTANCE_TYPE:'standard-2';
+// Wraps the diagnostic stage setter so a successful run also reports how many
+// milliseconds each phase took. A label repeated per tree accumulates. Labels
+// are host-authored identifiers from the diagnostics allowlist, never content.
+function timedStages(report){
+ const phases={};let current=null,since=Date.now();
+ const close=()=>{if(current){const now=Date.now();phases[current]=(phases[current]||0)+(now-since);since=now;}};
+ return {stage:name=>{close();current=name;report(name);},phases:()=>{close();return {...phases};}};
+}
 const outputText=result=>new TextDecoder().decode(result.stdout);
 async function execute(container,args,options={}){const result=await(await container.exec(args,{cwd:'/workspace',env:cleanEnv,signal:AbortSignal.timeout(20*60_000),...options})).output();if(result.exitCode!==0)throw fail('Controlled container operation failed');return result;}
 function assertInput(input){if(!uuid.test(input.sourceId||'')||!uuid.test(input.publicationId||'')||!input.files?.ref?.startsWith(`snapshots/${input.sourceId}/`))throw fail('Invalid build source identity');}
@@ -28,7 +41,7 @@ export class DependencySandbox extends DurableObject {
  async run({packageText,lockText},stage,tag){
   const container=this.ctx.container,files=new Files(container);let cache,primary;
   try{
-   stage('start');container.start({image:container.images.build,instance:'standard-2',enableInternet:false});stage('lifetime');await container.setInactivityTimeout(20*60_000);await this.ctx.storage.setAlarm(Date.now()+20*60_000);
+   stage('start');container.start({image:container.images.build,instance:instanceType(this.env),enableInternet:false});stage('lifetime');await container.setInactivityTimeout(20*60_000);await this.ctx.storage.setAlarm(Date.now()+20*60_000);
    stage('backup');
    const backup=new DirectoryBackup(container,this.ctx.exports.DirectoryBackupGateway,{binding:'SNAPSHOTS',prefix:'dependency-cache/objects/'});await backup.intercept();
    stage('outbound-binding');
@@ -38,7 +51,7 @@ export class DependencySandbox extends DurableObject {
    const key=await dependencyCacheKey({packageText,lockText,image:container.images.build,...runtime}),recordKey=`dependency-cache/records/${key}.json`;
    stage('cache-read');
    const existing=await this.env.SNAPSHOTS.get(recordKey);
-   if(existing){const receipt=await existing.json();if(receipt.key!==key||receipt.image!==container.images.build||!receipt.backup?.sha256)throw fail('Dependency cache identity changed');return receipt;}
+   if(existing){const receipt=await existing.json();if(receipt.key!==key||receipt.image!==container.images.build||!receipt.backup?.sha256)throw fail('Dependency cache identity changed');return {...receipt,restored:true};}
    stage('package-copy');await files.writeFile('/dependencies/package.json',packageText);await files.writeFile('/dependencies/package-lock.json',lockText);await execute(container,['chown','-R','1000:1000','/dependencies']);
    stage('install');
    await execute(container,['npm',...INSTALL_FLAGS],{cwd:'/dependencies',user:'1000'});
@@ -57,36 +70,39 @@ export class BuildSandbox extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.serial=Promise.resolve();}
  run(input){const next=this.serial.then(()=>nativeBuildResult('native-build',(stage,tag)=>this.execute(input,stage,tag)));this.serial=next.catch(()=>{});return next;}
  metadata(input){const next=this.serial.then(()=>nativeBuildResult('native-build-metadata',(stage,tag)=>this.executeMetadata(input,stage,tag)));this.serial=next.catch(()=>{});return next;}
- async executeMetadata(input,stage,tag){
+ async executeMetadata(input,report,tag){
   if(!uuid.test(input.sourceId||'')||!uuid.test(input.publicationId||'')||!['release-metadata','stamp'].includes(input.operation))throw fail('Invalid metadata operation');
-  const container=this.ctx.container,files=new Files(container),bucket=this.env.SNAPSHOTS,trees={};let primary;
+  const {stage,phases}=timedStages(report),container=this.ctx.container,files=new Files(container),bucket=this.env.SNAPSHOTS,trees={};let primary;
   try{
-   stage('start');container.start({image:container.images.build,instance:'standard-2',enableInternet:false});stage('lifetime');await container.setInactivityTimeout(20*60_000);await this.ctx.storage.setAlarm(Date.now()+20*60_000);
+   stage('start');container.start({image:container.images.build,instance:instanceType(this.env),enableInternet:false});stage('lifetime');await container.setInactivityTimeout(20*60_000);await this.ctx.storage.setAlarm(Date.now()+20*60_000);
    stage('outbound-binding');
    const deny=this.ctx.exports.BuildDeny({props:{}});stage('outbound-http');await container.interceptAllOutboundHttp(deny);stage('outbound-https');await container.interceptOutboundHttps('*',deny);
    for(const name of ['source',...(input.operation==='stamp'?['artifact']:['prior'])]){
     const tree=input[name];if(!tree?.ref?.startsWith(`snapshots/${input.sourceId}/`))throw fail('Metadata tree belongs to another source');
-    stage('manifest');const manifest=await readTreeManifest(bucket,tree);trees[name]=manifest;stage('mkdir');await files.mkdir(`/input/${name}`,{recursive:true});
-    stage('copy');await transferFiles(manifest.files,async(file,i)=>files.writeFile(`/input/${name}/${i}`,(await readTreeFile(bucket,tree,file)).body));
+    // Only the files the toolkit operation reads cross into the container; the
+    // driver indexes /input/<tree>/<i> by this filtered list.
+    stage('manifest');const manifest=await readTreeManifest(bucket,tree),selected=metadataInputFiles(input.operation,name,manifest.files);trees[name]={version:manifest.version,files:selected};stage('mkdir');await files.mkdir(`/input/${name}`,{recursive:true});
+    stage('copy');await transferFiles(selected,async(file,i)=>files.writeFile(`/input/${name}/${i}`,(await readTreeFile(bucket,tree,file)).body));
    }
    stage('control-input');
    await files.writeFile('/workspace/metadata-input.json',JSON.stringify({trees,sourceCommit:input.sourceCommit,systemId:input.systemId,preparedAt:input.preparedAt,note:input.note}));
    stage('control-exec');await execute(container,['node','/opt/timds/build-driver.mjs',input.operation]);
    stage('result');
    const result=await(await files.readFile('/workspace/metadata-result.json')).json();
-   if(input.operation==='stamp')return result;
-   stage('persist');return {version:result.version,files:await persistContainerTree(bucket,{sourceId:input.sourceId,operationId:input.publicationId,role:'release-metadata',manifest:result.manifest,readFile:index=>files.readFile(`/output/${index}`)})};
+   if(input.operation==='stamp')return {...result,phases:phases()};
+   stage('persist');const persisted=await persistContainerTree(bucket,{sourceId:input.sourceId,operationId:input.publicationId,role:'release-metadata',manifest:result.manifest,readFile:index=>files.readFile(`/output/${index}`)});
+   return {version:result.version,files:persisted,phases:phases()};
   }catch(error){primary=tag(error);throw primary;}finally{await cleanup(container,this.ctx.storage,stage,tag,primary);}
  }
- async execute(input,stage,tag){
-  assertInput(input);stage('manifest');const bucket=this.env.SNAPSHOTS,manifest=await readTreeManifest(bucket,input.files),byPath=new Map(manifest.files.map(file=>[file.path,file]));
+ async execute(input,report,tag){
+  const {stage,phases}=timedStages(report);assertInput(input);stage('manifest');const bucket=this.env.SNAPSHOTS,manifest=await readTreeManifest(bucket,input.files),byPath=new Map(manifest.files.map(file=>[file.path,file]));
   const inputText=async name=>{const file=byPath.get(name);if(!file||file.mode==='120000')throw fail(`Build source requires regular ${name}`);return(await readTreeFile(bucket,input.files,file)).text();};
   const packageText=await inputText('package.json'),lockText=await inputText('package-lock.json');
   const selector=await sha256(new TextEncoder().encode(packageText+'\0'+lockText));
   stage('dependencies');const cache=await unwrapNativeBuildResult(this.ctx.exports.DependencySandbox.getByName(selector).prepare({packageText,lockText}),'dependencies');
   const container=this.ctx.container,files=new Files(container);let primary;
   try{
-   stage('start');container.start({image:container.images.build,instance:'standard-2',enableInternet:false});stage('lifetime');await container.setInactivityTimeout(20*60_000);await this.ctx.storage.setAlarm(Date.now()+20*60_000);
+   stage('start');container.start({image:container.images.build,instance:instanceType(this.env),enableInternet:false});stage('lifetime');await container.setInactivityTimeout(20*60_000);await this.ctx.storage.setAlarm(Date.now()+20*60_000);
    stage('backup');
    const backup=new DirectoryBackup(container,this.ctx.exports.DirectoryBackupGateway,{binding:'SNAPSHOTS',prefix:'dependency-cache/objects/'});await backup.intercept();
    stage('outbound-binding');const deny=this.ctx.exports.BuildDeny({props:{}});stage('outbound-http');await container.interceptAllOutboundHttp(deny);stage('outbound-https');await container.interceptOutboundHttps('*',deny);
@@ -113,7 +129,7 @@ export class BuildSandbox extends DurableObject {
    const {artifactDirectory,...artifactManifest}=await(await files.readFile('/workspace/artifact-manifest.json')).json();
    if(!['dist','design-system/dist'].includes(artifactDirectory))throw fail('Controlled build artifact location is invalid');
    stage('persist');const artifact=await persistContainerTree(bucket,{sourceId:input.sourceId,operationId:input.publicationId,role:'build-artifact',manifest:artifactManifest,artifact:true,readFile:index=>files.readFile('/work/'+artifactDirectory+'/'+artifactManifest.files[index].path)});
-   return{files:artifact,cacheKey:cache.key,checks:{workspace:true,tokenReferences:true,mediaReferences:true,artifactReferences:true}};
+   return{files:artifact,cacheKey:cache.key,checks:{workspace:true,tokenReferences:true,mediaReferences:true,artifactReferences:true},phases:phases(),dependencyCache:cache.restored?'hit':'miss'};
   }catch(error){primary=tag(error);throw primary;}finally{await cleanup(container,this.ctx.storage,stage,tag,primary);}
  }
  async alarm(){if(this.ctx.container?.running)await this.ctx.container.destroy();}
