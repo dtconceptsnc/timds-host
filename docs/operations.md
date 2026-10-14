@@ -54,7 +54,16 @@ export TIMDS_ACCESS_AUD='<access-application-audience>'
 export TIMDS_DESIGNER_PRINCIPAL_ID=''
 export TIMDS_DESIGNER_MODEL='gpt-6-sol'
 export TIMDS_STUDIO_FRAME_ORIGINS='https://*.<workers-subdomain>.workers.dev'
+export TIMDS_LIVE_INSTANCE_TYPE='standard-3' # optional live container size
 ```
+
+`TIMDS_LIVE_INSTANCE_TYPE` sizes each live session container: `standard-1`
+(0.5 vCPU, 4 GiB), `standard-2` (1 vCPU, 6 GiB), `standard-3` (2 vCPU, 8 GiB,
+the default) or `standard-4` (4 vCPU, 12 GiB). A wake clones the fork, restores
+or installs `node_modules` and starts the dev server on that CPU, so a smaller
+instance wakes slower. Every running session counts against the account's
+concurrent container vCPU and memory limits; the diagnostics route described
+under "Verify and operate" reports the instance each session last woke on.
 
 The Worker name must match `[a-z0-9][a-z0-9-]{0,48}`. Both origins are exact
 origins without a path. Use the full HTTPS Access team URL. Before Access exists,
