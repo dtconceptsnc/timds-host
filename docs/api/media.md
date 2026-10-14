@@ -19,7 +19,7 @@ with the source UUID. UUIDs in child routes are resolved within that source.
 | POST | `/uploads/{upload}/parts` | One part capability; body `{partNumber}` |
 | POST | `/uploads/{upload}/complete` | Verified ready asset; multipart body `{parts:[{partNumber,etag}]}` |
 | DELETE | `/uploads/{upload}` | Durable cancellation; `pending:true` while a bounded transfer drains |
-| GET | `/{asset}/download` | Existing public URL or a five-minute private download capability |
+| GET | `/{asset}/download` | Canonical public URL or a five-minute private download capability |
 | POST | `/{asset}/archive` | Remove exactly owned media bytes and retain an archived audit row |
 
 Create accepts `filename`, MIME `contentType`, integer `bytes`, lowercase SHA256,
@@ -86,8 +86,16 @@ CORS and supports a single byte range. Private downloads remain no-store.
 
 Imported media reads come only from the source's exact active import stage.
 Native overlay rows retain archive/purge audit without rewriting that history.
-Existing public URLs remain unchanged. Private downloads and cleanup require an
-explicit bucket-to-binding map, for example:
+Public asset responses and download links derive from the current
+`TIMDS_PUBLIC_ORIGIN`, including rows saved before a domain change. They never
+advertise a retained provider URL. Native media uses its saved safe filename;
+imported media uses a sanitized original filename beneath
+`/media/<source>/<asset>/<filename>`. Public reads require the exact source,
+ready/public state, filename and storage ownership checks used for private reads.
+Stored rows and import history are not rewritten.
+
+Imported public delivery, private downloads and cleanup require an explicit
+bucket-to-binding map, for example:
 
 ```sh
 export TIMDS_MEDIA_LEGACY_BINDINGS='{"example-public-media":"MEDIA_LEGACY_PUBLIC"}'
@@ -95,8 +103,11 @@ export TIMDS_MEDIA_LEGACY_BINDINGS='{"example-public-media":"MEDIA_LEGACY_PUBLIC
 
 Each configured bucket becomes an R2 binding. Imported object ownership must
 match the archived source/client/SHA256 path exactly; unmapped or mismatched
-storage fails closed. Source deletion inventories exact asset IDs, stops
-pending transfers, removes those originals and verifies absence. Imported
+storage fails closed. Unbound assets have no advertised public URL and are
+omitted from the public MCP media list; the public download control returns 503
+until the binding is configured. Existing portal URLs remain legacy aliases,
+not the URLs advertised by host media controls. Source deletion inventories exact
+asset IDs, stops pending transfers, removes those originals and verifies absence. Imported
 source cleanup renews its existing administrator lease and portal consumer proof
 before each removal. No bucket-wide deletion or lock change occurs.
 

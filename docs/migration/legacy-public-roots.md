@@ -96,10 +96,11 @@ export TIMDS_LEGACY_PUBLIC_HOSTS='{"<primary-host>":"<source-uuid>","<mirror-hos
 ```
 
 Preserve `TIMDS_WORKER_NAME` and `TIMDS_PUBLIC_ORIGIN` from the installation's
-normal deployment environment. Deploying the companion does not register
-custom domains or change DNS. Domain attachment/routing is a separate operator
-step after fresh comparison and ownership checks. Keep deleted sources out of
-the map. The normal public origin still provides `/systems/...` and `/mcp`.
+normal deployment environment. Deploying the companion attaches the canonical
+`TIMDS_PUBLIC_ORIGIN` when it is a custom domain; it does not attach legacy
+source domains from this map. Their domain attachment/routing is a separate
+operator step after fresh comparison and ownership checks. Keep deleted sources
+out of the map. The normal public origin still provides `/systems/...` and `/mcp`.
 
 ## Verification so far
 

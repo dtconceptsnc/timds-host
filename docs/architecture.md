@@ -657,10 +657,10 @@ after rollback. Preserve both `v/` and `releases/` URL aliases.
 The issue's broad immutable-header wording conflicts with the existing public
 contract: current files use `public, max-age=300, must-revalidate`; pinned files
 use `public, max-age=31536000, immutable`. Preserve that distinction unless the
-product contract is explicitly changed. Consumer bundles and `bundle.json`
-keep exact bytes and root-relative URLs. Preserve intentional viewer rewriting
-only outside that consumer contract. Support GET/HEAD, type, ETag and missing or
-unpublished/archived-source behavior consistently.
+product contract is explicitly changed. Consumer bundle files keep exact bytes
+and hashes. The native `bundle.json` response projects its manifest, directory and file locations onto the configured
+public origin; its file paths, byte counts and hashes are unchanged. Support
+GET/HEAD, type, ETag and missing or unpublished/archived-source behavior consistently.
 
 Backfill requires every file, including local-only artifact bytes and media,
 not just manifests. Produce an inventory of source/version/path, byte count,
@@ -668,6 +668,13 @@ MIME type, digest and R2 key; verify it before switching serving. Keep the four
 live systems' domain aliases and immutable release identities. Twelve public
 reads are the acceptance smoke check; the full manifest digest comparison is
 the migration integrity check.
+
+Publication response URLs, including previously committed results, are derived
+from the current `TIMDS_PUBLIC_ORIGIN` and system identity. Retained
+`public_root_url` values do not override the advertised origin; their historical
+aliases remain a separate compatibility surface. Read projection does not modify
+stored publication receipts or event history. Media follows the same canonical
+origin through the [source media service](api/media.md).
 
 MCP uses `createMcpHandler`. Anonymous `/mcp` exposes only published reads:
 `describe_system`, `get_tokens`, `read_page` and `read_derived_layer` select

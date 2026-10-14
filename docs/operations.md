@@ -45,7 +45,7 @@ export TIMDS_WORKER_NAME='timds-example'
 export CLOUDFLARE_ACCOUNT_ID='<account-id>'
 export TIMDS_HOST_ORIGIN='https://timds-example.<workers-subdomain>.workers.dev'
 export TIMDS_STUDIO_ORIGIN='' # optional additional exact HTTPS origin for Studio
-export TIMDS_PUBLIC_ORIGIN='https://timds-example-public.<workers-subdomain>.workers.dev'
+export TIMDS_PUBLIC_ORIGIN='https://design.example.com'
 export TIMDS_AGENT_PUSH_QUEUE_ID='<queue-id-from-next-step>'
 export TIMDS_ARTIFACTS_BINDINGS='{"example":"ARTIFACTS_EXAMPLE"}'
 export TIMDS_ARTIFACTS_REST_FALLBACK='false'
@@ -199,6 +199,53 @@ The companion is `${TIMDS_WORKER_NAME}-public`. It has only the `PublicRoots`
 service binding and receives no API/OAuth/provider secrets. For redeployment,
 repeat the API command with the preserved environment and current secret file;
 deploy the companion when its own code/configuration changes.
+
+### Public-facing domains and client handoff
+
+`TIMDS_PUBLIC_ORIGIN` is the canonical client-facing address for published
+guides, release links, bundle manifests, media and anonymous `/mcp`. Set it to
+an owned HTTPS domain such as `https://design.example.com`, with no path, query,
+credentials or custom port. Use the same value in the API Worker and companion.
+The companion configuration attaches that hostname as a Cloudflare custom
+domain when it is deployed; the zone must already belong to the deployment
+account. Default provider domains and local development origins do not create
+custom-domain attachments.
+
+Keep the public domain separate from both the authenticated host and Studio.
+Published HTML must not share their OAuth origin. The companion configuration
+rejects either collision and rejects using the canonical public hostname as a
+legacy source alias. No customer domain belongs in committed configuration;
+record the selected origin in the private installation settings.
+
+To change an installation's public address, first review its existing routing
+and any consumers of the old address, update the private `TIMDS_PUBLIC_ORIGIN`,
+then explicitly deploy both Workers with that same value. An origin change
+does not create an alias for the old address. Verify anonymous current and
+pinned guide reads, data exports, bundle file URLs, media and `/mcp` through
+the new domain, and refresh Studio before handing links to clients. Neither a
+local build nor changing the example environment file performs this cutover.
+
+Studio's Deliverables view and copied handoff require HTTPS domain names and
+exclude `workers.dev`, `pages.dev`, `r2.dev` and IP addresses. A collection whose
+public root or captured release base still uses an infrastructure address shows
+a public-address setup state instead of share links. Provider-hosted file, media,
+design and page links are omitted. Studio never replaces hostnames by guessing:
+the configured public domain must actually route to the published collection.
+Disposable provider-domain deployments remain available for development, but
+are not client handoff destinations.
+
+Publication responses project their public root and versioned links onto this
+origin, including previously committed receipts, without changing stored audit
+history. Media controls likewise derive current URLs from source/asset identity;
+imported media needs the explicit legacy bucket binding described in
+[source media](api/media.md). No public handoff link falls back to the OAuth host
+or an imported source's old root. Studio admits files and guidance only on the
+advertised public root's origin.
+
+Release bytes and source-authored external URLs are not bulk-rewritten. During
+cutover, check any absolute links inside existing guidance or consumer files;
+publish an authorized source change if those dependencies use the retiring
+origin. Existing aliases must remain available while consumers still need them.
 
 ## Access, OAuth and administrator bootstrap
 

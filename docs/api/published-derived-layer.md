@@ -19,7 +19,9 @@ raw document bytes. Artifact-local media normalization reads only that immutable
 tree, never fetches authored URLs, and is bounded to 1,000 references. Imported
 media comes only from the source's exact active import stage, ready/public rows,
 and an explicit public-field allowlist. It is capped at 1,000 records with
-`truncated` and `limit`. Native sources without imported media return null.
+`truncated` and `limit`. The coordinator also includes ready/public native media.
+Media URLs use the current `TIMDS_PUBLIC_ORIGIN`; imported assets require an explicitly bound,
+owned storage object before a URL is advertised. See [source media](media.md).
 
 No authored source tree, storage reference, provider secret, grant, private media
 or raw import history is returned. Missing/deleted sources fail before reading
@@ -50,3 +52,10 @@ version directory; a current manifest does not claim that a same-label historica
 release has identical bytes. The MCP can advertise the version directory when
 its captured first-label descriptor matches, or for an explicit historical read.
 Guidance/design/media URL fields in MCP documents use that same captured base.
+
+All host-generated guide, version, document and bundle locations use the current
+`TIMDS_PUBLIC_ORIGIN`, rather than an imported source's retained public root.
+Published media responses follow the same origin. A domain change projects new
+locations on reads; it does not rewrite source-authored external links, stored
+release bytes or consumer file hashes. Verify those authored dependencies during
+the domain cutover, and publish a source change if they require migration.
