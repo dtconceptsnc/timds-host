@@ -21,7 +21,7 @@ export function publicOrigins({hostOrigin,publicOrigin}) {
 const idSegment=/^[a-z0-9][a-z0-9._-]*$/;
 export function publicSystemUrls(publicOrigin,systemId,label) {
   const root = `${origin(publicOrigin)}${publicSystemPath(systemId)}/`;
-  return {root,current:root,...(label?{version:`${root}v/${encodeURIComponent(label)}/`}:{})};
+  return {root,current:root,latest:`${root}v/latest/`,...(label?{version:`${root}v/${encodeURIComponent(label)}/`}:{})};
 }
 function decode(value) { try { return decodeURIComponent(value); } catch { throw fail(400,'Invalid public path'); } }
 export function safePublicPath(path) {
@@ -57,6 +57,9 @@ function route(rest,pathname) {
     file=pinned[2] ?? '';
   }
   file=file.split('/').map(decode).join('/');
+  // `latest` is a tag, never a release label: it names the current pointer,
+  // which publish moves forward and rollback moves back.
+  if (label==='latest') return {label:null,tag:'latest',file,needsSlash:!pathname.endsWith('/') && !file};
   return {label,file,needsSlash:!pathname.endsWith('/') && !file};
 }
 export async function publishedFile(readFile,bucket,version,path) {
@@ -81,6 +84,10 @@ export function createPublicRoots({resolvePublished,bucket,hostOrigin,publicOrig
           catch(error) { if (error?.statusCode!==404 || index===routes.length-1) throw error; }
         }
         if (source.system_id!==route.systemId || version.source_id!==source.id || route.label && version.version_label!==route.label) throw fail(404,'Published version not found');
+        // A tag answers with the immutable address it resolved to, so a page and
+        // every asset it then loads come from one release, and the consumer
+        // learns which version it received.
+        if (route.tag) return new Response(null,{status:307,headers:{Location:`${published}${publicSystemPath(route.systemId,version.version_label)}/${(route.file?safePublicPath(route.file):'').split('/').map(encodeURIComponent).join('/')}${url.search}`,'Cache-Control':'public, max-age=300, must-revalidate','X-TimDS-Version':version.version_label,'Access-Control-Allow-Origin':'*'}});
         if (route.needsSlash) return Response.redirect(`${published}${url.pathname}/${url.search}`,308);
         let path=route.file || version.artifact?.entryPath || 'index.html';
         // An entry below the artifact root needs its real directory as the

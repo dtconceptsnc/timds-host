@@ -33,13 +33,14 @@ export function publishedDocumentUrls(document,base){
 }
 /** Rewrite only manifest location fields. Its file paths, bytes, SHA256 values
  * and all physical bundle objects retain their original immutable identity. */
-export function publishedBundle(document,{base,manifestPath,versionBase=null}){
+export function publishedBundle(document,{base,manifestPath,versionBase=null,latestBase=null}){
   if(!document||typeof document!=='object'||Array.isArray(document)||!Array.isArray(document.files)||document.files.length>10000)throw fail(503,'Published bundle manifest is invalid');
   const directory=manifestPath.includes('/')?manifestPath.slice(0,manifestPath.lastIndexOf('/')+1):'';
   const prefix=`${base.replace(/\/$/,'')}/`,pathPrefix=directory?artifactPath(directory.slice(0,-1))+'/':'';
   const bundleDirectory=`${prefix}${pathPrefix}bundle`;
   return {...document,url:`${prefix}${artifactPath(manifestPath)}`,base:prefix.replace(/\/$/,''),directory:bundleDirectory,
     versioned:versionBase?`${versionBase.replace(/\/$/,'')}/${pathPrefix}bundle`:null,
+    latest:latestBase?`${latestBase.replace(/\/$/,'')}/${pathPrefix}bundle`:null,
     files:document.files.map(file=>({...file,url:`${bundleDirectory}/${artifactPath(file.path)}`}))};
 }
 export function rewriteNativeBrowser(text,type,prefix){

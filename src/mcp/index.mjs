@@ -16,6 +16,7 @@ const instructions='Read describe_system and the relevant tokens or page on ever
 const systemStamp=({source,version})=>({id:source.system_id,name:source.name||source.system_id,version:version.version_label,published:source.published_version||null,pinned:null,source:'published'});
 const pageDirectory=index=>(index?.pages||[]).map(page=>({id:page.id,title:page.title,url:page.url,view:page.view,...(page.eyebrow?{eyebrow:page.eyebrow}:{}),...(page.lede?{lede:page.lede}:{}),blockCount:page.blocks?.length||0}));
 const result=value=>({content:[{type:'text',text:JSON.stringify(value,null,2)}],structuredContent:value});
+const unpin=args=>args?.version==='latest'?{...args,version:undefined}:args;
 function toolError(error) {
   return {isError:true,content:[{type:'text',text:error?.statusCode>=400&&error.statusCode<500?error.message:'Published guidance is temporarily unavailable'}]};
 }
@@ -54,7 +55,7 @@ export function createReadServer({resolvePublished,bucket,readFile=readPublished
     if(!name.endsWith('.json'))return text;
     const value=JSON.parse(text);return name==='tokens.json'?value:publishedDocumentUrls(value,resolved.publicBase);
   };
-  const tool=(name,description,inputSchema,handler,annotations=readOnly)=>server.registerTool(name,{description,inputSchema:z.object(inputSchema),annotations},async args=>{try{return result(await handler(args));}catch(error){return toolError(error);}});
+  const tool=(name,description,inputSchema,handler,annotations=readOnly)=>server.registerTool(name,{description,inputSchema:z.object(inputSchema),annotations},async args=>{try{return result(await handler(unpin(args)));}catch(error){return toolError(error);}});
   tool('describe_system','Describe the current published Design System, its page directory, token summary, and immutable public URLs.',scope,async args=>{
     const resolved=await resolve(args);
     const [index,tokens,llms]=await Promise.all([document(resolved,'index.json',true),document(resolved,'tokens.json',true),document(resolved,'llms.txt',true)]);
@@ -76,7 +77,7 @@ export function createReadServer({resolvePublished,bucket,readFile=readPublished
     return {...header,...(format==='markdown'?{markdown:pageToMarkdown(page)}:{blocks:page.blocks||[]})};
   });
   server.registerTool('read_derived_layer',{description:'Read a bounded published derived layer and its exact source/version receipt from one current-pointer resolution. No authored source, private metadata or write authority is returned.',inputSchema:z.object({...scope,metadataOnly:z.boolean().optional()}),annotations:readOnly},async args=>{
-    try{const value=await readPublicDerivedLayer({resolved:await resolve(args,true),bucket,readFile,publicOrigin,metadataOnly:args.metadataOnly===true,pinned:Boolean(args.version)});return {content:[{type:'text',text:'Published derived layer and version receipt.'}],structuredContent:value};}
+    args=unpin(args);try{const value=await readPublicDerivedLayer({resolved:await resolve(args,true),bucket,readFile,publicOrigin,metadataOnly:args.metadataOnly===true,pinned:Boolean(args.version)});return {content:[{type:'text',text:'Published derived layer and version receipt.'}],structuredContent:value};}
     catch(error){return {...toolError(error),structuredContent:{error:{statusCode:[400,404,409].includes(error?.statusCode)?error.statusCode:503}}};}
   });
   const canWrite=hasMcpScope(actor,'timds:write');

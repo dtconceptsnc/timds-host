@@ -42,6 +42,22 @@ test('the system id may be spelled as path segments; the encoded form keeps work
   assert.equal((await handler.fetch(new Request('https://published.example/systems/nobody/core/'))).status, 404);
 });
 
+test('the latest tag redirects to the immutable address of the current pointer', async () => {
+  const fixture = await publishedFixture();
+  const handler = createPublicRoots({ ...config, ...fixture });
+  const plain = 'https://published.example/systems/example/core/';
+  assert.equal(publicSystemUrls(config.publicOrigin, 'example/core').latest, `${plain}v/latest/`);
+  const page = await handler.fetch(new Request(`${plain}v/latest/docs/index.html?x=1`));
+  assert.equal(page.status, 307);
+  assert.equal(page.headers.get('Location'), `${plain}v/1.0.0/docs/index.html?x=1`);
+  assert.equal(page.headers.get('Cache-Control'), 'public, max-age=300, must-revalidate', 'the tag itself moves; only its target is immutable');
+  assert.equal(page.headers.get('X-TimDS-Version'), '1.0.0');
+  assert.equal((await handler.fetch(new Request(`${plain}v/latest`))).headers.get('Location'), `${plain}v/1.0.0/`);
+  fixture.publish('2.0.0');
+  assert.equal((await handler.fetch(new Request(`${root}v/latest/docs/style.css`))).headers.get('Location'), `${plain}v/2.0.0/docs/style.css`, 'follows the pointer, from either id form');
+  assert.equal((await handler.fetch(new Request(`${plain}v/latest/docs/%2F..%2Fprivate`))).status, 400);
+});
+
 test('pinned version keeps serving after the current pointer moves', async () => {
   const fixture = await publishedFixture();
   const handler = createPublicRoots({ ...config, ...fixture });

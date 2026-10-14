@@ -17,7 +17,7 @@ export async function nativeViewerFile(file,{path,type,systemId,label,publicOrig
   const prefix=publicSystemPath(systemId,label);
   const text=new TextDecoder('utf-8',{fatal:true}).decode(original);
   const body=new TextEncoder().encode(manifest
-    ?JSON.stringify(publishedBundle(JSON.parse(text),{base:publicOrigin+prefix,manifestPath:path,versionBase:label?publicOrigin+prefix:null}),null,2)+'\n'
+    ?JSON.stringify(publishedBundle(JSON.parse(text),{base:publicOrigin+prefix,manifestPath:path,versionBase:label?publicOrigin+prefix:null,latestBase:publicOrigin+publicSystemPath(systemId,'latest')}),null,2)+'\n'
     :rewriteNativeBrowser(text,type,prefix));
   return {body:new Response(body).body,size:body.byteLength,sha256:await sha256(body)};
 }
