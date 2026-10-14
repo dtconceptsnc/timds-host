@@ -365,6 +365,64 @@
         }
       }
     },
+    "/api/timds/sessions/{sessionId}/diagnostics": {
+      "get": {
+        "operationId": "getSessionLiveDiagnostics",
+        "summary": "Get live runtime diagnostics for a session: last wake phase timings, dependency cache outcome, startup error and dev server state",
+        "description": "Reads the LiveSession record for a session the caller may read. It never starts a container; a sleeping or closed session still reports its last wake. Timings are durations in milliseconds; no command output, source content or credentials are returned.",
+        "tags": [
+          "Sessions"
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Session or draft UUID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-TimDS-API-Version",
+            "in": "header",
+            "required": false,
+            "description": "Omission means v1. Unsupported values fail with 400.",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current live runtime diagnostics.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveDiagnostics"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
     "/api/timds/sessions/{sessionId}/history": {
       "get": {
         "operationId": "getSessionHistory",
@@ -4751,6 +4809,83 @@
           "apiVersion",
           "session"
         ]
+      },
+      "LiveDiagnostics": {
+        "type": "object",
+        "description": "Live runtime diagnostics. Additional fields may be added.",
+        "properties": {
+          "state": {
+            "type": "string",
+            "description": "Runtime state: none, sleeping, starting, ready, running, failed, closing or closed."
+          },
+          "runner": {
+            "description": "The current or last Request run, or null."
+          },
+          "wakeStartedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the last cold wake began."
+          },
+          "wakePhases": {
+            "type": "object",
+            "description": "Milliseconds spent in each phase of the last cold wake. A failed wake keeps the phases it completed.",
+            "properties": {
+              "credential": {
+                "type": "integer"
+              },
+              "boot": {
+                "type": "integer"
+              },
+              "clone": {
+                "type": "integer"
+              },
+              "dependencies": {
+                "type": "integer"
+              },
+              "server": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer",
+                "description": "Wake start until the runtime reported ready or failed."
+              }
+            },
+            "additionalProperties": false
+          },
+          "dependencyCache": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "hit",
+                  "miss",
+                  "bypass",
+                  "restore-failed",
+                  "backup-failed"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Cache key digest."
+              }
+            }
+          },
+          "restoredRevision": {
+            "type": "string"
+          },
+          "startupError": {
+            "type": "string"
+          },
+          "commandFailure": {
+            "type": "object"
+          },
+          "dev": {
+            "type": "object",
+            "description": "Dev server supervisor status while the container runs."
+          }
+        },
+        "additionalProperties": true
       },
       "Event": {
         "type": "object",

@@ -57,12 +57,12 @@ export function createApi({ getCoordinator, provision, mcp }) {
     }
     const sourceRoute=path.match(/^\/api\/timds\/design-systems\/([^/]+)$/);
     if(sourceRoute&&method==='GET'){const row=await source(segment(sourceRoute[1]));return respond(await call(row.id,'sourceView'));}
-    let match=path.match(/^\/api\/timds\/sessions\/([^/]+)(?:\/(status|history|submit|update|close|join|claims))?$/);
+    let match=path.match(/^\/api\/timds\/sessions\/([^/]+)(?:\/(status|history|submit|update|close|join|claims|diagnostics))?$/);
     if (match) {
       const id=segment(match[1]), action=match[2] || 'snapshot';
-      const expected=['snapshot','status','history'].includes(action)?'GET':'POST';
+      const expected=['snapshot','status','history','diagnostics'].includes(action)?'GET':'POST';
       if(method!==expected)throw fail(405,`Use ${expected}`);
-      const operation=action==='claims'?'claim':action;
+      const operation=action==='claims'?'claim':action==='diagnostics'?'liveDiagnostics':action;
       return respond(await call(await located('session',id),operation,[id,...(method==='POST'&&action!=='close'?[input]:[])]));
     }
     match=path.match(/^\/api\/timds\/design-systems\/([^/]+)\/principals$/);

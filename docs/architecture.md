@@ -478,6 +478,16 @@ timers, so it still hibernates between messages.
   reports `ready` or `failed`. A fresh or resumed container reports `ready`
   without a frame open or a Request running. After a Request, the runtime syncs
   the frame's checkout before it reports `ready`.
+- **Wake timings.** Each cold wake records `wakeStartedAt` and `wakePhases`
+  on the `live` record: the milliseconds spent on `credential` (the
+  coordinator callback), `boot` (container start until its first command
+  answers), `clone`, `dependencies` (cache restore or `npm ci`, see below),
+  `server` (the supervisor answering) and `total` (wake start until the runtime
+  reported `ready` or `failed`). A failed wake keeps the phases it completed.
+  `GET /api/timds/sessions/{sessionId}/diagnostics` returns them with the rest of
+  `LiveSession.diagnostics()` for any caller who may read the session's status;
+  it never starts a container, and a sleeping session still reports its last
+  wake.
 
 Warm reload after a push stays inside the five-second budget without timers on
 the coordinator. A session push reaches `LiveSession.pushed` directly through
@@ -524,8 +534,9 @@ archive even when their lockfile matches.
   identity, or a runtime without the backup SDK all run plain `npm ci`.
 - **Diagnostics.** `LiveSession.diagnostics()` reports `dependencyCache` as
   `{state, key?}` with `state` one of `hit`, `miss`, `bypass`,
-  `restore-failed` or `backup-failed`. The key is a digest, never source
-  content.
+  `restore-failed` or `backup-failed`, next to the `wakePhases` timings above.
+  The key is a digest, never source content. The session diagnostics route
+  (`GET /api/timds/sessions/{sessionId}/diagnostics`) exposes it.
 
 The cache changes nothing about what is warm or for how long: it shortens the
 wake, and the idle rule above still decides when the container is destroyed.
