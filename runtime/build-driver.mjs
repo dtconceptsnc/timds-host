@@ -2,7 +2,7 @@
 import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {checkWorkspace} from '/opt/timds/node_modules/@dtconcepts/timds/src/core.mjs';
+import {checkWorkspace,loadWorkspace} from '/opt/timds/node_modules/@dtconcepts/timds/src/core.mjs';
 import {prepareMergeRelease} from '/opt/timds/node_modules/@dtconcepts/timds/templates/starter/scripts/prepare-merge-release.mjs';
 import {createPublicationStampFromFiles} from '/opt/timds/node_modules/@dtconcepts/timds/src/publication-snapshot.mjs';
 const command=process.argv[2];
@@ -13,9 +13,12 @@ if(command==='check'){
  async function visit(dir){for(const entry of await fs.readdir(dir,{withFileTypes:true})){const name=path.join(dir,entry.name);if(entry.isSymbolicLink()){const resolved=await fs.realpath(name);if(!resolved.startsWith('/work/'))throw new Error('Source link leaves workspace');}else if(entry.isDirectory())await visit(name);}}
  await visit('/work');
 }else if(command==='manifest'){
+ const workspace=await loadWorkspace('/work',{editing:true}),artifactDirectory=workspace.layout==='standalone'?'dist':workspace.layout==='embedded'?'design-system/dist':null;
+ const artifactRoot=artifactDirectory&&path.join('/work',artifactDirectory);
+ if(workspace.repoRoot!=='/work'||!artifactDirectory||artifactRoot!==path.join(workspace.designSystemRoot,'dist')||await fs.realpath(workspace.designSystemRoot)!==workspace.designSystemRoot)throw new Error('Unsupported artifact workspace layout');
  const files=[];let totalBytes=0;
  async function visit(relative=''){
-  const target=path.join('/work/dist',relative),stat=await fs.lstat(target);
+  const target=path.join(artifactRoot,relative),stat=await fs.lstat(target);
   if(stat.isSymbolicLink())throw new Error('Artifact contains a symbolic link');
   if(stat.isDirectory()){for(const name of (await fs.readdir(target)).sort())await visit(relative?`${relative}/${name}`:name);return;}
   if(!stat.isFile()||!relative||/[\\\x00-\x1f\x7f]/.test(relative)||relative.split('/').some(p=>!p||p==='.'||p==='..'))throw new Error('Artifact contains an unsafe file');
@@ -23,7 +26,7 @@ if(command==='check'){
   const bytes=await fs.readFile(target);files.push({path:relative,mode:'100644',size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')});
  }
  await visit();if(files.some(file=>file.path==='.timds-artifact.json'))throw new Error('Artifact contains reserved stamp');
- await fs.writeFile('/workspace/artifact-manifest.json',JSON.stringify({version:1,files,totalBytes}));
+ await fs.writeFile('/workspace/artifact-manifest.json',JSON.stringify({artifactDirectory,version:1,files,totalBytes}));
 }else if(command==='release-metadata'||command==='stamp'){
  const input=JSON.parse(await fs.readFile('/workspace/metadata-input.json','utf8'));
  const load=async name=>Promise.all(input.trees[name].files.map(async(file,i)=>({...file,content:await fs.readFile(`/input/${name}/${i}`)})));

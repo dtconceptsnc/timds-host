@@ -14,8 +14,14 @@ response status, media type, required response headers, nested schemas,
 formats, and error responses on every request. Unknown fields remain allowed
 as required by the v1 contract. Requests, submission listing, the source event
 feed, and public CSS use the same validating transport because toolkit 0.1.464
-does not expose client methods for those operations. All other operations call
+does not expose client methods for those operations. Other HTTP operations call
 `createHostProvider` from `@dtconcepts/timds/hosted`.
+
+The [designer MCP surface](../docs/api/designer-mcp.md) is exercised through a
+separate MCP transport against `/api/timds/mcp` using the same fixture and
+credentials. Its contribution receipts are checked alongside the HTTP flow;
+anonymous `/mcp` is checked on the publication's public origin. The harness
+does not require a local toolkit MCP server.
 
 The host has since extended the vendored contract additively with
 `GET /api/timds/design-systems/{source}/events?after=<seq>&limit=<n>`
@@ -42,8 +48,8 @@ npm test
 ```
 
 The unit suite checks real toolkit request dispatch, version/auth headers,
-schema rejection, error handling, public reads without credentials, and the
-write guard. It does **not** establish live-host conformance.
+schema rejection, error handling, public reads without credentials, the MCP
+transport and the write guard. It does **not** establish live-host conformance.
 
 See [CI instructions](../docs/ci.md) for automatic foundation checks and the
 manual GitHub Actions run requiring an explicit disposable fixture and named
@@ -62,8 +68,12 @@ gates, or directly write a database.
   schemaVersion 1), and have a working build, preview provider, publication
   worker, and designer Request runner.
 - Its owner identity must have a publisher grant for this fixture.
-- A second, distinct identity needs an identity token. The owner invites it to
-  the disposable draft; no publisher grant is needed for that member.
+- A second, distinct identity needs an identity token and must have no publisher
+  grant on the fixture. The owner invites it to the disposable session and draft;
+  this member proves that contributor checks do not require publication rights.
+- Both credentials must permit authenticated MCP contribution. OAuth bearer
+  tokens need `timds:read` and `timds:write`; scopes do not replace the fixture
+  grants above.
 - There must be no other open sessions or drafts on the fixture. No other
   process may write it during the run.
 - The host URL, immutable source ID, and immutable system ID must be selected
@@ -128,9 +138,26 @@ ordinary approved lifecycle after examining the results.
    `request_received` once (despite the retry), then `member_joined`,
    `request_started`, `request_submitted` with its submission ID and
    `submitted`, and no `request_failed`. `active-work` events carry `seq`.
+9. Authenticated MCP discovers the fixture, starts and recovers a session,
+   lists and reads authored files in bounded pages, invites the second member,
+   returns a credential-free Studio join link, and closes sessions and drafts.
+   Its draft file reads, claims, stale-update guards, main submission and retry,
+   publication preflight/build check, publication/polling and designer Request
+   creation/polling agree with the HTTP flow. Guarded MCP rollback rejects an
+   obsolete current version, reuses its durable receipt, and never reapplies an
+   old rollback when retried after HTTP restores the newer release. Anonymous
+   `/mcp` exposes published reads without contribution tools.
+10. MCP describes the authored workspace and bounded media catalogue, rejects
+    protected tooling, grouped token aggregates, agent configuration and new
+    symbolic links, and leaves source bytes unchanged after those refusals.
+    The member without a publisher grant runs a controlled check of the clean
+    initial fixture, reads its receipt and bounded private derived output, and
+    recovers the same completed check on retry. The check creates no submission
+    or publication. A later authored edit marks its receipt stale without
+    silently rebuilding under the old check ID; check history survives closure.
 
 Every created session is tracked for test teardown, including on failure.
-Publication attempts are recorded before transport, so a lost or malformed
+HTTP and MCP publication attempts are recorded before transport, so a lost or malformed
 response cannot erase evidence of a possibly accepted write. Accepted publication
 IDs are retained only when they match this fixture and a submission from this
 run, and duplicate receipts are drained once before cleanup. If a publication
@@ -163,3 +190,5 @@ baseline passed on October 13, 2026 (private operational record),
 with the exact deployed revision and redacted machine receipt recorded there.
 The new host still requires its own local and deployed runs. This receipt does
 not claim completion of the independent #60 acceptance or production migration.
+The MCP extension has not been accepted merely by passing this package's local
+unit suite; its authenticated deployed run is still owed.

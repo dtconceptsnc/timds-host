@@ -34,11 +34,17 @@ change, each as a card:
    current system (`POST /api/timds/sessions` with a per-card idempotency key,
    regenerated after each success) and opens the Studio for it. **Start from a
    draft…** opens the same dialog as the Sessions page.
-2. **Connect over MCP** (badged `preview`). The host's authenticated read MCP
-   endpoint, `<origin>/api/timds/mcp`, for reading the published system and
-   filing gaps as Requests, plus the toolkit commands that let an agent edit
-   (`timds auth login --oauth`, then `timds mcp`). The card says that editing
-   over MCP is not production-ready.
+2. **Connect over MCP** (badged `preview`). The host's authenticated MCP
+   endpoint, `<origin>/api/timds/mcp`, lets an agent read published guidance,
+   edit files in a hosted session, submit changes for review, or send a Request
+   to the designer. The client signs in with OAuth and requests read/write
+   access; existing Design System permissions still apply. Remote MCP also
+   supports checks, invitations and explicit publisher preflight, publication
+   and rollback, sharing Studio's host lifecycle. Deployed acceptance remains
+   owed; the card keeps its preview badge until that is verified. See
+   [designer MCP](../docs/api/designer-mcp.md) for the tools and
+   [contributor setup](../docs/contributing-design-systems.md) for installation,
+   connection and the complete workflow.
 3. **Edit locally with npm.** Install `@dtconcepts/timds` globally, log in
    with OAuth against this origin, `timds start <systemId>` to pull a new
    session to disk, `npm ci`, `timds dev`, and `timds submit` to send it back
