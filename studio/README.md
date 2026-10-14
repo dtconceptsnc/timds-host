@@ -7,11 +7,20 @@ registration, authorization-code flow with PKCE S256, and API v1; no portal
 backend or frontend is involved. API and WebSocket URLs always derive from
 `location.origin`, never from a host origin the server reports.
 
-The access token and one-time PKCE transaction live only in this tab's
-`sessionStorage`. The client requests read/write scopes without refresh tokens,
-clears the code from the URL before exchange, checks state and expiry, and sends
-the bearer token only to fixed same-origin API routes with redirects rejected.
-Disconnect clears this tab's Studio state. Rendered data uses DOM text.
+The access token, its rotating refresh token and the one-time PKCE transaction
+live only in this tab's `sessionStorage`; closing the tab ends the sign-in. The
+client requests `timds:read timds:write offline_access`, clears the code from
+the URL before exchange, checks state and expiry, and sends the bearer token
+only to fixed same-origin API routes with redirects rejected. The access token
+lasts about an hour. When a call finds it within five minutes of expiry, or
+already expired after the tab was in the background, the client first renews it
+through the same-origin `/token` refresh grant (one renewal in flight at a
+time, bound to the registered client and the API resource) and stores the
+rotated pair. The host issues refresh tokens for 30 days, so an open tab stays
+connected for up to that long. A refused refresh drops the refresh token and
+the tab asks the person to connect again once the access token expires; a
+`401` from the API disconnects at once. Disconnect clears this tab's Studio
+state. Rendered data uses DOM text.
 
 ## The dashboard
 
