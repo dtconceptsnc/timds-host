@@ -65,6 +65,19 @@ export function createRequestStore({storage, sourceId, catalog, store, clock = (
     get: id => get('requests',id),
     getJob: id => get('request_jobs',id),
     jobForRequest(id) {const row=sql.exec('SELECT row_json FROM request_jobs WHERE request_id=?',id).toArray()[0];return row?JSON.parse(row.row_json):null;},
+    // Called directly inside the session mutation queue, never through its RPC.
+    // Clear leases atomically so delayed dispatch cannot finish a cancelled job.
+    cancelSession(session) {return atomic(()=>{
+      if(session.source_id!==sourceId || session.status!=='closing')throw fail(409,'Session cleanup identity changed');
+      let cancelled=0;
+      for(const job of pending())if(target(job)===session.id || !target(job) && job.payload_json.requestId===session.originating_request_id){
+        const request=get('requests',job.payload_json.requestId),error='The session was closed before this Request finished';
+        put('request_jobs',{...job,status:'cancelled',error_message:error,failure_diagnostic:null,lease_token:null,lease_owner:null,lease_expires_at:null,updated_at:timestamp()});
+        put('requests',{...request,status:'cancelled',updated_at:timestamp()});
+        failed(job,'cancelled',error);cancelled++;
+      }
+      return {cancelled};
+    });},
     claim({jobId,leaseToken,leaseOwner,leaseSeconds = 300}) {return atomic(()=>{
       const job=get('request_jobs',jobId);
       if(!job || !uuid.test(leaseToken || '') || !leaseOwner || terminal(job.status) || job.status==='succeeded' || job.available_at>timestamp() || job.lease_expires_at && Date.parse(job.lease_expires_at)>clock())return null;
@@ -74,7 +87,7 @@ export function createRequestStore({storage, sourceId, catalog, store, clock = (
     validateLease: leased,
     finish(input) {return atomic(()=>{const job=leased(input),request=get('requests',job.payload_json.requestId);put('requests',{...request,status:'processed',updated_at:timestamp()});return put('request_jobs',{...job,status:'succeeded',result_json:input.result || {},error_message:null,failure_diagnostic:null,lease_token:null,lease_owner:null,lease_expires_at:null,updated_at:timestamp()});});},
     fail(input) {return atomic(()=>{const job=leased(input),saved=put('request_jobs',{...job,status:job.attempt_count>=job.max_attempts?'dead_letter':'queued',error_message:'Designer Request execution failed',failure_diagnostic:safeRequestDiagnostic(input.diagnostic),lease_token:null,lease_owner:null,lease_expires_at:null,available_at:new Date(clock()+60_000).toISOString(),updated_at:timestamp()});failed(job,saved.status,saved.error_message,saved.failure_diagnostic);return saved;});},
-    retry(jobId) {return atomic(()=>{const job=get('request_jobs',jobId);if(!job)throw fail(404,'Designer Request not found');if(!terminal(job.status))return job;return put('request_jobs',{...job,status:'queued',attempt_count:0,error_message:null,failure_diagnostic:null,lease_token:null,lease_owner:null,lease_expires_at:null,available_at:timestamp(),updated_at:timestamp()});});},
+    retry(jobId) {return atomic(()=>{const job=get('request_jobs',jobId);if(!job)throw fail(404,'Designer Request not found');if(!terminal(job.status))return job;const session=target(job)?get('sessions',target(job)):store.sessionForRequest(sourceId,job.payload_json.requestId);if(session && (['closing','closed','expired'].includes(session.status) || session.expires_at && Date.parse(session.expires_at)<=clock()))throw fail(410,'The target session is closed or expired');return put('request_jobs',{...job,status:'queued',attempt_count:0,error_message:null,failure_diagnostic:null,lease_token:null,lease_owner:null,lease_expires_at:null,available_at:timestamp(),updated_at:timestamp()});});},
     // A session that is busy at dispatch time puts its Request back without
     // consuming an attempt or writing request_failed; it keeps its FIFO place.
     requeue(input) {return atomic(()=>{const job=leased(input);return put('request_jobs',{...job,status:'queued',attempt_count:Math.max(0,job.attempt_count-1),lease_token:null,lease_owner:null,lease_expires_at:null,available_at:new Date(clock()+(input.delayMs ?? 5_000)).toISOString(),updated_at:timestamp()});});},

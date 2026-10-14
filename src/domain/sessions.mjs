@@ -51,7 +51,7 @@ export function validateTimdsChangeSet(input) {
 export const timdsSessionView = (row, source) => ({ id: row.id, systemId: source.system_id, sourceId: row.source_id, baseRevision: row.base_revision, status: row.status, expiresAt: row.expires_at, kind: row.kind || 'session', name: row.name || null, draftSessionId: row.draft_session_id || null, lastUpdateHash: row.last_update_hash || '', ownerPrincipalId: row.owner_principal_id, liveUrl: row.live_url || '', sandboxId: row.sandbox_id || '', liveState: row.live_state || 'stopped' });
 export const timdsSubmissionView = row => row && ({ id: row.id, sessionId: row.session_id, baseRevision: row.base_revision, headCommit: row.head_commit, reviewBranch: row.review_branch, previewUrl: row.preview_url, status: row.status, diff: row.diff_json, note: row.note, targetDraftSessionId: row.target_draft_session_id || null, publishedAt: row.published_at, publishedBy: row.published_by, createdAt: row.created_at });
 
-export function createDesignSystemSessions({ repository, authorization, cleanupAgentSession, onSessionReserved, onSessionStarted, store, now = () => Date.now() }) {
+export function createDesignSystemSessions({ repository, authorization, cleanupAgentSession, onSessionReserved, onSessionStarted, onSessionClosing, store, now = () => Date.now() }) {
   const ready = (source, actor, { closing = false } = {}) => {
     if (!source) throw fail(404, 'Design System not found');
     if (!closing && (source.archived_at || source.lifecycle_status !== 'ready')) throw fail(409, 'Design System is archived or deleting');
@@ -91,7 +91,7 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
   }
   async function activeWork(actor, id) {
     const source = await sourceFor(actor, id);
-    const rows = (await store.sessions(source.id)).filter(row => !row.expires_at || Date.parse(row.expires_at) > now());
+    const rows = (await store.sessions(source.id)).filter(row => row.status === 'closing' || !row.expires_at || Date.parse(row.expires_at) > now());
     const sessions = await Promise.all(rows.map(async row => ({ ...timdsSessionView(row, source), ...await details(actor, row, source) })));
     return { apiVersion: TIMDS_HOST_API_VERSION, sourceId: source.id, canPublish: await canPublish(source, actor), sessions, drafts: sessions.filter(row => row.kind === 'draft'), events: await store.events(source.id), publicationEvents: store.publications ? await store.publications(source.id) : [] };
   }
@@ -271,12 +271,16 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     const { session, source } = await owned(id, actor, true);
     if (!actor.system && !actor.operator && session.owner_principal_id !== actor.principalId && !await canPublish(source, actor)) throw fail(403, 'Only the session owner or a publisher may close a session');
     if (['closed','expired'].includes(session.status)) return output(session, source);
-    if (session.kind === 'draft' && store.sessions) for (const child of (await store.sessions(source.id)).filter(row => row.draft_session_id === id && ['starting','open','closing'].includes(row.status))) await close({ ...actor, system: true, operator: true }, child.id, expired);
     return leased(id, async (row, checkpoint) => {
       if (['closed','expired'].includes(row.status)) return output(row, source);
-      const closing = await checkpoint({ status: 'closing' });
       const submissions = await store.submissions(id);
       if (submissions.some(item => item.status === 'publishing')) throw fail(409, 'Publication is in progress; close after it finishes');
+      // Persist intent before touching children or remote resources. Recovery
+      // keeps an explicit close distinct from expiry, even across its deadline.
+      if (row.status === 'closing' && typeof row.close_expired === 'boolean') expired = row.close_expired;
+      const closing = await checkpoint({ status: 'closing', close_expired: expired });
+      if (onSessionClosing) await onSessionClosing(closing, source);
+      if (row.kind === 'draft' && store.sessions) for (const child of (await store.sessions(source.id)).filter(item => item.draft_session_id === id && ['starting','open','closing'].includes(item.status))) await close({ ...actor, system: true, operator: true }, child.id, expired);
       if (cleanupAgentSession) await cleanupAgentSession(closing, source);
       await repository.close(source, closing, { reviewBranches: submissions.map(item => item.review_branch) });
       await store.closeSubmissions(id);
@@ -289,7 +293,8 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     const results = [];
     for (const session of (await store.expired(new Date(now()).toISOString())).slice(0, limit)) {
       if (dryRun) { results.push({ id: session.id, status: 'due' }); continue; }
-      try { await close({ userId: null, tokenId: null, clientId: null, operator: true }, session.id, true); results.push({ id: session.id, status: 'expired' }); }
+      const expired = session.status === 'closing' && typeof session.close_expired === 'boolean' ? session.close_expired : Boolean(session.expires_at && Date.parse(session.expires_at) <= now());
+      try { const result = await close({ userId: null, tokenId: null, clientId: null, operator: true }, session.id, expired); results.push({ id: session.id, status: result.session.status }); }
       catch (error) { results.push({ id: session.id, status: 'failed', error: error.message }); }
     }
     return results;

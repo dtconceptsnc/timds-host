@@ -66,7 +66,40 @@ toolkit version in the snippets is the `TOOLKIT` constant at the top of
 `--portal-url <origin>`, because a toolkit that has no workspace yet does not
 otherwise know which host to call. Below the cards the
 Overview lists drafts and sessions, recent Requests and the last releases. The
-Request composer lives on the Sessions page.
+Request composer lives inside each session's Studio.
+
+## Sessions and drafts
+
+The Sessions page (`view=sessions` without a session ID) is a creation and
+management index. **New session** opens a dialog to choose the main Design System
+or an open shared draft. **New draft** asks for a draft name. Each successful
+creation enters that workspace's Studio. The dialogs capture the source and
+principal, retain the original name or draft selection and idempotency key after
+an ambiguous response, and verify the returned session belongs to that source.
+A late response cannot navigate a different signed-in identity; if the dialog
+was closed, a notice directs the caller back to the Sessions list.
+
+Separate Working sessions and Shared drafts lists show status, membership and
+**Open Studio**. There is no Request composer, recent Requests panel, runner
+strip, claim list or live-preview link on this page. Send Requests, watch the
+agent and review changes inside Studio. The Overview retains its existing
+activity and contribution options.
+
+Callers with the host's `canManage` permission also see **Destroy…** beside each
+active workspace. This action calls `POST /api/timds/sessions/:id/close` directly;
+it does not first open the workspace or wake its runtime. Confirmation captures
+the exact session ID, source ID and principal, and explains loss of unpublished
+edits, removal of the working repository and review branches, stopping the live
+runtime, and retention of published releases and recorded history. Destroying a
+draft also destroys every active child session based on it. Pending submissions
+are closed while their records remain.
+
+Studio's rail uses the same destroy action. While cleanup runs, its controls
+show a busy state. A matching `closed` or `expired` receipt removes the workspace
+from the active lists and returns an affected open Studio to Sessions. Cleanup
+errors stay visible in the dialog and management row; **Retry destroy…** retries
+the same workspace. A host `closing` state remains listed, including after reload,
+until cleanup is confirmed. Every attempt rechecks authority on the host.
 
 ## Creating and deleting Design Systems
 
@@ -165,9 +198,9 @@ invite. Studio never pulls source files and refuses the snapshot, `update`,
 `submit` and `claims` session routes before a request leaves the tab. Working
 areas (claims) are shown read-only; agents declare them as they edit.
 
-- **Requests.** The composer (on the Sessions page) targets a new session
-  (default), an open session or a shared draft from `active-work` (only those the caller owns or publishes,
-  as the host requires). Each Request keeps its UUID, original prompt and target
+- **Requests.** The composer inside Studio targets that open session or shared
+  draft (only for its owner or a publisher, as the host requires). Each Request
+  keeps its UUID, original prompt and target
   across an ambiguous response or retry; a later returned session cannot change
   that target. A Request row shows the runner strip (queued, starting, running,
   submitting, submitted) and `queued, N ahead`. While it is queued or running,
@@ -202,7 +235,7 @@ areas (claims) are shown read-only; agents declare them as they edit.
   this session's submissions with the stage strip, **Publish…** (publishers
   only) and **Preview ↗**, the session's people (the member list, plus
   **Invite…** for the owner and publishers while the session is open), the
-  session's state (status, live view, designer, queue, expiry) and close.
+  session's state (status, live view, designer, queue, expiry) and **Destroy…**.
   Working areas, other sessions and the release history stay on the dashboard
   pages. The top bar carries the dashboard breadcrumb, the current release label, the presence avatars and
   the feed indicator. Review still embeds each submission's Preview with the
@@ -237,8 +270,8 @@ areas (claims) are shown read-only; agents declare them as they edit.
   prefix>` folder. `timds join` takes a session id in every release and the
   link from toolkit `0.1.473`, the release `TOOLKIT` names; an older pin
   would break this row. Membership grants session access, not
-  publication. There is no principal picker; owners and publishers can still
-  close sessions.
+  publication. There is no principal picker; owners, publishers and host
+  administrators can destroy sessions using the host's current permissions.
 
 ## Loading and busy states
 
@@ -249,7 +282,7 @@ styles, so the CSP is unchanged):
   control and sets `aria-busy="true"` until the action settles. A busy button
   keeps its label and shows a small spinner after it. This covers Connect,
   Refresh, Send Request, Open Studio (in the new-session dialog), Create draft,
-  Publish, Build check only, Restore release, Close and every retry. The
+  Publish, Build check only, Restore release, Destroy and every retry. The
   Connect button stays busy while the browser leaves for `/authorize`.
 - **Pages.** The static shell shows "Checking your sign-in…" until `app.js`
   decides between the welcome page and the workspace. A workspace without

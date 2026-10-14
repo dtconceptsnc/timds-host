@@ -88,7 +88,7 @@ store adapter initially, and the existing camelCase wire views at the boundary.
 | `server/design-system-public-urls.mjs` | Inject a configured URL builder; preserve imported configured domain aliases and slug mappings. |
 
 The session factory already accepts
-`createDesignSystemSessions({store,repository,authorization,cleanupAgentSession,onSessionReserved,onSessionStarted,now})`.
+`createDesignSystemSessions({store,repository,authorization,cleanupAgentSession,onSessionReserved,onSessionStarted,onSessionClosing,now})`.
 The optional legacy `getSupabaseAdmin` default must not be reached in the host.
 Its methods cover start, snapshot, submit, update, status, history, close, join,
 claim, active work, drafts, token preview and cleanup. The store's `eligible`
@@ -139,7 +139,7 @@ other long network work. The proposed tables are:
 | Table | Key state and constraints |
 | --- | --- |
 | `source_state` | Single source identity; lifecycle; authority epoch; current version/digest/commit; monotonic pointer generation and next queue sequence. |
-| `sessions` | UUID, source, owner, kind/name, base/head revisions, status, expiry, operation lease/generation, fork identity, originating Request. Unique owner/idempotency key locally, backed by a global D1 reservation; draft names remain unique while starting/open/closing. |
+| `sessions` | UUID, source, owner, kind/name, base/head revisions, status, expiry, durable close/expiry intent, operation lease/generation, fork identity, originating Request. Unique owner/idempotency key locally, backed by a global D1 reservation; draft names remain unique while starting/open/closing. |
 | `members` | Unique `(session_id,principal_id)` and role. Membership does not replace active principal/source access. |
 | `claims` | Unique `(session_id,principal_id,kind)`, bounded path/key payload and expiry. Expired claims never block a write. |
 | `submissions` | UUID, session/source, request hash, immutable base/head, diff/note, review branch/preview status, integration/publication state. Unique session/request hash. |
@@ -247,10 +247,22 @@ document its meaning rather than returning a fake portal job.
 
 One alarm per coordinator schedules the earliest durable deadline. Each wake
 handles a bounded batch, commits progress, and schedules the next deadline.
-Close first fences new writes, then idempotently revokes tokens and removes
-forks/review branches/previews, then records completion. Missing remote
-resources count as cleaned; transient errors retain obligations. Expiry and
-Queue replay must use the same close path. No periodic timers are required.
+Close checks the session's publication lease before any resource teardown,
+then persists `closing` and whether completion means explicit close or expiry.
+The direct `onSessionClosing` hook cancels bound pending Request jobs in the
+same coordinator mutation queue. A draft is fenced before closing its child
+sessions; its fork remains until child cleanup succeeds. Cleanup stops the live
+runtime, removes its host and subscription, idempotently revokes tokens and
+removes forks/review branches/previews, then records completion. Audit,
+submissions and published releases remain retained.
+
+Missing remote resources count as cleaned; transient errors retain obligations.
+Every `closing` row is due for coordinator cleanup, including drafts without
+an expiry, and remains visible in active work until cleanup completes. Alarms
+retry within five seconds, respecting any still-valid session/publication
+lease. The persisted close intent preserves `closed` versus `expired` even if
+recovery crosses the original expiry deadline. Expiry and Queue replay use
+the same close path. No periodic timers are required.
 
 ## D1 authority, audit and revocation protocol
 

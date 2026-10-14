@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHE
 CREATE TABLE IF NOT EXISTS publication_events(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS outbox(sequence INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 `;
-const sessionPatchFields = ['fork_repository','token_id','base_revision','last_update_hash','status','expires_at','live_url','sandbox_id','live_state'];
+const sessionPatchFields = ['fork_repository','token_id','base_revision','last_update_hash','status','expires_at','close_expired','live_url','sandbox_id','live_state'];
 const blockingPublication = row => !['published','superseded'].includes(row.status) &&
   (row.status !== 'failed' || Object.hasOwn(row.checkpoints_json, 'sourceCommit') || row.checkpoints_json.staged === true);
 const busy = () => fail(409, 'This session is busy; retry when its current operation finishes');
@@ -228,7 +228,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     }),
     findFork: name => list('sessions',"json_extract(row_json,'$.fork_repository')=?",[name])[0] || null,
     sessionForRequest(id,requestId) { own(id); const result = list('sessions',"json_extract(row_json,'$.originating_request_id')=?",[requestId]); if (result.length > 1) throw fail(409, 'Request has more than one session'); return result[0] || null; },
-    expired: now => list('sessions',"status IN ('starting','open','closing') AND expires_at IS NOT NULL AND expires_at<=?",[now],'expires_at,id','LIMIT 100'),
+    expired: now => list('sessions',"status='closing' OR (status IN ('starting','open') AND expires_at IS NOT NULL AND expires_at<=?)",[now],'expires_at,id','LIMIT 100'),
     async members(id) { return Promise.all(list('members','session_id=?',[id]).map(async row => ({...row,principal:await principalDisplay(row.principal_id)}))); },
     member: (id,principal) => list('members','session_id=? AND principal_id=?',[id,principal])[0] || null,
     async addMember(input,event = {}) {

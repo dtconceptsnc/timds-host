@@ -17,6 +17,26 @@ the same authorized Request POST can retry a terminal job. `nextAlarm()` must
 participate in the coordinator's next-alarm calculation, including delayed
 retries and leased work that can outlive an isolate.
 
+Closing a session or draft cancels its bound queued, leased and running
+dispatch jobs, including the Request that created an untargeted session. The
+session closing hook calls the Request store directly inside the existing
+coordinator mutation queue; it must not recursively enter that queue. Each
+cancellation clears the job lease and records `request_failed` with status
+`cancelled`, so a delayed dispatch cannot finish or requeue the cancelled job.
+Already completed dispatch receipts remain retained; closing the live runtime
+stops any model work still running behind them. Child session jobs are cancelled
+as draft cleanup reaches each child.
+
+New Requests and POST retries that would dispatch work to a closing, closed or
+expired session return 410 before reserving or scheduling work. An exact POST
+replay of an already-succeeded job returns the original acceptance receipt even
+after the target closes, without scheduling it again. Current source, principal
+and target authority still apply, and the reservation validates every immutable
+input before returning that receipt. A terminal untargeted job cannot be retried
+once its bound session closes. Read the existing Request for its durable status;
+completion recovery of an already-dispatched Request still checks current caller
+authority and exact submission identity.
+
 D1 reserves each Request UUID globally before the coordinator inserts its
 Request and job in one SQLite transaction. The reservation preserves source,
 requester, prompt and target session, with an agent principal selected by the

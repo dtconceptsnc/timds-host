@@ -562,7 +562,7 @@
       "post": {
         "operationId": "closeSession",
         "summary": "Close a session and release all owned resources",
-        "description": "Owner or publisher may close; operators may perform cleanup. Idempotent. Retains audit while removing live runtime, fork, credentials, subscriptions and previews. Closing a draft first closes its child sessions.",
+        "description": "Owner or publisher may close; operators may perform cleanup. Idempotent. Retains audit while removing live runtime, fork, credentials, subscriptions and previews. Publication in progress prevents teardown. Closing fences new work and cancels bound pending Requests; a draft is fenced before closing its child sessions. Interrupted cleanup resumes through coordinator alarms, including drafts without expiry. Closing rows remain in active-work until cleanup completes.",
         "tags": [
           "Sessions"
         ],
@@ -1335,6 +1335,7 @@
       "post": {
         "operationId": "closeDraft",
         "summary": "Close a draft and its child sessions",
+        "description": "Uses the session close lifecycle: publication protection, a durable closing fence, cancellation of pending Requests, child cleanup and alarm retries. Use the draft UUID to retry interrupted cleanup; audit remains retained.",
         "tags": [
           "Drafts"
         ],
@@ -1410,7 +1411,7 @@
       "post": {
         "operationId": "startDesignerRequest",
         "summary": "Start an instruction in a new or existing live session",
-        "description": "Reuse requestId and identical prompt/target for retries. Targeting a session or draft requires owner/publisher authority; the runner joins that exact live sandbox. A Request that names a session or draft is queued behind earlier Requests for that session and starts only when its runner is idle (submitted, failed, conflicted, sleeping or closed); a busy session never consumes an attempt or fails the Request.",
+        "description": "Reuse requestId and identical prompt/target for retries. Targeting a session or draft requires owner/publisher authority; the runner joins that exact live sandbox. Closing, closed or expired targets reject new Requests and retries that would dispatch work with 410. An exact replay of an already-succeeded job returns its original acceptance receipt without scheduling work, including after target closure; current authority and immutable-input checks still apply. Read the Request for its retained status. A Request that names a session or draft is queued behind earlier Requests for that session and starts only when its runner is idle (submitted, failed, conflicted, sleeping or closed); a busy session never consumes an attempt or fails the Request.",
         "tags": [
           "Requests"
         ],
