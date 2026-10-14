@@ -3,6 +3,7 @@ import {validateRun,sessionIdPattern,safeTaskDiagnostics} from './policy.mjs';
 import {dependencyCacheKey,INSTALL_FLAGS} from '../src/build/cache.mjs';
 // watchMs bounds one coordinator keepalive: a viewer re-sends `viewing` every five minutes.
 const idleMs=10*60_000, taskMs=12*60_000, watchMs=30*60_000;
+const liveInstanceTypes=new Set(['standard-1','standard-2','standard-3','standard-4']);
 const ca='/etc/cloudflare/certs/cloudflare-containers-ca.crt';
 const trust={NODE_EXTRA_CA_CERTS:ca,GIT_SSL_CAINFO:ca,CURL_CA_BUNDLE:ca,SSL_CERT_FILE:ca};
 const active=run=>run && ['starting','running','submitting'].includes(run.state);
@@ -51,6 +52,9 @@ export class LiveSessionRuntime {
   // Viewer wake: returns at once; the alarm performs the same wake() a frame fetch or Request does.
   async requestWake(){const live=this.record();if(!live||['closed','closing'].includes(live.state)||(live.expiresAt&&Date.parse(live.expiresAt)<=Date.now())||this.ctx.container?.running)return this.status();this.save({wakeRequested:true});await this.ctx.storage.setAlarm(Date.now());return this.status();}
   // requestId names the Request a running/failed task belongs to; the host verifies its binding.
+  // Live container size. Clone, dependency restore and the dev server are CPU
+  // bound, so the default is two vCPUs; TIMDS_LIVE_INSTANCE_TYPE overrides it.
+  instanceType(){const value=this.env?.TIMDS_LIVE_INSTANCE_TYPE;return liveInstanceTypes.has(value)?value:'standard-3';}
   // Wake phase durations in milliseconds for diagnostics(): credential, boot,
   // clone, dependencies, server (supervisor answering) and total (wake start
   // until the runtime reported ready or failed). Durations only, never output.
@@ -92,9 +96,9 @@ export class LiveSessionRuntime {
     this.assertOpen();const container=this.ctx.container;if(!container)throw new Error('Missing live container');
     if(container.running){if(this.record().pendingPush&&!active(this.run()))await this.sync();await this.ensureServer();return;}
     try {
-    const wakeStartedAt=Date.now();let since=wakeStartedAt;
-    this.save({startupError:null,restoredRevision:null,syncedRevision:null,dependencyCache:null,wakeStartedAt,wakePhases:{}});await this.report('starting');const credential=await this.credential();this.phase('credential',since);
-    since=Date.now();container.start({image:container.images.agent,instance:'standard-1',enableInternet:false});await container.setInactivityTimeout(this.idleTimeout());
+    const wakeStartedAt=Date.now(),instance=this.instanceType();let since=wakeStartedAt;
+    this.save({startupError:null,restoredRevision:null,syncedRevision:null,dependencyCache:null,wakeStartedAt,wakePhases:{},instance});await this.report('starting');const credential=await this.credential();this.phase('credential',since);
+    since=Date.now();container.start({image:container.images.agent,instance,enableInternet:false});await container.setInactivityTimeout(this.idleTimeout());
     // The backup host must be registered before the catch-all intercept takes every later hostname.
     const backup=this.dependencyBackup();if(backup)await backup.intercept();
     await this.intercept(credential);
@@ -191,7 +195,7 @@ export class LiveSessionRuntime {
       const probe={mode:input.fetchProbe,ok:output.exitCode===0,elapsedMs:Date.now()-started,exitCode:Number.isInteger(output.exitCode)?output.exitCode:null,...(output.exitCode===0?{}:{reason:commandFailureReason(output.stderr),packDetails:packFailureDetails(output.stderr)})};
       this.save({fetchProbe:probe});await this.touch();return this.diagnostics();
     });
-    const result={...this.status(),...(this.record()?.restoredRevision?{restoredRevision:this.record().restoredRevision}:{}),...(this.record()?.startupError?{startupError:this.record().startupError}:{}),...(this.record()?.commandFailure?{commandFailure:this.record().commandFailure}:{}),...(this.record()?.dependencyCache?{dependencyCache:this.record().dependencyCache}:{}),...(this.record()?.wakeStartedAt?{wakeStartedAt:new Date(this.record().wakeStartedAt).toISOString()}:{}),...(this.record()?.wakePhases?{wakePhases:this.record().wakePhases}:{}),...(typeof this.record()?.originMatches==='boolean'?{originMatches:this.record().originMatches}:{})};if(!this.ctx.container?.running)return result;
+    const result={...this.status(),...(this.record()?.restoredRevision?{restoredRevision:this.record().restoredRevision}:{}),...(this.record()?.startupError?{startupError:this.record().startupError}:{}),...(this.record()?.commandFailure?{commandFailure:this.record().commandFailure}:{}),...(this.record()?.dependencyCache?{dependencyCache:this.record().dependencyCache}:{}),...(this.record()?.instance?{instance:this.record().instance}:{}),...(this.record()?.wakeStartedAt?{wakeStartedAt:new Date(this.record().wakeStartedAt).toISOString()}:{}),...(this.record()?.wakePhases?{wakePhases:this.record().wakePhases}:{}),...(typeof this.record()?.originMatches==='boolean'?{originMatches:this.record().originMatches}:{})};if(!this.ctx.container?.running)return result;
     if(this.record()?.fetchProbe)result.fetchProbe=this.record().fetchProbe;
     if(this.record()?.commandFailure?.reason==='pack'&&!active(this.run())){const checked=await(await this.ctx.container.exec(['git','fsck','--connectivity-only','--no-reflogs'],{cwd:'/workspace/repo',env:trust})).output();result.connectivityOk=checked.exitCode===0;}
     try{const file=await new this.Files(this.ctx.container).readFile('/workspace/task/live-dev-status.json');if(file.size>16*1024)return result;const value=JSON.parse(await file.text());

@@ -4930,6 +4930,10 @@
           "runner": {
             "description": "The current or last Request run, or null."
           },
+          "instance": {
+            "type": "string",
+            "description": "Container size the last wake used, for example standard-3."
+          },
           "wakeStartedAt": {
             "type": "string",
             "format": "date-time",

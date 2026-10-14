@@ -487,7 +487,10 @@ timers, so it still hibernates between messages.
   `GET /api/timds/sessions/{sessionId}/diagnostics` returns them with the rest of
   `LiveSession.diagnostics()` for any caller who may read the session's status;
   it never starts a container, and a sleeping session still reports its last
-  wake.
+  wake. The record also keeps `instance`, the container size the wake used:
+  `TIMDS_LIVE_INSTANCE_TYPE` (`standard-1` to `standard-4`, default
+  `standard-3`, two vCPUs), since clone, dependency restore and the dev server
+  are all CPU bound.
 
 Warm reload after a push stays inside the five-second budget without timers on
 the coordinator. A session push reaches `LiveSession.pushed` directly through
