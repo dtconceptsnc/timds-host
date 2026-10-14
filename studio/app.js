@@ -43,6 +43,12 @@ async function responseJson(response){let body;try{body=await response.json();}c
 // Humans cannot write: these session routes (snapshot pull, update, submit,
 // claims) belong to agents and are refused before any request leaves the tab.
 const agentOnly=/^\/api\/timds\/sessions\/[^/]+(?:\/(?:update|submit|claims))?$/;
+function safeDeletionBlockers(value){
+  const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  if(!value||typeof value!=='object'||!uuid.test(value.sourceId||'')||!Number.isSafeInteger(value.total)||value.total<1||!Array.isArray(value.sessions))return null;
+  const sessions=value.sessions.slice(0,50).filter(row=>row&&uuid.test(row.sessionId||'')&&['starting','open','closing','closed','expired'].includes(row.status)&&['missing_creation_receipt','fork_identity_changed'].includes(row.reason)&&['review_session','operator_review'].includes(row.action)).map(row=>({sessionId:row.sessionId,status:row.status,reason:row.reason,action:row.action==='review_session'&&row.reason==='missing_creation_receipt'&&['open','closing'].includes(row.status)?'review_session':'operator_review'}));
+  return{sourceId:value.sourceId,total:Math.max(value.total,sessions.length),sessions};
+}
 async function api(route,body){
   if(!route.startsWith('/api/timds/')||route.includes('://'))throw new Error('Invalid API route');
   if(agentOnly.test(route.split('?')[0]))throw new Error('Studio does not edit source files. Send a Request and the agent makes the change.');
@@ -56,7 +62,7 @@ async function api(route,body){
   // A 409 with conflicts is a receipt, not a failure: callers render it read-only.
   const conflict=response.status===409&&Array.isArray(result?.conflicts);
   if(!result)throw new Error('The host returned an unreadable response. Refresh status before retrying.');
-  if(!response.ok&&!conflict){const error=new Error(result.error_description||result.error||`The host returned HTTP ${response.status}`);error.status=response.status;throw error;}
+  if(!response.ok&&!conflict){const error=new Error(result.error_description||result.error||`The host returned HTTP ${response.status}`);error.status=response.status;const blockers=response.status===409?safeDeletionBlockers(result.deletionBlockers):null;if(blockers)error.deletionBlockers=blockers;throw error;}
   if(result.apiVersion!==1)throw new Error('This Studio requires TimDS API version 1');
   return result;
 }
@@ -201,43 +207,75 @@ async function refreshWorkspace(){
 function manageSystemsView(){
   const head=pageHead('ADMINISTRATION','Design Systems','Create a system, review its lifecycle, or follow a deletion through cleanup.',button('Create Design System',()=>createSystemDialog(),'primary'));
   if(!state.management)return node('div',{},head,state.managementError?panel('The catalog could not load',title('p',state.managementError,{class:'error-text'}),button('Try again',()=>loadManagement(true))):loadingBlock('Loading Design Systems…'));
-  const data=state.management,pending=pendingCreations(),pendingIds=new Set(pending.map(row=>row.input.sourceId));
+  const data=state.management,pending=pendingCreations().filter(record=>!data.systems.some(system=>system.id===record.input.sourceId&&['deleting','deleted'].includes(system.lifecycleStatus))),pendingIds=new Set(pending.map(row=>row.input.sourceId)),active=data.systems.filter(system=>system.lifecycleStatus!=='deleted'),deleted=data.systems.filter(system=>system.lifecycleStatus==='deleted');
+  const systemRow=system=>{const organization=data.organizations.find(row=>row.id===system.organizationId),deletionId=system.deletionOperationId||read(deletionKey(system.id))?.operationId,isDeleted=system.lifecycleStatus==='deleted';return node('article',{class:'panel system-management-row'},node('div',{class:'card-title'},node('div',{},title('h2',system.name),title('p',system.systemId,{class:'mono help break'})),badge(isDeleted?'deleted':system.archivedAt?'archived':system.lifecycleStatus)),title('p',organization?.name||'Design System organization',{class:'card-meta'}),node('div',{class:'actions'},system.lifecycleStatus==='ready'&&!system.archivedAt?button('Open system',()=>{location.hash=new URLSearchParams({source:system.id,view:'overview'}).toString();},'small'):null,!isDeleted&&organization?button('Rename organization…',()=>renameOrganizationDialog(organization),'small'):null,['provisioning','ready'].includes(system.lifecycleStatus)&&system.creationPending&&system.creationInput&&!pendingIds.has(system.id)?button(system.lifecycleStatus==='ready'?'Finish setup':'Resume creation',()=>createSystemDialog({input:system.creationInput}),'small'):null,system.lifecycleStatus==='provisioning'&&!system.creationInput?title('p','Provisioning is incomplete. Resume it from the original administrative workflow.',{class:'help'}):null,deletionId?button(isDeleted?'Deletion receipt':'Review deletion',()=>deleteSystemDialog(system,deletionId),'small'):['ready','provisioning'].includes(system.lifecycleStatus)?button('Delete…',()=>deleteSystemDialog(system),'small danger'):null));};
   return node('div',{class:'system-management'},head,state.managementError?title('p',state.managementError,{class:'error-text'}):null,...pending.map(record=>panel(`Creation in progress: ${record.input.name}`,title('p','This tab saved the original details. Review status or retry the same creation.',{class:'help'}),button('Resume creation',()=>createSystemDialog(record),'small'))),
-    data.systems.length?node('div',{class:'list'},...data.systems.map(system=>{const organization=data.organizations.find(row=>row.id===system.organizationId),deletionId=system.deletionOperationId||read(deletionKey(system.id))?.operationId;return node('article',{class:'panel system-management-row'},node('div',{class:'card-title'},node('div',{},title('h2',system.name),title('p',system.systemId,{class:'mono help break'})),badge(system.archivedAt?'archived':system.lifecycleStatus)),title('p',organization?.name||'Design System organization',{class:'card-meta'}),node('div',{class:'actions'},system.lifecycleStatus==='ready'&&!system.archivedAt?button('Open system',()=>{location.hash=new URLSearchParams({source:system.id,view:'overview'}).toString();},'small'):null,['provisioning','ready'].includes(system.lifecycleStatus)&&system.creationPending&&system.creationInput&&!pendingIds.has(system.id)?button(system.lifecycleStatus==='ready'?'Finish setup':'Resume creation',()=>createSystemDialog({input:system.creationInput}),'small'):null,system.lifecycleStatus==='provisioning'&&!system.creationInput?title('p','Provisioning is incomplete. Resume it from the original administrative workflow.',{class:'help'}):null,deletionId?button(system.lifecycleStatus==='deleted'?'Deletion receipt':'Review deletion',()=>deleteSystemDialog(system,deletionId),'small'):['ready','provisioning'].includes(system.lifecycleStatus)?button('Delete…',()=>deleteSystemDialog(system),'small danger'):null));})):panel('Create your first Design System',title('p','Start with a hosted starter, then open a session and ask the designer to make it yours.',{class:'help'}),button('Create Design System',()=>createSystemDialog(),'primary')));
+    active.length?node('div',{class:'list'},...active.map(systemRow)):panel(deleted.length?'No active Design Systems':'Create your first Design System',title('p','Start with a hosted starter, then open a session and ask the designer to make it yours.',{class:'help'}),button('Create Design System',()=>createSystemDialog(),'primary')),
+    deleted.length?node('details',{class:'details'},title('summary',`Deleted Design Systems (${deleted.length})`),node('div',{class:'list'},...deleted.map(systemRow))):null);
+}
+function renameOrganizationDialog(organization){
+  if(!state.principal?.admin)throw new Error('An active administrator is required.');
+  const principal=state.principal,id=organization.id,expectedName=organization.name,host=node('div'),name=node('input',{id:'organization-name',required:true,maxLength:200,value:expectedName}),errorText=title('p','',{class:'error-text',role:'alert'});
+  const visible=()=>state.principal===principal&&host.isConnected&&dialog.open;
+  const rename=button('Save name',async()=>{
+    if(!visible()||!name.reportValidity())return;
+    const desiredName=name.value.trim();if(!desiredName)throw new Error('Enter a name for the organization.');errorText.textContent='';
+    try{
+      const result=await api(`/api/timds/admin/organizations/${enc(id)}/name`,{name:desiredName,expectedName});
+      if(!visible())return;
+      if(result.organization?.id!==id||result.organization.name!==desiredName)throw new Error('No matching organization was returned. Refresh the catalog before retrying.');
+      const row=state.management?.organizations.find(item=>item.id===id);if(row)row.name=result.organization.name;
+      dialog.close();if(state.view==='systems')renderShell();notice('Organization name updated.');
+    }catch(error){if(visible())errorText.textContent=error.message;}
+  },'primary');
+  host.append(title('p','This changes the organization name for every Design System that uses it, including systems sharing an existing organization. Organization IDs and Design System identities remain fixed.'),field('Organization name',name),errorText,node('div',{class:'dialog-actions'},cancelButton(),rename));
+  const dialog=showDialog('Rename organization',host);
 }
 async function createSystemDialog(record=null){
   if(!state.principal?.admin)throw new Error('An active administrator is required.');
-  await loadManagement();
+  const principal=state.principal,dialog=$('#dialog'),dialogContent=dialog.firstChild,dialogOpen=dialog.open,unchanged=()=>state.principal===principal&&dialog.firstChild===dialogContent&&dialog.open===dialogOpen;
+  try{await loadManagement();}catch(error){if(unchanged())throw error;return;}
+  if(!unchanged())return;
   if(record){rememberCreation(record);return creationProgress(record);}
-  const data=state.management,name=node('input',{id:'system-name',required:true,maxLength:200,placeholder:'Example design system'}),systemId=node('input',{id:'system-slug',required:true,maxLength:300,placeholder:'example/design-system'}),organization=node('select',{id:'system-organization'},...data.organizations.map(row=>node('option',{value:row.id},row.name))),organizationName=node('input',{id:'new-organization-name',required:true,maxLength:200,placeholder:'Example organization'}),namespace=node('select',{id:'system-namespace'},...data.namespaces.map(value=>node('option',{value},value)));
+  const data=state.management,name=node('input',{id:'system-name',required:true,maxLength:200,placeholder:'Example design system'}),systemId=node('input',{id:'system-slug',required:true,maxLength:300,placeholder:'example/design-system'}),organization=node('select',{id:'system-organization'},node('option',{value:''},'New organization'),...data.organizations.map(row=>node('option',{value:row.id},row.name))),namespace=[...data.namespaces].sort()[0]||'';
   let edited=false;systemId.addEventListener('input',()=>edited=true);name.addEventListener('input',()=>{if(!edited)systemId.value=name.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,300);});
   const create=button('Create Design System',async()=>{
-    if(!name.reportValidity()||!systemId.reportValidity()||!data.organizations.length&&!organizationName.reportValidity())return;
-    if(!name.value.trim()||!data.organizations.length&&!organizationName.value.trim())throw new Error('Enter a name for the Design System and organization.');
+    if(state.principal!==principal||!name.isConnected||!dialog.open)return;
+    if(!name.reportValidity()||!systemId.reportValidity())return;
+    if(!name.value.trim())throw new Error('Enter a name for the Design System.');
     if(!/^[a-z0-9][a-z0-9._-]*(\/[a-z0-9][a-z0-9._-]*)*$/.test(systemId.value))throw new Error('Use a lowercase system ID with letters, numbers, periods, underscores or hyphens, optionally separated by slashes.');
-    if(!namespace.value)throw new Error('No repository namespace is configured. Ask the host operator to configure one.');
-    const organizationId=data.organizations.length?organization.value:crypto.randomUUID(),input={operationId:crypto.randomUUID(),sourceId:crypto.randomUUID(),organizationId,name:name.value.trim(),systemId:systemId.value,namespace:namespace.value};
-    const saved={input,...(!data.organizations.length?{organization:{id:organizationId,name:organizationName.value.trim()}}:{})};rememberCreation(saved);creationProgress(saved);await submitCreation(saved);
-  },'primary');create.disabled=!data.namespaces.length;
-  showDialog('Create a Design System',title('p','Create a hosted starter with a working guide and the foundation for your first release. You receive read, edit and publish access.'),field('Name',name),field('System ID',systemId,'A unique public identifier: lowercase letters, numbers, periods, underscores and hyphens, optionally separated by slashes.'),data.organizations.length?field('Organization',organization):field('Organization name',organizationName,'Create the first organization for this host.'),field('Repository namespace',namespace,'The host uses a configured namespace for the new system.'),!data.namespaces.length?title('p','No repository namespace is configured. Ask the host operator to configure one before creating a system.',{class:'error-text'}):null,node('div',{class:'dialog-actions'},cancelButton(),create));
+    if(!namespace)throw new Error('No repository namespace is configured. Ask the host operator to configure one.');
+    if(organization.value&&!data.organizations.some(row=>row.id===organization.value))throw new Error('Select an available organization.');
+    const organizationId=organization.value||crypto.randomUUID(),input={operationId:crypto.randomUUID(),sourceId:crypto.randomUUID(),organizationId,name:name.value.trim(),systemId:systemId.value,namespace};
+    const saved={input,...(!organization.value?{organization:{id:organizationId,name:input.name}}:{})};rememberCreation(saved);creationProgress(saved);await submitCreation(saved);
+  },'primary');create.disabled=!namespace;
+  showDialog('Create a Design System',title('p','Create a hosted starter with a working guide and the foundation for your first release. You receive read, edit and publish access.'),field('Name',name),field('System ID',systemId,'A unique public identifier: lowercase letters, numbers, periods, underscores and hyphens, optionally separated by slashes. Technical identities stay fixed after creation.'),field('Organization',organization,'A new organization takes the Design System name. You can rename the organization later.'),!namespace?title('p','No repository namespace is configured. Ask the host operator to configure one before creating a system.',{class:'error-text'}):null,node('div',{class:'dialog-actions'},cancelButton(),create));
 }
-function creationProgress(record,message=''){const host=node('div',{class:'creation-progress'});record.host=host;const input=record.input;showDialog(`Creating ${input.name}`,host);renderCreation(record,message);}
+function creationProgress(record,message=''){const host=node('div',{class:'creation-progress'});record.host=host;record.principal=state.principal;const input=record.input;record.dialog=showDialog(`Creating ${input.name}`,host);renderCreation(record,message);}
+const creationVisible=(record,host=record.host)=>state.principal===record.principal&&record.host===host&&host?.isConnected&&record.dialog?.open;
 function renderCreation(record,message=''){
-  if(!record.host?.isConnected)return;
-  const input=record.input;replaceContent(record.host,title('p','These original details are saved in this tab. A retry continues the same creation.'),node('dl',{class:'lifecycle-facts'},title('dt','Name'),title('dd',input.name),title('dt','System ID'),title('dd',input.systemId),title('dt','Operation'),title('dd',input.operationId)),message?title('p',message,{class:'help',role:'status'}):null,record.busy?loadingLine('Creating the repository and starter… this can take a moment.'):null,record.error?title('p',record.error,{class:'error-text',role:'alert'}):null,node('div',{class:'dialog-actions'},button('Close',()=>$('#dialog').close()),record.busy?null:button('Refresh status',async()=>{try{const result=await api(`/api/timds/admin/systems/${enc(input.sourceId)}/provision/${enc(input.operationId)}`);renderCreation(record,result.provision.status==='completed'?'The starter exists. Resume creation to finish access and open it.':`Provisioning ${result.provision.status}. Resume creation to continue.`);}catch(error){if(error.status===404||error.status===409){renderCreation(record,'No complete receipt is available yet. Retry the saved creation to continue.');return;}throw error;}},'quiet'),record.busy?null:button('Resume creation',()=>submitCreation(record),'primary')));
+  if(!creationVisible(record))return;
+  const input=record.input;replaceContent(record.host,title('p','These original details are saved in this tab. A retry continues the same creation.'),node('dl',{class:'lifecycle-facts'},title('dt','Name'),title('dd',input.name),title('dt','System ID'),title('dd',input.systemId),title('dt','Operation'),title('dd',input.operationId)),message?title('p',message,{class:'help',role:'status'}):null,record.busy?loadingLine('Creating the repository and starter… this can take a moment.'):null,record.error?title('p',record.error,{class:'error-text',role:'alert'}):null,node('div',{class:'dialog-actions'},button('Close',()=>record.dialog.close()),record.busy?null:button('Refresh status',()=>refreshCreation(record),'quiet'),record.busy?null:button('Resume creation',()=>submitCreation(record),'primary')));
+}
+async function refreshCreation(record){
+  if(!creationVisible(record))return;const host=record.host,input=record.input;
+  try{
+    const result=await api(`/api/timds/admin/systems/${enc(input.sourceId)}/provision/${enc(input.operationId)}`);if(!creationVisible(record,host))return;
+    renderCreation(record,result.provision.status==='completed'?'The starter exists. Resume creation to finish access and open it.':`Provisioning ${result.provision.status}. Resume creation to continue.`);
+  }catch(error){if(!creationVisible(record,host))return;if(error.status===404||error.status===409){renderCreation(record,'No complete receipt is available yet. Retry the saved creation to continue.');return;}throw error;}
 }
 async function submitCreation(record){
-  if(record.busy)return;const principalId=state.principal.id;record.busy=true;record.error=null;renderCreation(record);
+  if(record.busy||!creationVisible(record))return;const principal=state.principal,host=record.host,dialog=record.dialog;record.busy=true;record.error=null;renderCreation(record);
   try{
     if(record.organization)await api('/api/timds/admin/organizations',record.organization);
-    if(state.principal?.id!==principalId)return;
-    const result=await api('/api/timds/admin/systems/create',record.input);if(state.principal?.id!==principalId)return;
+    if(state.principal!==principal)return;
+    const result=await api('/api/timds/admin/systems/create',record.input);if(state.principal!==principal||!creationVisible(record,host))return;
     if(result.source?.id!==record.input.sourceId)throw new Error('No matching creation receipt was returned. Refresh status before retrying.');
     forgetCreation(record.input.operationId);state.management=null;
     const source={id:result.source.id,systemId:record.input.systemId,name:record.input.name};state.systems=[...state.systems.filter(row=>row.id!==source.id),source];
-    $('#dialog').close();notice(`${source.name} is ready. Open a session to start creating.`);location.hash=new URLSearchParams({source:source.id,view:'overview'}).toString();
-  }catch(error){if(state.principal?.id===principalId){record.error=error.message;notice('Creation needs attention. The original details are saved for retry.',true);}}
-  finally{record.busy=false;if(state.principal?.id===principalId)renderCreation(record);}
+    if(creationVisible(record,host)){dialog.close();notice(`${source.name} is ready. Open a session to start creating.`);location.hash=new URLSearchParams({source:source.id,view:'overview'}).toString();}
+  }catch(error){if(state.principal===principal){record.error=error.message;if(creationVisible(record,host))notice('Creation needs attention. The original details are saved for retry.',true);}}
+  finally{record.busy=false;if(creationVisible(record,host))renderCreation(record);}
 }
 const deletionActive=receipt=>['queued','running'].includes(receipt?.status);
 function retireFromWorkspace(sourceId){state.systems=state.systems.filter(row=>row.id!==sourceId);if(state.source?.id===sourceId){feedStop();state.source=null;state.work=null;state.delivery=null;state.session=null;state.generation++;void manageSystems();}else if(state.view==='systems')renderShell();}
@@ -252,39 +290,47 @@ async function deleteSelectedSystem(){
 }
 async function deleteSystemDialog(system,operationId=null){
   if(!state.principal?.admin)throw new Error('An active administrator is required.');
-  const saved=read(deletionKey(system.id)),id=operationId||system.deletionOperationId||saved?.operationId||crypto.randomUUID(),host=node('div',{class:'deletion-progress'}),tracker={system,operationId:id,host,principalId:state.principal.id,receipt:null,reading:false};
+  const saved=read(deletionKey(system.id)),id=operationId||system.deletionOperationId||saved?.operationId||crypto.randomUUID(),host=node('div',{class:'deletion-progress'}),tracker={system,operationId:id,host,principalId:state.principal.id,receipt:null,blockers:null,reading:false};
   save(deletionKey(system.id),{operationId:id});showDialog(`Delete ${system.name}`,host);host.append(loadingLine('Reading the system’s cleanup review…'),node('div',{class:'dialog-actions'},cancelButton()));await readDeletion(tracker,true);
 }
 function deletionVisible(tracker){return state.principal?.id===tracker.principalId&&tracker.host.isConnected&&$('#dialog').open;}
 async function readDeletion(tracker,prepare=false){
   if(tracker.reading||!deletionVisible(tracker))return;tracker.reading=true;clearTimeout(tracker.timer);
   try{
-    let receipt;const base=`/api/timds/admin/systems/${enc(tracker.system.id)}/deletion`;
-    try{receipt=await api(`${base}/${enc(tracker.operationId)}`);}catch(error){if(!prepare||error.status!==404)throw error;receipt=await api(base,{operationId:tracker.operationId});}
-    if(!deletionVisible(tracker))return;tracker.receipt=receipt;tracker.error=null;
+    let receipt,prepared=false;const base=`/api/timds/admin/systems/${enc(tracker.system.id)}/deletion`;
+    try{receipt=await api(`${base}/${enc(tracker.operationId)}`);}catch(error){if(!prepare||error.status!==404)throw error;receipt=await api(base,{operationId:tracker.operationId});prepared=true;}
+    if(!deletionVisible(tracker))return;tracker.receipt=receipt;tracker.error=null;if(prepared||receipt.status!=='awaiting_confirmation')tracker.blockers=null;
     if(receipt.status!=='awaiting_confirmation'){const row=state.management?.systems.find(row=>row.id===tracker.system.id);if(row){row.deletionOperationId=receipt.operationId;row.lifecycleStatus=receipt.status==='completed'?'deleted':'deleting';}retireFromWorkspace(tracker.system.id);}
     renderDeletion(tracker);
     if(deletionActive(receipt))tracker.timer=setTimeout(()=>void readDeletion(tracker),3000);
     else if(receipt.status==='completed'){void loadManagement(true).catch(error=>notice(error.message,true));}
-  }catch(error){if(deletionVisible(tracker)){tracker.error=error.message;renderDeletion(tracker);if(deletionActive(tracker.receipt)&&![401,403].includes(error.status))tracker.timer=setTimeout(()=>void readDeletion(tracker),5000);}}
+  }catch(error){if(deletionVisible(tracker)){tracker.error=error.message;if(error.deletionBlockers?.sourceId===tracker.system.id)tracker.blockers=error.deletionBlockers;renderDeletion(tracker);if(deletionActive(tracker.receipt)&&![401,403].includes(error.status))tracker.timer=setTimeout(()=>void readDeletion(tracker),5000);}}
   finally{tracker.reading=false;}
+}
+function deletionBlockerPanel(tracker){
+  const blockers=tracker.blockers;if(!blockers||blockers.sourceId!==tracker.system.id)return null;
+  const sourceId=tracker.system.id,href='#'+new URLSearchParams({source:sourceId,view:'sessions'}).toString();
+  const sessionsLink=()=>node('a',{href,class:'button small',onclick:event=>{event.preventDefault();if(!deletionVisible(tracker))return;if(!state.systems.some(row=>row.id===sourceId)){tracker.error='This Design System is unavailable in Sessions. Ask a host operator to resolve its lifecycle state before managing these workspaces.';renderDeletion(tracker);return;}$('#dialog').close();if(location.hash===href)void route().catch(loadFailure);else location.hash=href;}},'Go to Sessions');
+  return panel('Workspaces blocking deletion',title('p',`${blockers.total} workspace${blockers.total===1?' needs':'s need'} attention before this Design System can be deleted.`,{class:'help'}),blockers.total>blockers.sessions.length?title('p',`Showing ${blockers.sessions.length} of ${blockers.total} affected workspaces.`,{class:'help'}):null,
+    ...blockers.sessions.map(row=>{const known=state.source?.id===sourceId?(state.work?.sessions||[]).find(item=>item.id===row.sessionId):null;return node('article',{class:'work-card'},node('div',{class:'card-title'},title('h3',known?sessionLabel(known):`Workspace ${short(row.sessionId)}`),badge(row.status)),title('p',row.sessionId,{class:'mono help break'}),title('p',row.reason==='missing_creation_receipt'?'Missing ownership receipt: this workspace’s repository has no immutable creation receipt, so system deletion cannot remove it automatically.':'Repository identity changed: the current repository does not match its recorded ownership receipt.',{class:'help'}),row.action==='review_session'?node('div',{},title('p','Go to Sessions and explicitly destroy this workspace there. Then return here and retry the deletion review; prepare a new review if its impact changed.',{class:'help'}),node('div',{class:'actions'},sessionsLink())):title('p','A host operator must verify ownership and resolve this blocker. Studio will not remove or adopt the repository.',{class:'help'}));}),!blockers.sessions.length?title('p','No valid workspace details were returned. Ask a host operator to inspect the deletion blocker.',{class:'help'}):null);
 }
 function renderDeletion(tracker){
   if(!deletionVisible(tracker))return;
   const receipt=tracker.receipt,host=tracker.host,close=button('Close',()=>$('#dialog').close()),refresh=button('Refresh status',()=>readDeletion(tracker));
-  if(!receipt){replaceContent(host,title('p',tracker.error||'No deletion review was returned.',{class:'error-text',role:'alert'}),node('div',{class:'dialog-actions'},close,button('Retry review',()=>readDeletion(tracker,true))));return;}
+  if(!receipt){replaceContent(host,title('p',tracker.error||'No deletion review was returned.',{class:'error-text',role:'alert'}),deletionBlockerPanel(tracker),node('div',{class:'dialog-actions'},close,button('Retry review',()=>readDeletion(tracker,true))));return;}
   const phase={inspect:'Review the impact before deleting.',stop_work:'Stopping sessions, Requests and live runtimes.',remove_media:'Removing source media and waiting for temporary upload capabilities to expire.',remove_repositories:'Removing session forks and the source repository.',remove_preview:'Removing the owned Preview Worker and Builds connection.',revoke_authority:'Revoking Design System grants.',verify:'Verifying cleanup and retained history.',completed:'Deletion is complete. The Design System identity remains permanently retired.'}[receipt.phase]||'Cleanup is in progress.';
-  const counts=receipt.counts||{},typed=node('input',{id:'delete-repository',autoComplete:'off',spellcheck:false}),confirmable=['awaiting_confirmation','failed'].includes(receipt.status)&&!receipt.requiresConsumerProof;
+  const counts=receipt.counts||{},typed=node('input',{id:'delete-repository',autoComplete:'off',spellcheck:false}),confirmable=['awaiting_confirmation','failed'].includes(receipt.status)&&!receipt.requiresConsumerProof&&!tracker.blockers;
   const confirm=button(receipt.status==='failed'?'Resume deletion':'Permanently delete',async()=>{
+    if(tracker.blockers)throw new Error('Resolve the workspace blockers and refresh the deletion review before confirming.');
     if(typed.value!==receipt.repository.name)throw new Error('Type the exact repository name shown in the review.');
-    try{tracker.receipt=await api(`/api/timds/admin/systems/${enc(tracker.system.id)}/deletion/${enc(receipt.operationId)}/confirm`,{impactHash:receipt.impactHash,typedRepository:typed.value});tracker.error=null;retireFromWorkspace(tracker.system.id);renderDeletion(tracker);tracker.timer=setTimeout(()=>void readDeletion(tracker),1000);}catch(error){tracker.error=error.message;renderDeletion(tracker);}
+    try{tracker.receipt=await api(`/api/timds/admin/systems/${enc(tracker.system.id)}/deletion/${enc(receipt.operationId)}/confirm`,{impactHash:receipt.impactHash,typedRepository:typed.value});tracker.error=null;tracker.blockers=null;retireFromWorkspace(tracker.system.id);renderDeletion(tracker);tracker.timer=setTimeout(()=>void readDeletion(tracker),1000);}catch(error){tracker.error=error.message;if(error.deletionBlockers?.sourceId===tracker.system.id)tracker.blockers=error.deletionBlockers;renderDeletion(tracker);}
   },'danger');confirm.disabled=true;typed.addEventListener('input',()=>{confirm.disabled=typed.value!==receipt.repository.name;});
   replaceContent(host,node('div',{class:'title-line'},badge(receipt.status),title('span',phase,{class:'help',role:'status'})),deletionActive(receipt)?loadingLine('The host is cleaning up in the background. You can close this dialog and return to its receipt.'):null,
     title('p','Deletion permanently removes the source repository, mutable session forks, live runtimes, owned Preview resources and access grants. It stops authoring and public serving as soon as confirmed.'),
     node('dl',{class:'lifecycle-facts'},title('dt','Repository'),title('dd',`${receipt.repository.namespace}/${receipt.repository.name}`),...Object.entries({Sessions:counts.sessions,'Session forks':counts.forks,Publishers:counts.publishers,'Active Requests':counts.requests,...(counts.mediaAssets!==undefined?{'Media assets':counts.mediaAssets}:{}),...(counts.mediaUploads!==undefined?{'Media uploads':counts.mediaUploads}:{})}).flatMap(([label,value])=>[title('dt',label),title('dd',String(value??0))])),
     panel('Retained after deletion',title('p','Immutable release bytes and audit history remain retained. Downloads and cached copies cannot be recalled. The source UUID cannot be reused.',{class:'help'}),receipt.retention?.mediaOriginals==='removed_scoped'?title('p','Source media uploads and original assets are removed. Immutable release copies remain retained.',{class:'help'}):title('p','Immutable media bytes remain retained.',{class:'help'})),
     receipt.requiresConsumerProof&&receipt.status!=='completed'?panel('External consumer verification required',title('p','An imported system needs its original backend to fence consumer attachments and supply a fresh signed verification. An operator must complete or resume deletion through that backend. Studio cannot supply this proof.',{class:'help'}),snippet([`Source: ${receipt.sourceId}`,`Operation: ${receipt.operationId}`,`Impact: ${receipt.impactHash}`])):null,
-    receipt.error?title('p',receipt.error,{class:'error-text',role:'alert'}):null,tracker.error?title('p',tracker.error,{class:'error-text',role:'alert'}):null,
+    receipt.error?title('p',receipt.error,{class:'error-text',role:'alert'}):null,tracker.error?title('p',tracker.error,{class:'error-text',role:'alert'}):null,deletionBlockerPanel(tracker),
     confirmable?field(`Type ${receipt.repository.name} to ${receipt.status==='failed'?'resume deletion':'confirm'}`,typed,'This confirmation permanently retires the Design System and cannot be undone.'):null,
     node('div',{class:'dialog-actions'},close,refresh,receipt.status==='awaiting_confirmation'?button('Prepare a new review',async()=>{const operationId=crypto.randomUUID();save(deletionKey(tracker.system.id),{operationId});await deleteSystemDialog(tracker.system,operationId);},'quiet'):null,confirmable?confirm:null,receipt.status==='completed'?button('Retained history',async()=>{const history=await api(`/api/timds/admin/systems/${enc(tracker.system.id)}/deletion/${enc(receipt.operationId)}/history`);if(deletionVisible(tracker)){const existing=host.querySelector('.retained-history');existing?.remove();host.append(node('div',{class:'retained-history'},details('Retained session and audit descriptors',history)));}},'quiet'):null));
 }

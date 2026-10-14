@@ -105,9 +105,11 @@ until cleanup is confirmed. Every attempt rechecks authority on the host.
 
 Active host administrators see **Create Design System** and **Manage Design
 Systems** in the sidebar. The management page uses the paginated administrative
-system and organization catalogs; it includes provisioning, archived, deleting
-and permanently deleted systems that are absent from the ordinary workspace
-catalog. Non-administrators keep the existing access-only empty state. An
+system and organization catalogs; it includes provisioning, archived and deleting
+systems that are absent from the ordinary workspace catalog. Completed deletions
+are tucked under a collapsed **Deleted Design Systems** section at the bottom;
+expand it to read deletion receipts. They remain absent from ordinary navigation.
+Non-administrators keep the existing access-only empty state. An
 administrator with no systems lands on the first-system creation state.
 
 The selected system's **Overview** also has a **Delete Design System…** button
@@ -117,9 +119,11 @@ system's existing deletion receipt or a new cleanup review; switching systems,
 leaving Overview or changing identity during the read cancels opening the dialog.
 The same review is available through **Manage Design Systems → Delete…**.
 
-Creation asks for a name, unique lowercase system ID, organization and one of
-the host's configured repository namespaces. When no active organization exists,
-the same flow first creates an organization with a stable UUID. The host creates
+Creation asks for a name and unique lowercase system ID. **Organization** defaults
+to **New organization**, named after the system, and also offers existing active
+organizations. New organizations receive a stable UUID saved before submission.
+The namespace is automatic and hidden: the first configured namespace in the
+sorted administrative catalog is captured in the saved creation input. The host creates
 the pinned starter and repository, then grants the creating administrator read,
 write and publish access. Studio does not upload or edit starter files. A
 successful creation selects the system and opens its Overview.
@@ -135,6 +139,11 @@ owed; the catalog distinguishes this from a later intentional grant revocation.
 Completion of the provision receipt alone does not imply that the final access
 grant succeeded, so the original creation request is retried before opening it.
 An explicit Disconnect clears the tab's saved inputs; server receipts remain.
+
+**Rename organization…** on each management row changes only the organization's
+display name. The dialog explains that shared organizations change for every
+system using them, and rejects an unrelated concurrent rename. Organization IDs,
+system IDs, source UUIDs, namespaces and repositories remain fixed after creation.
 
 **Delete…** prepares a read-only inventory with a durable operation UUID. Studio
 shows its exact repository, affected sessions, forks, Requests, publishers and
@@ -156,6 +165,14 @@ their original backend must fence consumers and supply signed verification.
 Studio offers no proof entry or unsigned override; the operator completes or
 resumes that workflow server-side and refreshes the receipt here. See
 [source deletion](../docs/lifecycle-deletion.md) for cleanup and retention details.
+
+When a deletion review is blocked by a session repository, Studio lists bounded
+workspace IDs and statuses. Missing ownership evidence is distinguished from a
+changed repository identity. **Go to Sessions** is offered only for accepted
+active work whose existing Destroy flow can be reviewed separately. That link
+does not open or destroy a workspace. Starting or terminal workspaces and changed
+identities require operator verification. After cleanup, retry the review; Studio
+never adopts a repository from its name or bypasses the host's ownership checks.
 
 ## Published deliverables and client handoff
 

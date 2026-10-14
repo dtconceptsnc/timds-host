@@ -19,6 +19,7 @@ import { createImporter } from '../imports/service.mjs';
 import { createPortalReceiptVerifier } from '../imports/portal-proof.mjs';
 import { hostOrigin } from '../http.mjs';
 import { createSourceDeletion } from '../lifecycle/deletion.mjs';
+import { safeDeletionBlockers } from '../lifecycle/diagnostics.mjs';
 import { createSourceInvitations } from '../invitations/service.mjs';
 import { readSourceView } from '../source-view.mjs';
 import { readImportedPublicMedia } from '../mcp/public-media.mjs';
@@ -30,6 +31,7 @@ const safeError = error => ({ statusCode:Number.isInteger(error?.statusCode)?err
   message:error?.statusCode && error.statusCode < 500 ? error.message : 'The host could not complete this operation',
   details:{...(safeRequestDiagnostic(error?.requestDiagnostic)?{requestDiagnostic:safeRequestDiagnostic(error.requestDiagnostic)}:{}),
     ...(safeRequestDiagnostic(error?.cleanupDiagnostic)?{cleanupDiagnostic:safeRequestDiagnostic(error.cleanupDiagnostic)}:{}),
+    ...(error?.statusCode===409&&safeDeletionBlockers(error?.deletionBlockers)?{deletionBlockers:safeDeletionBlockers(error.deletionBlockers)}:{}),
     ...(Array.isArray(error?.conflicts)?{conflicts:error.conflicts,mainRevision:error.mainRevision}:{})} });
 
 export class SystemCoordinator extends DurableObject {

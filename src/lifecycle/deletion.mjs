@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { fail, principalId } from '../store/errors.mjs';
 import { verifyDeletionConsumers } from './consumer-proof.mjs';
+import { DELETION_BLOCKER_LIMIT } from './diagnostics.mjs';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const canonical=value=>JSON.stringify(value&&typeof value==='object'?Array.isArray(value)?value.map(item=>JSON.parse(canonical(item))):Object.fromEntries(Object.keys(value).sort().map(key=>[key,JSON.parse(canonical(value[key]))])):value);
@@ -44,16 +45,24 @@ export function createSourceDeletion({sourceId,storage,store,catalog,artifacts,p
     if(store.pendingPublications().length)throw fail(409,'Finish outstanding publications before deleting this Design System');
     const root=await artifacts.getRepository(source.artifacts_namespace,source.artifacts_repository);
     if(root&&String(root.id)!==String(source.artifacts_repository_id))throw fail(409,'Repository identity changed');
-    const sessions=readRows('sessions').map(row=>({id:row.id,status:row.status,fork:row.fork_repository||`session-${row.id}`,live:Boolean(row.sandbox_id||row.live_state&&row.live_state!=='closed')}));
+    const sessionRows=readRows('sessions'),sessions=sessionRows.map(row=>({id:row.id,status:row.status,fork:row.fork_repository||`session-${row.id}`,live:Boolean(row.sandbox_id||row.live_state&&row.live_state!=='closed')}));
     if(sessions.length>10000)throw fail(409,'Deletion inventory exceeds the supported bound');
-    const forks=[];
+    if(sessionRows.some(row=>row.source_id!==sourceId))throw fail(409,'Session fork ownership is unavailable');
+    const recordedForks=new Set(sessionRows.filter(row=>row.fork_repository===`session-${row.id}`).map(row=>row.id));
+    const forks=[],deletionBlockers={sourceId,total:0,sessions:[]};
     for(const session of sessions){
       if(!uuid.test(session.id)||session.fork!==`session-${session.id}`)throw fail(409,'Session fork ownership is unavailable');
       const fork=await artifacts.getRepository(source.artifacts_namespace,session.fork);
       const receipt=store.sessionRepository(session.id);
-      if(fork&&(!receipt||receipt.namespace!==source.artifacts_namespace||receipt.repository!==session.fork||receipt.repository_id!==String(fork.id)))throw fail(409,'An existing historical fork lacks its exact immutable creation receipt');
+      if(fork&&(!receipt||receipt.namespace!==source.artifacts_namespace||receipt.repository!==session.fork||receipt.repository_id!==String(fork.id))){
+        const reason=receipt?'fork_identity_changed':'missing_creation_receipt';
+        const action=!receipt&&['open','closing'].includes(session.status)&&recordedForks.has(session.id)?'review_session':'operator_review';
+        deletionBlockers.total++;
+        if(deletionBlockers.sessions.length<DELETION_BLOCKER_LIMIT)deletionBlockers.sessions.push({sessionId:session.id,status:session.status,reason,action});
+      }
       forks.push({sessionId:session.id,name:session.fork,id:fork?String(fork.id):null});
     }
+    if(deletionBlockers.total)throw Object.assign(fail(409,'Session repositories require review before this Design System can be deleted'),{deletionBlockers});
     const grants=await catalog.all('SELECT principal_id,can_read,can_write FROM system_access WHERE source_id=? ORDER BY principal_id',sourceId);
     const publishers=await catalog.all('SELECT principal_id FROM publishers WHERE source_id=? ORDER BY principal_id',sourceId);
     const requests=readRows('request_jobs').map(row=>({id:row.id,status:row.status}));
