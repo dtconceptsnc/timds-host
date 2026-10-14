@@ -256,14 +256,35 @@ areas (claims) are shown read-only; agents declare them as they edit.
   session appear above the composer with the usual read-only receipt and
   **Ask the agent to resolve**.
 - **The rail (right column) stays basic.** The current published version,
-  this session's submissions with the stage strip, **Publish…** (publishers
-  only) and **Preview ↗**, the session's people (the member list, plus
-  **Invite…** for the owner and publishers while the session is open), the
-  session's state (status, live view, designer, queue, expiry) and **Destroy…**.
-  Working areas, other sessions and the release history stay on the dashboard
-  pages. The top bar carries the dashboard breadcrumb, the current release label, the presence avatars and
+  the session's unsubmitted changes, this session's submissions with the
+  stage strip and changelog, **Publish…** (publishers only) and **Preview ↗**,
+  the session's people (the member list, plus **Invite…** for the owner and
+  publishers while the session is open), the session's state (status, live
+  view, designer, queue, expiry) and **Destroy…**. Working areas, other
+  sessions and the release history stay on the dashboard pages. The top bar carries the dashboard breadcrumb, the current release label, the presence avatars and
   the feed indicator. Review still embeds each submission's Preview with the
   same frame component.
+- **Changes since the last submission.** Every edit the host records for the
+  session is an `updated` event, whichever agent or client made it: `update`
+  and MCP `update_session` saves, draft integrations, and commits the host
+  reconciles from the session's container (`details_json.outOfBandHead`).
+  The rail's **Changes** section lists the `updated` events newer than the
+  session's last `submitted` event and its newest submission, skipping
+  rejected saves (`details_json.rejected`): who made each, what kind of change
+  it was, its note and its merged keys, with a count. Studio still never
+  submits: **Submit for review** (owner or publisher, open session) sends a
+  Request to the session's agent, `Submit the current changes in this session
+  for review. Write a note that summarises the N changes made since the last
+  submission.`, the same way **Ask the agent to resolve** does, and the
+  section in that tab shows "Submission requested" until the submission
+  lands. When
+  changes are pending but nothing is submitted, Publish says so instead of
+  "Nothing to publish yet".
+- **Changelog.** A submission's unified diff from the host becomes a file
+  list with added and removed line counts on the rail's submission card (six
+  files), on the Review card (six) and in the publish dialog (twelve), above
+  **Publish release**, so the reviewer reads what goes out before publishing.
+  A submission without a diff says so in the dialog and points at the Preview.
 - **Publication.** Preflight, optional build-only check, explicit publish and a
   stage strip (preflight, merge, build, prepare, release, flip, close) driven by
   the publication status and by `publication_stage`, `publication_failed` and
