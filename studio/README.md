@@ -43,7 +43,9 @@ change, each as a card:
    current system (`POST /api/timds/sessions` with a per-card idempotency key,
    regenerated after each success) and opens the Studio for it. **Start from a
    draft…** opens the same dialog as the Sessions page.
-2. **Connect over MCP** (badged `preview`). The host's authenticated MCP
+2. **Send your agent** (badged `preview`). The primary button, **Send to your
+   agent…**, opens the agent handoff dialog described under "Agent handoff"
+   below, scoped to the selected Design System. The host's authenticated MCP
    endpoint, `<origin>/api/timds/mcp`, lets an agent read published guidance,
    edit files in a hosted session, submit changes for review, or send a Request
    to the designer. The client signs in with OAuth and requests read/write
@@ -306,7 +308,9 @@ areas (claims) are shown read-only; agents declare them as they edit.
   (base #375638). Keep the intent of the latest Request and prefer the value
   that satisfies it; update related tokens for consistency.` There is no
   mine-or-theirs chooser.
-- **People.** **Invite…** in the rail opens the Join Session widget: two
+- **People.** **Send to your agent…** in the rail opens the agent handoff
+  dialog scoped to this session (see "Agent handoff" below); it is shown to
+  every member while the session is open. **Invite…** opens the Join Session widget: two
   copyable rows, each with a **Copy** button that falls back to selecting the
   text when the clipboard is unavailable. **Studio link** is
   `/studio/#source=…&view=studio&session=…&join=1`; anyone the Design System
@@ -324,6 +328,58 @@ areas (claims) are shown read-only; agents declare them as they edit.
   would break this row. Membership grants session access, not
   publication. There is no principal picker; owners, publishers and host
   administrators can destroy sessions using the host's current permissions.
+  The invite dialog also offers **Send to your agent…** for the same session.
+
+## Agent handoff
+
+Designers direct agents, so the shortest path into the host is a button that
+hands the designer's own agent everything it needs. **Send to your agent…**
+on the Overview (scoped to the Design System) and in the Studio rail (scoped
+to that session) open the same dialog. Nothing in it is sent anywhere by
+Studio; every action copies text, downloads a file or opens the client's own
+install link, and the agent then signs in as the designer through the host's
+OAuth flow. The dialog contains:
+
+- **A client picker** (Claude Code, Codex, Cursor, VS Code, Gemini CLI,
+  Claude app, Other), remembered in this tab's `sessionStorage` under
+  `agent`. The table of clients is the `AGENT_CLIENTS` constant in `app.js`;
+  every entry adds the host's MCP server under the name `timds`.
+- **1 · Connect once.** The one-time step for that client: a copyable command
+  (`claude mcp add --transport http timds <origin>/api/timds/mcp`,
+  `codex mcp add timds --url …` plus `codex mcp login timds`,
+  `gemini mcp add --transport http timds …`, `code --add-mcp '{…}'`), an
+  install link for clients that have one (`cursor://anysphere.cursor-deeplink/mcp/install?…`
+  with the server config base64-encoded, `vscode:mcp/install?…` with it
+  URL-encoded), or numbered steps plus the copyable URL for apps that take a
+  remote connector in their settings. A help line says how that client signs
+  in. Install links are plain anchors; Studio does not navigate to them itself.
+- **2 · Send it into this session** (or the system). The brief, in a
+  read-only code block with **Copy the brief** as the primary action. It
+  names the MCP URL with its OAuth expectations, the system ID, the session
+  ID when scoped to a session, and the Studio link, then tells the agent how
+  to connect if it is not connected yet (CLIs run the command and stop if a
+  restart or sign-in is needed; app clients ask the designer to add the server
+  and stop until it is connected), and what to do once it is: `join_session`
+  (or `list_systems`, `get_system`, `get_active_work` and `start_session`
+  when no session is scoped), `get_editing_guide` and the source `AGENTS.md`
+  and `README.md`, `claim_session`, `update_session` against the latest
+  `baseRevision` and `lastUpdateHash`, `run_check` and `get_check`,
+  `submit_session` with a note, then report the submission and its Preview
+  and stop without publishing. The last line is `Task: <describe the change
+  you want>` for the designer to replace.
+- **3 · Or keep it as a skill.** The same instructions as an Agent Skills
+  file, `SKILL.md`, with frontmatter `name: timds-<system folder>` and a
+  description that says when to use it, written in the third person and
+  always at system scope (a skill outlives any session, so it carries no
+  session ID and tells the agent to start a session or join the one the user
+  names). **Copy SKILL.md** copies it; **Download SKILL.md** saves it through
+  a Blob URL. The help line names the folder to save it in.
+
+Clipboard failure in any of these selects the text for manual copying, as
+elsewhere in Studio. The brief and the skill never contain a bearer token,
+an invitation or a join flag: membership comes from `join_session` under the
+agent's own signed-in identity, which must already have access to the Design
+System.
 
 ## Loading and busy states
 
