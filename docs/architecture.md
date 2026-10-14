@@ -566,6 +566,16 @@ content before extraction. The untrusted build never receives repository,
 OAuth, D1, R2 or Cloudflare credentials. Preserve path/symlink restrictions and
 current output ceilings (12 MB/file, 80 MB total, 2,000 regular files).
 
+The same isolated builder checks contributor session snapshots. After stopping
+source processes, its image-baked driver resolves the workspace with the pinned
+toolkit's read-only layout loader and inventories only `/work/dist` for a
+standalone source or `/work/design-system/dist` for an embedded source. The
+driver rejects a symbolic workspace root and artifact links; the RPC side
+independently allowlists those two relative output directories before streaming
+bytes. Source configuration cannot select an arbitrary artifact directory.
+This supports embedded check output without changing release-metadata or
+provisioning contracts.
+
 Toolkit merge is a supported pure package export. Publication helpers also
 import Node-oriented core and starter code today. Use an image-baked trusted
 toolkit RPC for release preparation/check/stamp operations unless a supported
@@ -659,12 +669,32 @@ live systems' domain aliases and immutable release identities. Twelve public
 reads are the acceptance smoke check; the full manifest digest comparison is
 the migration integrity check.
 
-Read MCP uses `createMcpHandler` with R2-backed `describe_system`, `get_tokens`
-and `read_page`; `report_gap` creates a Request with the caller/note recorded.
-Verify the exact Cloudflare Agents export and transport against the selected
-package before adding it. Existing Node read-MCP filesystem handlers cannot
-be imported wholesale into the Worker. Studio static assets consume the same
-host API and OAuth session and need actual phone/browser verification.
+MCP uses `createMcpHandler`. Anonymous `/mcp` exposes only published reads:
+`describe_system`, `get_tokens`, `read_page` and `read_derived_layer` select
+immutable release bytes. Authenticated `/api/timds/mcp` keeps those reads and
+adds source discovery, session and draft collaboration, guarded authored-file
+reads/changes, exact-snapshot checks and derived reads, designer Request
+creation/polling, and explicit publisher preflight/build/publish/rollback tools.
+`report_gap` also creates a Request with the caller/note recorded. Hosted
+contribution works before a system's first publication. The
+[designer MCP contract](api/designer-mcp.md) specifies tools, retries and the
+shared review lifecycle. [Contributor setup](contributing-design-systems.md)
+covers Studio, the CLI and remote/local MCP connections.
+
+Every authenticated contribution tool uses the existing coordinator operations
+and current D1 authority. Each mutation enforces `timds:write` and dispatches
+with write access; the MCP HTTP endpoint itself admits `timds:read` so that
+read-only clients can connect. Scope never supplies a missing source grant or
+publisher grant. File tools enforce the toolkit's authored/protected-path
+boundaries and bound their output; snapshot storage references stay internal.
+Contributor checks use the isolated build runtime and never move a public
+pointer. Publication retains its separate publisher checks, while rollback
+binds a stable operation to the reviewed target and expected current version.
+A fresh server per request keeps
+actor, source and release selection out of another caller's MCP session.
+Studio static assets consume the same host API and OAuth session. Deployed MCP
+client acceptance and phone/browser verification remain separate from local
+build and smoke checks.
 
 Studio is a steering console, not an editor: agents are the only writers.
 Humans direct through Requests and decide with publish, rollback, close and

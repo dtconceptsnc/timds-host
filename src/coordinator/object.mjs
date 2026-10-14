@@ -23,6 +23,7 @@ import { createSourceInvitations } from '../invitations/service.mjs';
 import { readSourceView } from '../source-view.mjs';
 import { readImportedPublicMedia } from '../mcp/public-media.mjs';
 import { createSourceFeed } from './feed.mjs';
+import { createSessionChecks } from '../mcp/checks.mjs';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const safeError = error => ({ statusCode:Number.isInteger(error?.statusCode)?error.statusCode:500,
@@ -70,6 +71,8 @@ export class SystemCoordinator extends DurableObject {
     this.publicationApi=createPublicationApi({sourceId,store:this.store,authorization:this.authorization,repository:this.repository,publication:this.publication,
       metadata:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`metadata:${input.publicationId}`).metadata(input),input.operation),
       build:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`build:${input.publicationId}`).run(input),'build')});
+    this.sessionChecks=createSessionChecks({sourceId,storage:ctx.storage,bucket:env.SNAPSHOTS,engine:this.engine,
+      build:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`check:${sourceId}:${input.publicationId}`).run(input),'build')});
     this.importer=createImporter({sourceId,storage:ctx.storage,catalog:this.catalog,store:this.store,artifacts:this.artifacts,releases:env,origin:hostOrigin(env),verifyPortalReceipt:createPortalReceiptVerifier(env)});
     this.media=createSourceMedia({sourceId,storage:ctx.storage,catalog:this.catalog,sourceStore:this.store,authorization:this.authorization,runMutation:this.engine.runMutation,env,
       schedule:async due=>{const prior=await ctx.storage.getAlarm();if(!prior||due<prior)await ctx.storage.setAlarm(due);}});
@@ -104,12 +107,13 @@ export class SystemCoordinator extends DurableObject {
       else if(['listInvitations','reserveInvitation','revokeInvitation'].includes(operation))value=await this.engine.runMutation(()=>this.invitations.admin({operation:{listInvitations:'list',reserveInvitation:'reserve',revokeInvitation:'revoke'}[operation],actor,input:args[0]}));
       else if(['prepareDeletion','readDeletion','confirmDeletion','deletionHistory'].includes(operation))value=await this.engine.runMutation(()=>this.deletion.invoke({operation:{prepareDeletion:'prepare',readDeletion:'read',confirmDeletion:'confirm',deletionHistory:'history'}[operation],actor,input:args[0]}));
       else if(operation==='createRequest'||operation==='readRequest')value=await this.engine.requestsInvoke({operation:operation==='createRequest'?'create':'read',actor,args});
+      else if(['checkSession','readSessionCheck','readCheckDerived'].includes(operation))value=await this.sessionChecks[{checkSession:'run',readSessionCheck:'read',readCheckDerived:'derived'}[operation]](actor,...args);
       else if(operation==='feedTicket')value=await this.feed.ticket(actor,args[0]);
       // Presence: committed rows plus each open session's stored runner record; never queued, never starts a container.
       else if(operation==='activeWork'||operation==='status')value=await this.requests.presence(await this.engine.invoke({operation,actor,args}));
       // Invite directory: activeWork's read authorization, D1 grants only, no writer queue.
       else if(operation==='principals')value=await this.engine.runRead(actor,async verified=>{const source=await this.store.getSource(this.sourceId);if(!source||source.archived_at||source.lifecycle_status!=='ready')throw fail(404,'Design System not found');await this.authorization.authorizeSource(source,verified);return {apiVersion:1,sourceId:source.id,principals:await this.catalog.sourcePrincipals(source.id,this.env.TIMDS_DESIGNER_PRINCIPAL_ID)};});
-      else if(operation==='rollback')value=await this.engine.rollbackVersion({actor,input:args[0],operationId:crypto.randomUUID()});
+      else if(operation==='rollback')value=await this.engine.rollbackVersion({actor,input:args[0],operationId:args[0]?.operationId??crypto.randomUUID()});
       else if(operation==='authority')value=await this.engine.mutateAuthority({...args[0],actor});
       else if(operation==='archive'||operation==='restore')value=await this.engine.setArchived({...args[0],actor,restore:operation==='restore'});
       else if(operation==='listSubmissions'||operation==='readPublication') {

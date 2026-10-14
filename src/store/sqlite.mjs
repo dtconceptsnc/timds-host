@@ -541,23 +541,28 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       put('preview_builds',{id:buildId,input,result,created_at:timestamp()});
       return result;
     }),
-    async rollbackVersion({versionId,actor,operationId,reason = '',dryRun = false}) {
+    async rollbackVersion({versionId,actor,operationId,reason = '',dryRun = false,expectedCurrentVersionId,verifyArtifact}) {
       const source = await store.getSource(sourceId);
       await publishAuthority({actor_principal_id:principalId(actor)});
+      const fingerprint = json([versionId,principalId(actor),reason,...(expectedCurrentVersionId!==undefined?[{expectedCurrentVersionId}]:[])]), key = `rollback:${operationId}`;
+      // A committed retry returns its original receipt even after another
+      // publication advances the pointer; it must never restore it a second time.
+      const prior = !dryRun&&operationId?meta(key):null;
+      if (prior) { if (prior.fingerprint !== fingerprint) throw fail(409, 'Rollback operation has different parameters'); return prior.response; }
       if (list('publications').some(row => ['running','closing'].includes(row.status) || row.status === 'failed' && (Object.hasOwn(row.checkpoints_json,'sourceCommit') || Object.hasOwn(row.checkpoints_json,'staged')))) throw fail(409, 'Wait for the current publication before rolling back');
       const version = get('versions',versionId);
       if (!version || !store.resolveRollbackVersion(sourceId,versionId,true) || !version.artifact_ref) throw fail(409, 'The immutable version is not available for rollback');
-      if (dryRun) return {apiVersion:1,dryRun:true,sourceId,versionId};
-      if (!operationId) throw fail(400, 'A rollback operation ID is required');
-      const fingerprint = json([versionId,principalId(actor),reason]), key = `rollback:${operationId}`;
-      const prior = meta(key);
-      if (prior) { if (prior.fingerprint !== fingerprint) throw fail(409, 'Rollback operation has different parameters'); return prior.response; }
+      if (!dryRun&&!operationId) throw fail(400, 'A rollback operation ID is required');
+      if (!dryRun&&verifyArtifact) { await verifyArtifact(version); await publishAuthority({actor_principal_id:principalId(actor)}); }
       return atomic(() => {
+        const current=meta('pointer'),currentVersionId=(current?current.published_version_id:source.published_version_id)||null;
+        if(expectedCurrentVersionId!==undefined&&expectedCurrentVersionId!==currentVersionId)throw fail(409,'The current publication changed; check rollback again');
+        if(dryRun)return {apiVersion:1,dryRun:true,sourceId,versionId,currentVersionId};
         const event = {id:ids(),design_system_source_id:sourceId,design_system_version_id:versionId,action:'rollback',actor_user_id:actor.userId || null,actor_principal_id:principalId(actor),originating_request_id:actor.requestId || null,version_label:version.version_label,content_digest:version.content_digest,reason,created_at:timestamp()};
         put('publication_events',event); enqueue('publication',event);
         const pointer = {published_version:version.version_label,source_commit:version.source_commit,content_digest:version.content_digest,published_version_id:versionId,artifact_ref:version.artifact_ref,source_ref:version.source_ref,initial_publication_required:false};
         setMeta('pointer',pointer); enqueue('pointer',pointer);
-        const response = {apiVersion:1,action:'rollback',result:{artifact:version.artifact || {},publication:pointerReceipt(event),version:{contentDigest:version.content_digest,id:versionId,sourceId:source.id,versionLabel:version.version_label}}};
+        const response = {apiVersion:1,action:'rollback',operationId,previousVersionId:currentVersionId,result:{artifact:version.artifact || {},publication:pointerReceipt(event),version:{contentDigest:version.content_digest,id:versionId,sourceId:source.id,versionLabel:version.version_label}}};
         setMeta(key,{fingerprint,response}); return response;
       });
     },

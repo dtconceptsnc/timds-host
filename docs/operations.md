@@ -13,6 +13,12 @@ For a collaborator who has not signed into the host, use
 authenticate themselves through the configured Access policy. Historical portal
 identity mappings never stand in for that person's verified login.
 
+Once a source and its grants are ready, give contributors the authenticated
+origin and immutable system ID and point them to
+[contributor setup and lifecycle](contributing-design-systems.md). That guide
+covers Studio, the pinned CLI, remote MCP and local toolkit MCP. Contributors
+do not need this installation's Cloudflare credentials or deployment record.
+
 ## Prerequisites and configuration
 
 Install Node.js 22.18+ and npm, and start a local Docker engine capable of
@@ -507,7 +513,34 @@ proof; a zero-consumer count alone is insufficient. See [the deletion protocol](
 for routes, recovery and retained-byte semantics. No production source deletion
 is part of the current implementation evidence.
 
-### Authenticated MCP on a configured Studio domain
+## Authenticated MCP and contributor onboarding
+
+The authenticated `/api/timds/mcp` endpoint serves the host's full contribution
+lifecycle: authored workspace reads/changes, checks, designer Requests,
+collaboration, submission review, explicit publisher actions and rollback.
+It needs the same runtime bindings, source readiness and current grants as
+Studio/API operations. There is no separately deployed MCP worker or local
+toolkit process to provision. Anonymous `/mcp` remains on the public companion
+and exposes published reads only.
+
+Configure Access for the interactive authorization route without putting an
+interactive challenge in front of OAuth discovery, `/register`, `/token`, the
+MCP transport or public reads. Clients need authorization code with PKCE S256
+and an exact `<authenticated-origin>/api/timds` resource. Use the endpoints
+advertised by that origin; the MCP endpoint path is not itself the OAuth
+resource. Source read/write grants and publisher grants remain separate from
+OAuth scopes. Keep administrator source-access invitations distinct from
+session membership invitations.
+
+For initial validation, connect an OAuth MCP client to a disposable source,
+verify read-only versus write-scoped tool availability, exercise a contributor
+without publisher authority, and then verify publisher preflight, build,
+publication and guarded rollback with a publisher. Checks run in the host's
+isolated build runtime and do not themselves publish. Follow the
+[MCP contract](api/designer-mcp.md) and [conformance fixture rules](../conformance/README.md);
+local smoke success does not establish deployed client acceptance.
+
+### Configured Studio domain
 
 When the installation configures `TIMDS_STUDIO_ORIGIN`, its authenticated
 `/api/timds/mcp` endpoint accepts that exact origin alongside `HOST_ORIGIN`.

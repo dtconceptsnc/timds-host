@@ -4,6 +4,16 @@ An Apache-2.0 Cloudflare host for TimDS sessions, collaboration, previews,
 publication and Studio. The Apache-2.0 toolkit is maintained separately as
 `@dtconcepts/timds`.
 
+## Contribute to a Design System
+
+Use Studio in your browser, the TimDS CLI, or an agent connected to the host's
+authenticated `/api/timds/mcp` endpoint. All three work with the same sessions,
+shared drafts, Previews, review submissions and releases. The
+[contributor guide](docs/contributing-design-systems.md) covers installation,
+OAuth connection, access, editing/checking, invitations, publication, rollback
+and cleanup. The [MCP contract](docs/api/designer-mcp.md) lists the remote tools
+and their retry/concurrency rules.
+
 ## Working in this repository
 
 [`AGENTS.md`](AGENTS.md) is the guide for contributors and coding agents: the
@@ -49,10 +59,13 @@ host through `provider: { kind: 'hosted', url }`. The vendored
 [OpenAPI contract](docs/api/timds-host.openapi.json),
 [architecture](docs/architecture.md) and [conformance package](conformance/README.md)
 describe these boundaries. The build and conformance baseline pin toolkit
-`0.1.464`. Human OAuth login and resumable commands are available in the validated published
-toolkit `0.1.472` ([released support](https://github.com/dtconceptsnc/timds-toolkit/pull/104)).
-Use `timds auth login --oauth` with the host origin; the native merge/build
-container retains its validated `0.1.464` pin.
+`0.1.464`. Contributor installation examples use the root's pinned toolkit
+`0.1.473`, with OAuth login, resumable commands, Studio-link joining and
+principal discovery. Use `timds auth login --oauth --portal-url <host-origin>`;
+the native merge/build container retains its `0.1.464` pin. The remote host MCP
+requires no local toolkit installation and preserves the same host authority
+and review lifecycle. Deployed client/lifecycle acceptance remains separate
+from local checks.
 
 The additive source read at `GET /api/timds/design-systems/:source` returns the
 authoritative published pointer, current version, at most 100 rollback versions,
@@ -92,5 +105,5 @@ including preview migration/readback and a direct API exception for deletion.
 Original host code is licensed under the Apache License 2.0. See
 [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party dependencies retain their
 respective licenses. The toolkit source and the published
-[`@dtconcepts/timds@0.1.472`](https://www.npmjs.com/package/@dtconcepts/timds/v/0.1.472)
+[`@dtconcepts/timds@0.1.473`](https://www.npmjs.com/package/@dtconcepts/timds/v/0.1.473)
 package are Apache-2.0; that package's version/license were verified from npm.

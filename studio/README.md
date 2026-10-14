@@ -18,19 +18,33 @@ Disconnect clears this tab's Studio state. Rendered data uses DOM text.
 The sidebar is the list of Design Systems the caller can see, one link per
 system (name and `systemId`), with the selected one marked active and
 `aria-current="page"`. The top bar carries the selected system, the view tabs
-(Overview, Sessions, Review, Activity), the feed indicator and Refresh.
+(Overview, Deliverables, Sessions, Review, Activity), the feed indicator and Refresh.
 
-The Overview explains the three ways to make a change, each as a card:
+The Overview leads with the published collection: the public guide, release
+label, counts of guidance pages, tokens and implementation files, and a small
+palette taken from the actual published color tokens. **View all deliverables**
+opens the Deliverables view; **Prepare client handoff** previews a copyable
+introduction containing the public links and implementation instructions.
+The handoff contains no Studio invitation, session link or bearer token.
+
+Below the collection, **Keep creating** explains the three ways to make a
+change, each as a card:
 
 1. **Open Studio.** The primary button creates a working session on the
    current system (`POST /api/timds/sessions` with a per-card idempotency key,
    regenerated after each success) and opens the Studio for it. **Start from a
    draft…** opens the same dialog as the Sessions page.
-2. **Connect over MCP** (badged `preview`). The host's authenticated read MCP
-   endpoint, `<origin>/api/timds/mcp`, for reading the published system and
-   filing gaps as Requests, plus the toolkit commands that let an agent edit
-   (`timds auth login --oauth`, then `timds mcp`). The card says that editing
-   over MCP is not production-ready.
+2. **Connect over MCP** (badged `preview`). The host's authenticated MCP
+   endpoint, `<origin>/api/timds/mcp`, lets an agent read published guidance,
+   edit files in a hosted session, submit changes for review, or send a Request
+   to the designer. The client signs in with OAuth and requests read/write
+   access; existing Design System permissions still apply. Remote MCP also
+   supports checks, invitations and explicit publisher preflight, publication
+   and rollback, sharing Studio's host lifecycle. Deployed acceptance remains
+   owed; the card keeps its preview badge until that is verified. See
+   [designer MCP](../docs/api/designer-mcp.md) for the tools and
+   [contributor setup](../docs/contributing-design-systems.md) for installation,
+   connection and the complete workflow.
 3. **Edit locally with npm.** Install `@dtconcepts/timds` globally, log in
    with OAuth against this origin, `timds start <systemId>` to pull a new
    session to disk, `npm ci`, `timds dev`, and `timds submit` to send it back
@@ -93,6 +107,46 @@ their original backend must fence consumers and supply signed verification.
 Studio offers no proof entry or unsigned override; the operator completes or
 resumes that workflow server-side and refreshes the receipt here. See
 [source deletion](../docs/lifecycle-deletion.md) for cleanup and retention details.
+
+## Published deliverables and client handoff
+
+Deliverables groups the published brand reference, tokens, design catalog,
+format specifications, implementation bundle and AI guide. Each available
+export has a public link; missing documents say **Not included in this
+release**. The file library searches bundle files, brand logos and imagery,
+font files and public media by name or type, shows up to 60 matches at a time,
+and links to the published files for opening or saving. Brand and media entries
+are deduplicated by URL. A guidance directory links to up to 30 published pages;
+the design card also opens the rendered catalog when its URL is available.
+
+The implementation section explains how to explore the guide, install or use
+the bundle, and connect an AI tool to the public, read-only `/mcp` endpoint.
+The copyable `timds consumer init` command uses the pinned root toolkit version,
+system ID, explicit release and public base. It is offered only when the
+captured release has an immutable version base and a matching bundle at the
+artifact root. Custom nested bundles and imported same-label republications
+instead direct clients to the actual file manifest. The main guide follows the
+current release; an immutable release link appears only when the derived layer
+confirms that it represents the captured publication.
+
+The client first reads the existing source view to distinguish an unpublished
+system from a failed read, then calls `read_derived_layer` over the fixed
+same-origin `/api/timds/mcp` route. It supports JSON and SSE responses and uses
+a 45-second timeout. All public document and file links come from that captured
+published layer; no unpublished source files are read. Requests never use an
+origin from the response, and public assets are not fetched into the OAuth
+origin. External links use the existing safe URL check and open without an
+opener or referrer.
+
+The collection loads independently of sessions and Requests. It is retained
+while navigating the same system, refreshed when publication history changes
+(including rollback), and explicitly reloaded by Refresh or **Try again**.
+Switching systems, confirming deletion or disconnecting discards the prior
+collection; late responses cannot replace the new system's content. A loading
+panel, first-publication empty state and
+retryable failure state are distinct. Clipboard failure selects the handoff or
+snippet text for manual copying. The published collection uses the existing
+static assets and CSP; its palette uses the same CSSOM swatches as conflicts.
 
 ## The steering model
 
@@ -261,6 +315,10 @@ The two-row phone header is unchanged. The Studio stacks the live view first
 (70% of the viewport), then the stream with its own scrolling list, then the
 rail; below 960 px the three columns become one.
 
-No tests were added per the user's instruction. Syntax was checked. Browser
-acceptance must use the real deployed host and a disposable source; this file
-does not claim that acceptance has passed.
+No unit tests are added for Studio. On 2026-10-13 the published collection was
+checked with local synthetic browser fixtures at desktop and 390 px phone width,
+including JSON/SSE reads, search, copy, absent exports, custom bundles,
+unpublished systems, retry and switching systems during a pending read. These
+local checks do not establish deployed behavior. Browser acceptance must use
+the real deployed host and a disposable source; this file does not claim that
+acceptance has passed.
