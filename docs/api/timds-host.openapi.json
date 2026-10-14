@@ -53,6 +53,13 @@
     "authenticatedEndpoint": "/api/timds/mcp",
     "publicEndpoint": "/mcp",
     "publicEndpointOrigin": "configured public origin",
+    "publicRoots": {
+      "current": "/systems/<org>/<name>/ (each id segment its own path segment; one URL-encoded segment also accepted and required for ids with more than two segments)",
+      "release": "/systems/<org>/<name>/v/<label>/ (immutable)",
+      "latest": "/systems/<org>/<name>/v/latest/<path> answers 307 to the current pointer's immutable address with X-TimDS-Version",
+      "stamp": ".timds-artifact.json beside the root: schemaVersion, systemId, version, sourceCommit, contentDigest, entry, files"
+    },
+    "versionAlias": "latest",
     "oauthResource": "<request-origin>/api/timds",
     "readScope": "timds:read",
     "writeScope": "timds:write",
