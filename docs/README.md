@@ -32,6 +32,7 @@ work in the repository and which checks apply to a change.
 | [access-invitations.md](access-invitations.md) | You touch explicit source access invitations or the `TIMDS_ACCESS_INVITATIONS_ENABLED` flag. |
 | [artifacts-bindings.md](artifacts-bindings.md) | You configure the Artifacts namespace-to-binding map for dev, types, build or deploy. |
 | [lifecycle-deletion.md](lifecycle-deletion.md) | You touch source archive, restore or reviewed deletion. |
+| [design-system-creation.md](design-system-creation.md) | You create a native Design System in Studio, resume provisioning or change the built-in starter API. |
 | [operations-designer-batch.md](operations-designer-batch.md) | You run concurrent designer Requests against a disposable system with `scripts/run-designer-batch.mjs`. |
 | [publication-queue-recovery.md](publication-queue-recovery.md) | A publication is waiting or interrupted and you need the queue and recovery rules. |
 | [submission-recovery.md](submission-recovery.md) | A submission was interrupted and you need to resume its reservation. |

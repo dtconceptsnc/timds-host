@@ -58,6 +58,11 @@ there is no Node process or Wrangler fallback. Source deletion refuses a
 repository connection shared with any other Worker and never deletes the
 operator's shared deployment token.
 
+Source deletion passes a `beforeDelete` callback into `deleteSourcePreview`.
+The controller invokes it immediately before each connection, Builds
+configuration and Worker deletion so a long ownership scan cannot outlive the
+administrator lease or imported portal consumer proof.
+
 `parsePreviewBuildEvent` accepts the observed successful event shape and yields
 the source UUID for Queue routing. `createPreviewBuildHandler` then checks the
 current source, frozen submission branch and exact commit. It verifies owned

@@ -56,6 +56,14 @@ export class Catalog {
     return principal;
   }
   async organization(id) { return this.first('SELECT * FROM organizations WHERE id=?', id); }
+  async organizationPage(after = '') {
+    const rows=await this.all("SELECT id,name FROM organizations WHERE status='active' AND id>? ORDER BY id LIMIT 201",after);
+    return {organizations:rows.slice(0,200),nextOrganizationCursor:rows.length>200?rows[199].id:null};
+  }
+  async systemPage(after = '') {
+    const rows=await this.all("SELECT s.*,p.id AS provision_operation_id,p.actor_id AS provision_actor_id,g.id AS provision_grant_id FROM systems s LEFT JOIN provision_operations p ON p.source_id=s.id LEFT JOIN authority_operations g ON g.id=p.id||':publisher' AND g.source_id=s.id WHERE s.id>? ORDER BY s.id LIMIT 201",after);
+    return {systems:rows.slice(0,200).map(row=>({...materialize(row),provision_operation_id:row.provision_operation_id,provision_actor_id:row.provision_actor_id,provision_grant_completed:Boolean(row.provision_grant_id)})),nextSystemCursor:rows.length>200?rows[199].id:null};
+  }
   async deactivationOperation(operationId) {
     const row = await this.first('SELECT * FROM principal_deactivations WHERE operation_id=?',operationId);
     return row && {...row,targets:await this.all('SELECT source_id,fenced FROM principal_fences WHERE operation_id=? ORDER BY source_id',operationId)};

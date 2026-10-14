@@ -2849,9 +2849,118 @@
         ],
         "responses": {
           "200": {
-            "description": "Bounded retained history and deletion receipt; no provider credentials."
+            "description": "Successful read",
+            "headers": {
+              "X-TimDS-API-Version": {
+                "schema": {
+                  "const": "1"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "operation",
+                    "sessions",
+                    "events",
+                    "retention"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "operation": {
+                      "$ref": "#/components/schemas/DeletionOperation"
+                    },
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "status"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "eventType": {
+                            "type": "string"
+                          },
+                          "sessionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "actorPrincipalId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "retention": {
+                      "type": "object",
+                      "properties": {
+                        "immutableReleaseBytes": {
+                          "const": "retained_inaccessible"
+                        },
+                        "audit": {
+                          "const": "retained"
+                        },
+                        "mediaOriginals": {
+                          "const": "removed_scoped"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
             "$ref": "#/components/responses/HostError"
           }
         }
@@ -3430,6 +3539,507 @@
                     "apiVersion",
                     "principal"
                   ]
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/organizations": {
+      "get": {
+        "operationId": "listAdminOrganizations",
+        "summary": "List active organizations for native Design System creation",
+        "description": "Active host administrator required.",
+        "tags": [
+          "Administration"
+        ],
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Exclusive UUID cursor returned by the previous page; pages contain at most 200 rows."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful administrator operation",
+            "headers": {
+              "X-TimDS-API-Version": {
+                "schema": {
+                  "const": "1"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "organizations",
+                    "nextOrganizationCursor"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "organizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "nextOrganizationCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createOrganization",
+        "summary": "Reserve an organization identity",
+        "description": "Active host administrator required. Reusing its UUID returns the existing organization.",
+        "tags": [
+          "Administration"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "properties": {
+                  "apiVersion": {
+                    "const": 1
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful administrator operation",
+            "headers": {
+              "X-TimDS-API-Version": {
+                "schema": {
+                  "const": "1"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "organization"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "organization": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems": {
+      "get": {
+        "operationId": "listAdminSystems",
+        "summary": "List all Design System lifecycle states and creation namespaces",
+        "description": "Active host administrator required. Includes provisioning, archived, deleting and deleted identities. creationInput is returned only to the initiating administrator for built-in starter operations; it contains no files or credentials. Namespaces are configured bindings, not a provider account inventory.",
+        "tags": [
+          "Administration"
+        ],
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Exclusive UUID cursor returned by the previous page; pages contain at most 200 rows."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful administrator operation",
+            "headers": {
+              "X-TimDS-API-Version": {
+                "schema": {
+                  "const": "1"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "systems",
+                    "namespaces",
+                    "nextSystemCursor"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "systems": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminSystemSummary"
+                      }
+                    },
+                    "namespaces": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "nextSystemCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "provisionDesignSystem",
+        "summary": "Provision a native system from an exact standalone file tree",
+        "description": "Active host administrator required. Exact input, source UUID and operation UUID must be reused on retry. Existing provider repositories are never adopted by name.",
+        "tags": [
+          "Administration"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "operationId",
+                  "sourceId",
+                  "organizationId",
+                  "systemId",
+                  "namespace",
+                  "repository",
+                  "files"
+                ],
+                "properties": {
+                  "apiVersion": {
+                    "const": 1
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "sourceId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "systemId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "repository": {
+                    "type": "string"
+                  },
+                  "grantPublisher": {
+                    "type": "boolean"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "path",
+                        "mode",
+                        "encoding",
+                        "content"
+                      ],
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "mode": {
+                          "enum": [
+                            "100644",
+                            "100755",
+                            "120000"
+                          ]
+                        },
+                        "encoding": {
+                          "const": "base64"
+                        },
+                        "content": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful administrator operation",
+            "headers": {
+              "X-TimDS-API-Version": {
+                "schema": {
+                  "const": "1"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedSystem"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/admin/systems/create": {
+      "post": {
+        "operationId": "createDesignSystem",
+        "summary": "Create a native Design System with the built-in hosted starter",
+        "description": "Active host administrator required. Creates a standalone repository in a deployed namespace, initializes the pinned starter and grants the initiating principal read/write/publish. Does not publish a release. Preserve the exact input and UUIDs after an ambiguous failure. Deleted identities remain reserved. Repository name is generated from sourceId. starterVersion defaults to 1.",
+        "tags": [
+          "Administration"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDesignSystemInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful administrator operation",
+            "headers": {
+              "X-TimDS-API-Version": {
+                "schema": {
+                  "const": "1"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedSystem"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/HostError"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/HostError"
+          }
+        }
+      }
+    },
+    "/api/timds/design-systems": {
+      "get": {
+        "operationId": "listDesignSystems",
+        "summary": "List accessible ready, unarchived Design Systems",
+        "tags": [
+          "Design Systems"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful read",
+            "headers": {
+              "X-TimDS-API-Version": {
+                "schema": {
+                  "const": "1"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "systems"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "systems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "systemId",
+                          "name"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "systemId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -4758,6 +5368,7 @@
             "enum": [
               "inspect",
               "stop_work",
+              "remove_media",
               "remove_repositories",
               "remove_preview",
               "revoke_authority",
@@ -4801,6 +5412,14 @@
               "requests": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "mediaAssets": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "mediaUploads": {
+                "type": "integer",
+                "minimum": 0
               }
             }
           },
@@ -4812,6 +5431,9 @@
               },
               "audit": {
                 "const": "retained"
+              },
+              "mediaOriginals": {
+                "const": "removed_scoped"
               }
             }
           },
@@ -5394,6 +6016,178 @@
           "sourceId",
           "principals"
         ]
+      },
+      "CreateDesignSystemInput": {
+        "type": "object",
+        "required": [
+          "operationId",
+          "sourceId",
+          "organizationId",
+          "systemId",
+          "name",
+          "namespace"
+        ],
+        "properties": {
+          "apiVersion": {
+            "const": 1
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "systemId": {
+            "type": "string",
+            "maxLength": 300,
+            "pattern": "^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "namespace": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+          },
+          "starterVersion": {
+            "const": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminSystemSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "systemId",
+          "name",
+          "organizationId",
+          "lifecycleStatus",
+          "archivedAt",
+          "namespace",
+          "repository",
+          "provisionOperationId",
+          "deletionOperationId",
+          "creationInput"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "systemId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lifecycleStatus": {
+            "type": "string"
+          },
+          "archivedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "provisionOperationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "deletionOperationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "creationInput": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreateDesignSystemInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "creationPending": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ProvisionedSystem": {
+        "type": "object",
+        "required": [
+          "apiVersion",
+          "source"
+        ],
+        "properties": {
+          "apiVersion": {
+            "const": 1
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "id",
+              "system_id",
+              "organization_id",
+              "lifecycle_status",
+              "artifacts_namespace",
+              "artifacts_repository",
+              "artifacts_repository_id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "system_id": {
+                "type": "string"
+              },
+              "organization_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              },
+              "lifecycle_status": {
+                "const": "ready"
+              },
+              "artifacts_namespace": {
+                "type": "string"
+              },
+              "artifacts_repository": {
+                "type": "string"
+              },
+              "artifacts_repository_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
       }
     },
     "responses": {

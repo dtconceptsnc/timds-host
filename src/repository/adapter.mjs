@@ -41,6 +41,7 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
       const operation=await store.getLifecycleOperation(input.source.lifecycleOperationId);
       source=await store.getSource(input.source.id);
       const expected=input.method==='provisionFiles'?'provisioning':'deleting';
+      if(input.method==='provisionFiles')await store.authorizeProvision({operationId:input.source.lifecycleOperationId,lease:input.source.lifecycleLease});
       if(!operation||operation.source_id!==input.source.id||operation.status!=='running'||operation.lease!==input.source.lifecycleLease||source?.lifecycle_status!==expected||!source.artifacts_namespace||!source.artifacts_repository)throw fail(409,'Lifecycle execution lease is unavailable');
       const receipt=operation.checkpoints_json?.repositoryReceipt;
       const repository=await artifacts.getRepository(source.artifacts_namespace,source.artifacts_repository);

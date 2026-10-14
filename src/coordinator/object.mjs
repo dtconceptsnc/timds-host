@@ -66,7 +66,7 @@ export class SystemCoordinator extends DurableObject {
       onSessionReserved:(session,source)=>requestService.live.schedule(session,source),
       onSessionStarted:(session,source)=>requestService.live.ensure(session,source),
       cleanupAgentSession:(session,source)=>requestService.live.close(session,source),
-      nextLifecycleAlarm:()=>{const due=[this.deletion?.nextAlarm(),this.media?.nextAlarm()].filter(Number.isFinite);return due.length?Math.min(...due):null;},
+      nextLifecycleAlarm:()=>this.store?.deletionFence()?this.deletion?.nextAlarm():this.media?.nextAlarm(),
     });
     this.publicationApi=createPublicationApi({sourceId,store:this.store,authorization:this.authorization,repository:this.repository,publication:this.publication,
       metadata:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`metadata:${input.publicationId}`).metadata(input),input.operation),
@@ -146,6 +146,23 @@ export class SystemCoordinator extends DurableObject {
   previewTokens(source,ref){return this.engine.previewTokens(source,ref);}
   recordPreviewBuild(input){return this.engine.recordPreviewBuild(input);}
   initializeSource(input){return this.engine.initializeSource(input);}
+  ensureProvisionRepository(input){return this.engine.runMutation(async()=>{
+    const {operation,source}=await this.engine.provisionState(input),ns=source.artifacts_namespace,name=source.artifacts_repository;
+    if(!await this.artifacts.getNamespace(ns))await this.artifacts.createNamespace(ns);
+    let repository=await this.artifacts.getRepository(ns,name);
+    const saved=operation.checkpoints_json?.repositoryReceipt;
+    if(saved&&(saved.namespace!==ns||saved.repository!==name))throw fail(409,'Provisioning repository receipt identity changed');
+    if(repository&&!saved)throw fail(409,'Repository already exists without an owned provisioning receipt; use the import procedure');
+    if(!repository){
+      if(saved)throw fail(409,'The reserved repository was removed; restore its identity before retrying');
+      await this.engine.provisionState(input);
+      repository=await this.artifacts.createRepository(ns,name);
+    }
+    if(repository?.id==null||!String(repository.id))throw fail(502,'Repository creation did not return an identity');
+    if(saved&&String(saved.id)!==String(repository.id))throw fail(409,'Provisioning repository identity changed');
+    const repositoryReceipt={id:String(repository.id),namespace:ns,repository:name};
+    return this.store.saveLifecycle({...operation,checkpoints_json:{...operation.checkpoints_json,repositoryReceipt}});
+  });}
   checkpointProvision(input){return this.engine.checkpointProvision(input);}
   completeProvision(input){return this.engine.completeProvision(input);}
   fencePrincipal(input){this.feed.closePrincipal(input?.principalId);return this.engine.fencePrincipal(input);}
@@ -163,15 +180,13 @@ export class SystemCoordinator extends DurableObject {
     return {source,version,firstPublicationEventId:firstEvent.id,...(includeReadView?{readView:readSourceView({storage:this.ctx.storage,source,canRollback:false,canAdmin:false}),publicMedia:await readImportedPublicMedia({catalog:this.catalog,storage:this.ctx.storage,sourceId:source.id,mediaStore:this.media.records})}:{})};
   }
   async provisionFiles(input) {
-    const operation=await this.engine.publicationStore('getLifecycleOperation',[input.operationId]);
-    if(!operation)throw fail(409,'Provision operation unavailable');
-    const source=await this.engine.currentSource();
+    const {source}=await this.engine.runMutation(()=>this.engine.provisionState(input));
     return this.repository.provisionFiles({...source,lifecycleOperationId:input.operationId,lifecycleLease:input.lease},{operationId:input.operationId,files:input.files});
   }
   async alarm() {
     const result=await this.engine.alarm();
-    await this.media.expire().catch(()=>{});
     if(this.store.deletionFence()){await this.deletion.advance();return result;}
+    await this.media.expire().catch(()=>{});
     for(const job of await this.engine.requestStore('due',[2])) {
       const lease={jobId:job.id,leaseToken:crypto.randomUUID()};
       const claimed=await this.engine.requestStore('claim',[{...lease,leaseOwner:`alarm:${this.sourceId}`,leaseSeconds:600}]);

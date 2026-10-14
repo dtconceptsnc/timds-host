@@ -7,7 +7,8 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "test:host": "node --test --test-concurrency=1 host.test.mjs"
+    "test:host": "node --test --test-concurrency=1 host.test.mjs",
+    "test:lifecycle": "node --test --test-concurrency=1 lifecycle.test.mjs"
   },
   "dependencies": {
     "@dtconcepts/timds": "0.1.464",
