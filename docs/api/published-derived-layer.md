@@ -35,7 +35,10 @@ Approvals intake; it calls this public tool without forwarding the caller's bear
 or cookies. Human host draft authorization is a separate interface.
 
 Native browser HTML/CSS responses rebase standalone root-relative links beneath
-`/systems/<encoded-system>/` or its `/v/<label>/` prefix. Their ETag and length
+`/systems/<encoded-system>/` or its `/v/<label>/` prefix. That covers `href`,
+`src`, `action`, `poster` and `value` attributes (so `<option value="/...">`
+section switchers navigate within the release), `srcset`, meta refresh
+`content`, and `url()` or `@import` in CSS. Their ETag and length
 reflect the rendered bytes. Stored release bytes, provenance digests and binary
 consumer bundle assets retain their original identity. Public native URLs remain
 on the separate companion origin.
