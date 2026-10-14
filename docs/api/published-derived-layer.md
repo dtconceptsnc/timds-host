@@ -53,7 +53,10 @@ active import-stage table; missing import authority fails closed.
 
 Native `bundle.json` has scoped absolute manifest/directory/file URL fields
 (`directory` moves with the pointer, `versioned` is the immutable copy and
-`latest` is the redirecting tag);
+`latest` is the redirecting tag); the public roots also answer `bundle.json`
+at the system root and under `/v/<label>/` with the entry directory's
+manifest when the artifact root has none, which is where `timds consumer
+sync` reads it;
 its declared file paths, byte counts and hashes are preserved. The physical
 `bundle/*` files are never rewritten. A pinned manifest advertises its immutable
 version directory; a current manifest does not claim that a same-label historical

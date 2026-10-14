@@ -18,6 +18,7 @@ export async function publishedFixture({storageBucket}={}) {
       'docs/index.json':JSON.stringify({pages:[{id:'brand/voice',title:'Brand voice',url:'/brand/voice',view:'brand',blocks:[{id:'brand/voice#tone',title:'Tone',intro:`Guidance ${label}`,specs:[],notes:[],code:[],assets:[],prose:[]}]}]}),
       'docs/tokens.json':JSON.stringify({count:2,kinds:{color:1,length:1},roles:{'color.primary':'--brand'},tokens:[{name:'--brand',value:'#abc',resolved:'#aabbcc',kind:'color',selector:':root',base:true,source:'styles.css'},{name:'--space',value:'1rem',resolved:'1rem',kind:'length',selector:'.panel',base:false}]}),
       'docs/llms.txt':`Example ${label}\n`,
+      'docs/bundle.json':JSON.stringify({schemaVersion:1,system:{id:source.system_id,name:'Example',version:label},fileCount:1,bytes:6,files:[{path:'style.css',bytes:6,sha256:'0'.repeat(64)}]}),
       'font.woff2':new Uint8Array([0,255,5,6,128,10]),
     };
     const entries=await Promise.all(Object.entries(files).map(async([path,value])=>{const data=typeof value==='string'?encoder.encode(value):value;return {path,data,sha256:await sha256(data),size:data.length,mode:'100644'};}));
