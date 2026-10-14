@@ -472,7 +472,13 @@ timers, so it still hibernates between messages.
   fetch or Request uses. A periodic re-send wakes only a session that slept
   normally (`reported: 'sleeping'`); it never retries a failed wake, but a viewer
   who reopens the page does. The runtime then reports `starting` and `ready` or
-  `failed`.
+  `failed`. While a wake is pending (`wakeRequested` set, or `starting` reported
+  within the last 15 minutes with no running container) `status()` answers
+  `starting`, not `sleeping`, so a viewer who reloads, a feed socket that
+  reconnects, or a Request during a slow start neither writes a second
+  `waking`/`starting` pair nor calls `container.start` again; `resume` ignores a
+  pending wake too. A `starting` older than that grace with no container (an
+  isolate lost mid-wake) counts as `sleeping` again and the next viewer wakes it.
 - **Ready after wake.** While the live record says `starting` and the container
   runs, `touch()` arms a 1-second alarm that probes `/__timds_live/version` and
   reports `ready` or `failed`. A fresh or resumed container reports `ready`

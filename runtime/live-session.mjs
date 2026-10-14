@@ -3,6 +3,9 @@ import {validateRun,sessionIdPattern,safeTaskDiagnostics} from './policy.mjs';
 import {dependencyCacheKey,INSTALL_FLAGS} from '../src/build/cache.mjs';
 // watchMs bounds one coordinator keepalive: a viewer re-sends `viewing` every five minutes.
 const idleMs=10*60_000, taskMs=12*60_000, watchMs=30*60_000;
+// wakeGraceMs bounds one in-flight wake: a `starting` report older than this with
+// no running container (an isolate lost mid-wake) counts as sleeping again.
+const wakeGraceMs=15*60_000;
 const ca='/etc/cloudflare/certs/cloudflare-containers-ca.crt';
 const trust={NODE_EXTRA_CA_CERTS:ca,GIT_SSL_CAINFO:ca,CURL_CA_BUNDLE:ca,SSL_CERT_FILE:ca};
 const active=run=>run && ['starting','running','submitting'].includes(run.state);
@@ -49,7 +52,11 @@ export class LiveSessionRuntime {
     return{...this.status(),reported:this.record().state};
   }
   // Viewer wake: returns at once; the alarm performs the same wake() a frame fetch or Request does.
-  async requestWake(){const live=this.record();if(!live||['closed','closing'].includes(live.state)||(live.expiresAt&&Date.parse(live.expiresAt)<=Date.now())||this.ctx.container?.running)return this.status();this.save({wakeRequested:true});await this.ctx.storage.setAlarm(Date.now());return this.status();}
+  // A wake already accepted (alarm armed) or begun (`starting` reported, container
+  // not running yet). status() answers `starting` for it, so a viewer arriving or a
+  // Request during a slow start does not write `waking` and `starting` again.
+  wakePending(){const live=this.record();if(!live||this.ctx.container?.running)return false;if(live.wakeRequested)return true;return live.state==='starting'&&Number.isFinite(live.wakeStartedAt)&&Date.now()-live.wakeStartedAt<wakeGraceMs;}
+  async requestWake(){const live=this.record();if(!live||['closed','closing'].includes(live.state)||(live.expiresAt&&Date.parse(live.expiresAt)<=Date.now())||this.ctx.container?.running||this.wakePending())return this.status();this.save({wakeRequested:true});await this.ctx.storage.setAlarm(Date.now());return this.status();}
   // requestId names the Request a running/failed task belongs to; the host verifies its binding.
   // Wake phase durations in milliseconds for diagnostics(): credential, boot,
   // clone, dependencies, server (supervisor answering) and total (wake start
@@ -61,7 +68,7 @@ export class LiveSessionRuntime {
     try{await this.portal(this.env,'live-state',{sessionId:live.id,state,...(requestId?{requestId}:{})});}catch{}
   }
   assertOpen(){const live=this.record();if(!live || ['closed','closing'].includes(live.state) || (live.expiresAt && Date.parse(live.expiresAt)<=Date.now()))throw Object.assign(new Error('Live session is closed'),{status:410});return live;}
-  status(){const live=this.record(),run=this.run();return{state:['closed','closing'].includes(live?.state)?live.state:!this.ctx.container?.running?'sleeping':live?.state||'none',runner:run?{requestId:run.requestId,state:run.state,...(run.submissionId?{submissionId:run.submissionId}:{}),...(run.error?{error:run.error}:{}),...(run.diagnostics?{diagnostics:safeTaskDiagnostics(run.diagnostics)}:{}),...(run.conflicts?{conflicts:run.conflicts}:{})}:null};}
+  status(){const live=this.record(),run=this.run();return{state:['closed','closing'].includes(live?.state)?live.state:!this.ctx.container?.running?(this.wakePending()?'starting':'sleeping'):live?.state||'none',runner:run?{requestId:run.requestId,state:run.state,...(run.submissionId?{submissionId:run.submissionId}:{}),...(run.error?{error:run.error}:{}),...(run.diagnostics?{diagnostics:safeTaskDiagnostics(run.diagnostics)}:{}),...(run.conflicts?{conflicts:run.conflicts}:{})}:null};}
   async configure(id,{expiresAt=null,idleTimeoutMs,interruptCleanupOnce}={}){if(!sessionIdPattern.test(id))throw new Error('Invalid session');if(['closed','closing'].includes(this.record()?.state))throw Object.assign(new Error('Closed'),{status:410});if(expiresAt!==null&&!Number.isFinite(Date.parse(expiresAt)))throw new Error('Invalid expiry');if(idleTimeoutMs!==undefined&&(!Number.isInteger(idleTimeoutMs)||idleTimeoutMs<60_000||idleTimeoutMs>idleMs))throw new Error('Idle timeout must be between one and ten minutes');if(interruptCleanupOnce!==undefined&&typeof interruptCleanupOnce!=='boolean')throw new Error('Invalid cleanup interruption');if(interruptCleanupOnce&&(!expiresAt||!this.ctx.container?.running))throw new Error('Cleanup interruption requires a running finite session');this.save({id,expiresAt,...(idleTimeoutMs===undefined?{}:{idleTimeoutMs}),...(interruptCleanupOnce===undefined?{}:{interruptCleanupOnce}),state:this.record()?.state||'sleeping'});if(this.ctx.container?.running)await this.ctx.container.setInactivityTimeout(this.idleTimeout());if(active(this.run())||this.ctx.container?.running||expiresAt)await this.schedule(active(this.run())?Date.now()+1000:this.ctx.container?.running?Date.now()+this.idleTimeout():Date.parse(expiresAt));else await this.ctx.storage.deleteAlarm();return this.status();}
   async command(args,cwd='/workspace'){
     const result=await(await this.ctx.container.exec(args,{cwd,env:trust})).output();
