@@ -68,7 +68,7 @@ export class SystemCoordinator extends DurableObject {
       cleanupAgentSession:(session,source)=>requestService.live.close(session,source),
       nextLifecycleAlarm:()=>this.store?.deletionFence()?this.deletion?.nextAlarm():this.media?.nextAlarm(),
     });
-    this.publicationApi=createPublicationApi({sourceId,store:this.store,authorization:this.authorization,repository:this.repository,publication:this.publication,
+    this.publicationApi=createPublicationApi({sourceId,publicOrigin:env.TIMDS_PUBLIC_ORIGIN,store:this.store,authorization:this.authorization,repository:this.repository,publication:this.publication,
       metadata:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`metadata:${input.publicationId}`).metadata(input),input.operation),
       build:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`build:${input.publicationId}`).run(input),'build')});
     this.sessionChecks=createSessionChecks({sourceId,storage:ctx.storage,bucket:env.SNAPSHOTS,engine:this.engine,
@@ -177,7 +177,7 @@ export class SystemCoordinator extends DurableObject {
     if(!version||version.source_id!==source.id||!version.artifact_ref)return null;
     const firstEvent=this.ctx.storage.sql.exec("SELECT id FROM publication_events WHERE json_extract(row_json,'$.design_system_source_id')=? AND json_extract(row_json,'$.version_label')=? ORDER BY json_extract(row_json,'$.created_at'),id LIMIT 1",source.id,version.version_label).toArray()[0];
     if(!firstEvent)return null;
-    return {source,version,firstPublicationEventId:firstEvent.id,...(includeReadView?{readView:readSourceView({storage:this.ctx.storage,source,canRollback:false,canAdmin:false}),publicMedia:await readImportedPublicMedia({catalog:this.catalog,storage:this.ctx.storage,sourceId:source.id,mediaStore:this.media.records})}:{})};
+    return {source,version,firstPublicationEventId:firstEvent.id,...(includeReadView?{readView:readSourceView({storage:this.ctx.storage,source,canRollback:false,canAdmin:false}),publicMedia:await readImportedPublicMedia({catalog:this.catalog,storage:this.ctx.storage,sourceId:source.id,mediaStore:this.media.records,publicUrl:this.media.publicUrl})}:{})};
   }
   async provisionFiles(input) {
     const {source}=await this.engine.runMutation(()=>this.engine.provisionState(input));

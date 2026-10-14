@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fail } from '../store/errors.mjs';
 import { createMediaStore } from './store.mjs';
-import { normalizeMedia,mediaView,UUID,PART_BYTES,SINGLE_BYTES } from './contract.mjs';
+import { normalizeMedia,mediaView,publicMediaFilename,UUID,PART_BYTES,SINGLE_BYTES } from './contract.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const etag=value=>String(value||'').replace(/^"|"$/g,'');
 const now=()=>new Date().toISOString();
@@ -26,10 +26,17 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
   if(!/^MEDIA_LEGACY_[A-Z0-9_]+$/.test(key||'')||!env[key]||!row.object_key?.startsWith(prefix)||!row.object_key.slice(prefix.length)||row.object_key.slice(prefix.length).includes('/'))throw fail(503,'Imported media storage is not bound');
   return env[key];
  }
+ function publicUrl(row){
+  const filename=publicMediaFilename(row);
+  if(row.source_id!==sourceId||!UUID.test(row.id||'')||row.visibility!=='public'||!/^[a-zA-Z0-9.-]+$/.test(filename||''))return null;
+  try{storageFor(row);}catch{return null;}
+  return `${origin}/media/${sourceId}/${row.id}/${filename}`;
+ }
+ const view=row=>({...mediaView(row),publicUrl:publicUrl(row)});
  async function archive(id,actor,{fenced=false,deleting=false}={}){
   const row=await runMutation(async()=>{if(!fenced)await authorize(actor,true);const value=await asset(id);if(value.status==='archived'&&value.purged_at)return value;if(!['ready','archiving','archived'].includes(value.status))throw fail(409,'Cancel the unfinished upload first');storageFor(value);const saved=records.putAsset({...value,status:'archiving',purge_requires_lifecycle:deleting||value.purge_requires_lifecycle===true,updated_at:now()});await schedule(Date.now()+1000);return saved;});
   if(!row.purged_at){const target=storageFor(row);await target.delete(row.object_key);if(await target.head(row.object_key))throw fail(409,'Media removal is not yet verified');await runMutation(()=>records.putAsset({...row,status:'archived',purged_at:now(),updated_at:now()}));}
-  return {archived:true,asset:mediaView(await asset(id))};
+  return {archived:true,asset:view(await asset(id))};
  }
  async function verifyObject(row){const object=await bucket().get(row.object_key);if(!object||object.size!==row.bytes){await object?.body?.cancel();throw fail(409,'Media byte count did not match');}const digest=new crypto.DigestStream('SHA-256');await object.body.pipeTo(digest,{signal:AbortSignal.timeout(10*60_000)});const actual=Buffer.from(await digest.digest).toString('hex');if(actual!==row.sha256)throw fail(409,'Media SHA256 did not match');return {etag:object.etag,bytes:object.size,sha256:actual};}
  async function cancel(id,actor,{fenced=false,beforeDelete=async()=>{}}={}){
@@ -42,7 +49,7 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
   if(row.status!=='cancelled'){
    // An upload never reuses its storage key. Wait for bounded transfers before
    // the final delete; late callbacks also delete their cancelled object.
-   if(row.cleanup_after>Date.now())return {ok:true,pending:true,asset:mediaView(await asset(row.asset_id))};
+   if(row.cleanup_after>Date.now())return {ok:true,pending:true,asset:view(await asset(row.asset_id))};
    if(row.multipart_id&&!row.multipart_aborted){
     await beforeDelete();
     await bucket().resumeMultipartUpload(row.object_key,row.multipart_id).abort();
@@ -53,13 +60,13 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
    if(await bucket().head(row.object_key))throw fail(409,'Media removal is not yet verified');
    await runMutation(async()=>{const current=upload(id);if(current.status!=='cancelling')throw fail(409,'Media cancellation changed');records.putUpload({...current,status:'cancelled',updated_at:now()});const value=await asset(row.asset_id);if(value.status!=='ready')records.putAsset({...value,status:'failed',purged_at:now(),updated_at:now()});});
   }
-  return {ok:true,asset:mediaView(await asset(row.asset_id))};
+  return {ok:true,asset:view(await asset(row.asset_id))};
  }
 
  return {
-  records,
+  records,publicUrl,
   async invoke({operation,actor,input={}}){
-   if(operation==='list')return runMutation(async()=>{await authorize(actor);const rows=await records.assets(),items=rows.slice(0,500).filter(row=>row.status!=='archived').map(mediaView);return {assets:items,truncated:rows.length>500,limit:500,storage:{configured:Boolean(env.MEDIA),publicDeliveryConfigured:Boolean(env.MEDIA)},summary:{total:items.length,ready:items.filter(row=>row.status==='ready').length,public:items.filter(row=>row.visibility==='public').length,private:items.filter(row=>row.visibility==='private').length}};});
+   if(operation==='list')return runMutation(async()=>{await authorize(actor);const rows=await records.assets(),items=rows.slice(0,500).filter(row=>row.status!=='archived').map(view);return {assets:items,truncated:rows.length>500,limit:500,storage:{configured:Boolean(env.MEDIA),publicDeliveryConfigured:Boolean(env.MEDIA)},summary:{total:items.length,ready:items.filter(row=>row.status==='ready').length,public:items.filter(row=>row.visibility==='public').length,private:items.filter(row=>row.visibility==='private').length}};});
    if(operation==='create'){
     const normalized=normalizeMedia(input);
     const prepared=await runMutation(async()=>{
@@ -68,7 +75,7 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
      let existing=records.byDigest(normalized.sha256);
      if(existing?.status==='ready'){
       if(existing.bytes!==normalized.bytes||existing.content_type!==normalized.contentType)throw fail(409,'Existing media digest has different metadata');
-      existing=records.putAsset({...existing,title:normalized.title,tags:normalized.tags,kind:normalized.kind,metadata:normalized.metadata,updated_at:now()});return {asset:mediaView(existing),reused:true,upload:null};
+      existing=records.putAsset({...existing,title:normalized.title,tags:normalized.tags,kind:normalized.kind,metadata:normalized.metadata,updated_at:now()});return {asset:view(existing),reused:true,upload:null};
      }
      if(existing&&records.activeUploads().some(row=>row.asset_id===existing.id))throw fail(409,'This media already has an active upload');
      const id=randomUUID(),assetId=randomUUID(),time=now(),object_key=`sources/${sourceId}/media/${id}/${normalized.sha256}/${normalized.safeFilename}`;
@@ -81,23 +88,23 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
     try{
      if(transfer.creation_lease_until<=Date.now())throw fail(410,'Media upload creation expired');
      if(transfer.method==='multipart')multipart=await Promise.race([bucket().createMultipartUpload(row.object_key,{httpMetadata:{contentType:row.content_type},customMetadata:{sha256:row.sha256,sourceId,assetId:row.id}}),new Promise((_,reject)=>{creationTimeout=setTimeout(()=>reject(fail(504,'Media upload creation timed out')),Math.max(1,transfer.creation_lease_until-Date.now()));})]);
-     return await runMutation(async()=>{await authorize(actor,true);const current=upload(transfer.id);if(current.status!=='creating')throw fail(409,'Media upload reservation changed');const ready=records.putUpload({...current,status:'active',creation_lease_until:null,multipart_id:multipart?.uploadId||null});const token=ready.method==='single'?cap({kind:'upload',source_id:sourceId,upload_id:ready.id,part:0,principal_id:actor.principalId,expires_at:ready.expires_at}):null;await schedule(ready.expires_at);return {asset:mediaView(row),reused:false,upload:plan(ready,token)};});
+     return await runMutation(async()=>{await authorize(actor,true);const current=upload(transfer.id);if(current.status!=='creating')throw fail(409,'Media upload reservation changed');const ready=records.putUpload({...current,status:'active',creation_lease_until:null,multipart_id:multipart?.uploadId||null});const token=ready.method==='single'?cap({kind:'upload',source_id:sourceId,upload_id:ready.id,part:0,principal_id:actor.principalId,expires_at:ready.expires_at}):null;await schedule(ready.expires_at);return {asset:view(row),reused:false,upload:plan(ready,token)};});
     }catch(error){await runMutation(async()=>{const current=upload(transfer.id);records.putUpload({...current,status:'cancelling',creation_lease_until:null,multipart_id:multipart?.uploadId||current.multipart_id||null,cleanup_after:Date.now(),updated_at:now()});records.putAsset({...row,status:'failed',updated_at:now()});await schedule(Date.now()+1000);});throw error;}
     finally{clearTimeout(creationTimeout);}
    }
    if(operation==='part')return runMutation(async()=>{await authorize(actor,true);const row=upload(input.uploadId);active(row);const part=Number(input.partNumber),count=Math.ceil(row.bytes/PART_BYTES);if(row.method!=='multipart'||!Number.isInteger(part)||part<1||part>count)throw fail(400,'Invalid multipart part');const token=cap({kind:'upload',source_id:sourceId,upload_id:row.id,part,principal_id:actor.principalId,expires_at:Math.min(row.expires_at,Date.now()+900000)});return {partNumber:part,url:`${origin}/media/uploads/${sourceId}/${row.id}/${part}`,headers:{Authorization:`Bearer ${token}`}};});
    if(operation==='cancel')return cancel(input.uploadId,actor);
    if(operation==='complete'){
-    const claim=await runMutation(async()=>{await authorize(actor,true);const row=upload(input.uploadId);if(row.status==='completed')return {completed:mediaView(await asset(row.asset_id))};if(row.status==='completing'&&row.lease_until>Date.now())throw fail(409,'Media verification is in progress');if(!['active','completing'].includes(row.status)||row.expires_at<=Date.now())throw fail(410,'Media upload is unavailable or expired');const parts=records.parts(row.id),expected=row.method==='multipart'?Math.ceil(row.bytes/PART_BYTES):1;if(parts.length!==expected||parts.some((part,index)=>part.status!=='uploaded'||part.partNumber!==(row.method==='single'?0:index+1)))throw fail(409,'Upload every media part before completing');if(row.method==='multipart'&&(!Array.isArray(input.parts)||input.parts.length!==parts.length||input.parts.some((part,index)=>Number(part.partNumber)!==parts[index].partNumber||etag(part.etag)!==etag(parts[index].etag))))throw fail(409,'Multipart completion differs from the uploaded part receipts');const lease=randomUUID();records.putUpload({...row,status:'completing',lease,lease_until:Date.now()+900000});return {row,parts,lease};});
+    const claim=await runMutation(async()=>{await authorize(actor,true);const row=upload(input.uploadId);if(row.status==='completed')return {completed:view(await asset(row.asset_id))};if(row.status==='completing'&&row.lease_until>Date.now())throw fail(409,'Media verification is in progress');if(!['active','completing'].includes(row.status)||row.expires_at<=Date.now())throw fail(410,'Media upload is unavailable or expired');const parts=records.parts(row.id),expected=row.method==='multipart'?Math.ceil(row.bytes/PART_BYTES):1;if(parts.length!==expected||parts.some((part,index)=>part.status!=='uploaded'||part.partNumber!==(row.method==='single'?0:index+1)))throw fail(409,'Upload every media part before completing');if(row.method==='multipart'&&(!Array.isArray(input.parts)||input.parts.length!==parts.length||input.parts.some((part,index)=>Number(part.partNumber)!==parts[index].partNumber||etag(part.etag)!==etag(parts[index].etag))))throw fail(409,'Multipart completion differs from the uploaded part receipts');const lease=randomUUID();records.putUpload({...row,status:'completing',lease,lease_until:Date.now()+900000});return {row,parts,lease};});
     if(claim.completed)return {ok:true,asset:claim.completed};
     try{
      if(claim.row.method==='multipart'&&!await bucket().head(claim.row.object_key))await bucket().resumeMultipartUpload(claim.row.object_key,claim.row.multipart_id).complete(claim.parts.map(({partNumber,etag})=>({partNumber,etag})));
      const verified=await verifyObject(claim.row);
-     return await runMutation(async()=>{await authorize(actor,true);const row=upload(claim.row.id);if(row.status!=='completing'||row.lease!==claim.lease)throw fail(409,'Media completion reservation changed');const value=await asset(row.asset_id),ready=records.putAsset({...value,status:'ready',ready_at:now(),updated_at:now(),verified});records.putUpload({...row,status:'completed',lease:null,lease_until:null,completed_at:now()});return {ok:true,asset:mediaView(ready)};});
+     return await runMutation(async()=>{await authorize(actor,true);const row=upload(claim.row.id);if(row.status!=='completing'||row.lease!==claim.lease)throw fail(409,'Media completion reservation changed');const value=await asset(row.asset_id),ready=records.putAsset({...value,status:'ready',ready_at:now(),updated_at:now(),verified});records.putUpload({...row,status:'completed',lease:null,lease_until:null,completed_at:now()});return {ok:true,asset:view(ready)};});
     }catch(error){await runMutation(()=>{const row=upload(claim.row.id);if(row.status==='completing'&&row.lease===claim.lease)records.putUpload({...row,status:error.statusCode===409?'cancelling':'active',cleanup_after:Date.now(),lease:null,lease_until:null,updated_at:now()});});await schedule(Date.now()+1000);throw error;}
    }
    if(operation==='archive')return archive(input.assetId,actor);
-   if(operation==='download')return runMutation(async()=>{await authorize(actor);const row=await asset(input.assetId);if(row.status!=='ready')throw fail(404,'Ready media not found');if(row.visibility==='public'&&row.public_url)return {asset:mediaView(row),url:row.public_url};const token=cap({kind:'download',source_id:sourceId,asset_id:row.id,principal_id:actor.principalId,expires_at:Date.now()+300000});return {asset:mediaView(row),url:`${origin}/media/downloads/${sourceId}/${row.id}?cap=${token}`};});
+   if(operation==='download')return runMutation(async()=>{await authorize(actor);const row=await asset(input.assetId);if(row.status!=='ready')throw fail(404,'Ready media not found');if(row.visibility==='public'){const url=publicUrl(row);if(!url)throw fail(503,'Public media storage is not configured');return {asset:view(row),url};}const token=cap({kind:'download',source_id:sourceId,asset_id:row.id,principal_id:actor.principalId,expires_at:Date.now()+300000});return {asset:view(row),url:`${origin}/media/downloads/${sourceId}/${row.id}?cap=${token}`};});
    throw fail(404,'Unknown media operation');
   },
   async upload(request,{uploadId,part}){
@@ -134,7 +141,7 @@ export function createSourceMedia({sourceId,storage,catalog,sourceStore,authoriz
   async fetch(request,{assetId,filename,downloadToken}){
    await source();const row=await asset(assetId);if(row.status!=='ready')throw fail(404,'Media not found');
    if(downloadToken){const grant=await capability(downloadToken,'download');if(grant.asset_id!==assetId)throw fail(403,'Download capability belongs to another asset');}
-   else if(row.visibility!=='public'||row.legacy||filename!==row.safe_filename)throw fail(404,'Public media not found');
+   else if(row.visibility!=='public'||filename!==publicMediaFilename(row))throw fail(404,'Public media not found');
    const binding=storageFor(row);
    const range=request.headers.get('Range');if(range&&!/^bytes=(?:\d+-\d*|-\d+)$/.test(range))throw fail(416,'Use one byte range');
    const object=request.method==='HEAD'?await binding.head(row.object_key):await binding.get(row.object_key,range?{range:new Headers({Range:range})}:{});

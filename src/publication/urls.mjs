@@ -1,5 +1,11 @@
+import { publicSystemUrls } from '../public/index.mjs';
 export function publicUrls(env,source,version){
- const origin=new URL(env.TIMDS_PUBLIC_ORIGIN||env.HOST_ORIGIN);if(origin.protocol!=='https:'&&origin.hostname!=='localhost')throw new Error('Public host origin must be HTTPS');
- const root=source.public_root_url?new URL(source.public_root_url).href.replace(/\/?$/,'/'):`${origin.origin}/systems/${encodeURIComponent(source.system_id)}/`;
- return{root,version:`${root}v/${encodeURIComponent(version)}/`};
+ const {root,version:release}=publicSystemUrls(env.TIMDS_PUBLIC_ORIGIN,source.system_id,version);
+ return{root,version:release};
+}
+// Project published response locations without changing the retained receipt.
+export function publishedResult(result,publicOrigin,source){
+ if(result?.status!=='published'||!result.version)return result;
+ const {root,version}=publicSystemUrls(publicOrigin,source.system_id,result.version);
+ return {...result,publicRoot:root,versionedUrls:{root:version,llmsTxt:`${version}llms.txt`,bundleJson:`${version}bundle.json`,artifact:`${version}.timds-artifact.json`},...(Object.hasOwn(result,'url')?{url:version}:{})};
 }

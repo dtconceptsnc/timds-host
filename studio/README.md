@@ -26,6 +26,15 @@ palette taken from the actual published color tokens. **View all deliverables**
 opens the Deliverables view; **Prepare client handoff** previews a copyable
 introduction containing the public links and implementation instructions.
 The handoff contains no Studio invitation, session link or bearer token.
+Client links require HTTPS public-facing domain names: provider domains
+(`workers.dev`, `pages.dev`, `r2.dev`) and IP addresses are excluded. If the
+published root or captured release base is not suitable, Studio shows a
+public-address setup state and a refresh action instead of the collection's
+share links. File, media, page and design links must also share the published
+root’s origin, as must the captured release base.
+Studio does not invent replacement hostnames; the host operator configures and
+deploys the canonical public origin as described in
+[public-facing domains](../docs/operations.md#public-facing-domains-and-client-handoff).
 
 Below the collection, **Keep creating** explains the three ways to make a
 change, each as a card:
