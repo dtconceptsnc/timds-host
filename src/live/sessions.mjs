@@ -34,6 +34,10 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
       throw fail(400,'Unsupported native live operation');
     },
     async schedule(session) {if(configured)return configure(session);},
+    // Runtime diagnostics for a session the caller may read: last wake phase
+    // timings, dependency cache outcome, startup error and dev server state.
+    // Never starts a container; a closed session still reports its last wake.
+    async diagnostics(id) {await owned(id,{open:false});return native(id).diagnostics();},
     waking:id=>mark(id,'waking'),
     // A viewer that waits for a wake which then never starts sees `sleeping` again.
     slept:id=>mark(id,'sleeping'),
