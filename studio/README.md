@@ -359,21 +359,22 @@ OAuth flow. The dialog contains:
   ID when scoped to a session, and the Studio link, then tells the agent how
   to connect if it is not connected yet (CLIs run the command and stop if a
   restart or sign-in is needed; app clients ask the designer to add the server
-  and stop until it is connected), and what to do once it is: `join_session`
-  (or `list_systems`, `get_system`, `get_active_work` and `start_session`
-  when no session is scoped), `get_editing_guide` and the source `AGENTS.md`
-  and `README.md`, `claim_session`, `update_session` against the latest
-  `baseRevision` and `lastUpdateHash`, `run_check` and `get_check`,
-  `submit_session` with a note, then report the submission and its Preview
-  and stop without publishing. The last line is `Task: <describe the change
-  you want>` for the designer to replace.
-- **3 · Or keep it as a skill.** The same instructions as an Agent Skills
-  file, `SKILL.md`, with frontmatter `name: timds-<system folder>` and a
-  description that says when to use it, written in the third person and
-  always at system scope (a skill outlives any session, so it carries no
-  session ID and tells the agent to start a session or join the one the user
-  names). **Copy SKILL.md** copies it; **Download SKILL.md** saves it through
-  a Blob URL. The help line names the folder to save it in.
+  and stop until it is connected), and what to do once it is: call
+  `get_skill` for the system and save the result at the path it names, then
+  `join_session` (or `get_system`, `get_active_work` and `start_session`
+  when no session is scoped), do the task, submit for review, report the
+  submission and its Preview, and stop without publishing. The working rules
+  themselves live in the skill, so the brief never restates them. The last
+  line is `Task: <describe the change you want>` for the designer to replace.
+- **3 · Or keep it as a skill.** The same `SKILL.md` the agent will fetch,
+  read from the host through `get_skill` over the fixed same-origin
+  `/api/timds/mcp` route (the `mcpCall` helper that `read_derived_layer`
+  also uses) when the dialog opens, with a loading line, a retryable error
+  state, **Copy SKILL.md** and **Download SKILL.md** (a Blob URL). The host
+  renders the toolkit's `skills/timds-hosted-design-system/SKILL.md`
+  template with this origin and system, so Studio shows exactly what the
+  agent gets; see [designer MCP](../docs/api/designer-mcp.md). The skill is
+  always system-scoped, because it outlives any session.
 
 Clipboard failure in any of these selects the text for manual copying, as
 elsewhere in Studio. The brief and the skill never contain a bearer token,
