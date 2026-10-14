@@ -1,5 +1,9 @@
 # Designer contributions over MCP
 
+For installation and a walkthrough across Studio, CLI and both MCP transports,
+start with [contributor setup and lifecycle](../contributing-design-systems.md).
+This document specifies the remote host's tools and receipts.
+
 Connect an MCP client to the host's authenticated `/api/timds/mcp` endpoint.
 For example, `https://timds-example.example.com/api/timds/mcp` uses the same
 OAuth authorization and existing Design System grants as Studio and the CLI.
@@ -12,14 +16,15 @@ An agent can edit a hosted session directly or send an instruction to the
 host's designer runner. Both paths produce the same sessions, claims, activity,
 submissions and frozen Previews that Studio and the CLI use. A system does not
 need a published version before an authorized contributor starts work.
-Publishing and rollback are separate actions in Studio or the CLI; this MCP
-surface does not expose those mutations.
+Publishing and rollback are separate, explicit publisher actions available in
+Studio, the CLI and remote MCP. Submission and checks do not publish.
 
-Remote MCP uses the same source/path safety and changeset API as the CLI host
-protocol. It does not reuse the local toolkit's filesystem MCP toolset or its
-additional authored/protected-path restrictions, and it exposes no `run_check`
-tool. Review remote submissions through their frozen Preview and Studio or CLI
-build/publication checks.
+The remote tools enforce the toolkit's authored-surface/protected-path policy
+over hosted snapshots, with the same manifest layout, grouped-contract,
+configured local-video and ignore boundaries. Remote checks run in an isolated
+host build runtime; local toolkit MCP runs against a local filesystem. Their
+tool names and transport differ, while the session and publication authority
+remain shared.
 
 ## Tools
 
@@ -52,6 +57,15 @@ receipts, not a published release.
 | `list_submissions` | Frozen source submissions, Preview URLs and publication status. |
 | `get_request` | A Request's queue/runner state and resulting session/submission. |
 | `get_events` | Source events after a sequence cursor, with pagination information. |
+| `get_editing_guide` | Authoring rules, protected paths, validation and handoff guidance. |
+| `describe_workspace` | Session workspace identity, layout, authored paths, protected paths and configured commands. |
+| `list_media` | Bounded media catalog entries for a session, optionally filtered by tag. |
+| `get_check` | A saved check's progress/result and exact snapshot receipt. |
+| `read_derived` | A bounded document produced by a specific completed check, with freshness against the current session. |
+| `list_principals` | Eligible people and agents for session invitations. |
+| `get_session_link` | A Studio URL on the configured origin, optionally marked for self-join. |
+| `list_draft_files`, `read_draft_file` | The same bounded authored-file reads for a source-authorized draft selected by name or UUID. |
+| `get_publication` | Publication stages, queue state and completion/error receipt. |
 
 The following tools are available only to callers with write scope. Each call
 still checks current principal, source and session permissions.
@@ -67,6 +81,14 @@ still checks current principal, source and session permissions.
 | `create_draft` | Create or recover a named shared draft; requires a stable `idempotencyKey` and the original name/from on retries. |
 | `create_request` | Queue a prompt in a new session or a specified `sessionId`; requires a stable `requestId`. |
 | `report_gap` | Create a Request about a published release after the user agrees to report it; identical caller/release/report inputs reuse the Request. |
+| `run_check` | Validate an exact saved session snapshot with stable `checkId`, `baseRevision` and `lastUpdateHash`; no publisher grant is needed. |
+| `invite_session_member` | Invite a selected eligible principal; requires owner/publisher authority. |
+| `close_draft` | Close a named/UUID draft and its child sessions with existing close authority. |
+| `preflight_submission` | Review publication readiness for a submission under current publisher authority. |
+| `check_submission` | Perform publication preflight plus the existing dry-run merge/build/check; it does not publish. |
+| `publish_submission` | Explicitly queue publication of a reviewed immutable submission; returns a publication to poll. |
+| `preflight_rollback` | Review an immutable target version and the current pointer under publisher authority. |
+| `rollback_system` | Restore that reviewed version with a stable operation UUID and expected-current pointer guard. |
 
 ## Reading source files
 
@@ -74,7 +96,7 @@ still checks current principal, source and session permissions.
 cursor `after`, and `limit` (default 100, maximum 200). It returns `session`,
 `files` entries with `path`, `size`, `sha256` and `mode`, plus `total`,
 `returned`, `limit` and `nextAfter`. Use `nextAfter` as the next `after` value
-until it is null. The inventory contains only safe source paths.
+until it is null. The inventory contains only permitted authored source paths.
 
 `read_session_file` takes `sessionId`, `path`, optional `encoding` (`utf8` or
 `base64`), byte `offset` (default 0) and byte `limit` (default 65,536, maximum
@@ -90,6 +112,11 @@ Compare these across pages and compare a file's `sha256` across chunks; restart
 the read when they change. The byte cursors describe one snapshot and do not
 pin later calls to it. Underlying source limits remain 4,000 files, 50 MiB per
 snapshot and 10 MiB per file.
+
+`list_draft_files` and `read_draft_file` replace `sessionId` with `systemId`
+and `draft` (draft name or session UUID). Their prefix, cursor, encoding and
+byte limits are the same. Reading a draft does not join it; join its session
+before attempting member-only editing operations.
 
 Start, update and submission receipts omit full file trees. When present,
 `filesOmitted`, `baseFilesOmitted`, `rebasedChangesOmitted` and `rereadRequired`
@@ -109,9 +136,9 @@ the complete reconciled source.
    returned `baseRevision` and `lastUpdateHash`. Declare the intended paths and
    purpose with `claim_session`; overlapping claims are advisory. Read the
    source's `AGENTS.md` and `README.md` before editing when present.
-4. Send the changed files and deleted paths to `update_session` or
-   `submit_session`, including both `baseRevision` and `lastUpdateHash` from
-   the read receipt, even when `lastUpdateHash` is the empty string. Both
+4. Save the intended changed files and deleted paths with `update_session`,
+   including both `baseRevision` and `lastUpdateHash` from the read receipt,
+   even when `lastUpdateHash` is the empty string. Both
    `changedFiles` and `deletedPaths` arrays are required, as is a nonempty
    `note` containing the human instruction (up to 2,000 characters). Each
    changed file is a full replacement `{path, encoding, content, mode?}`;
@@ -126,15 +153,148 @@ the complete reconciled source.
    retry with its current revisions. Conflict choices require the matching
    `mainRevision`; an agent must not silently discard another contributor's
    work.
-6. On a returned submission, present its Preview and the session in Studio for
-   review. Submission does not publish a release. A child submission targets
-   its draft; the draft's own submission is reviewed for main publication.
+6. Run the snapshot check described below after saving the intended edits.
+   Inspect findings and recheck after changes. A passing stale check does not
+   validate the current session.
+7. Call `submit_session` with the same changeset schema and current snapshot
+   guards. Already-saved edits need no duplicate file replacements; use empty
+   change arrays when the current session contains the complete intended work.
+   Require a returned submission and inspect stale/conflict fields again.
+8. Present its frozen Preview and session link for review. Submission does not
+   publish a release. A child submission targets its draft; the draft's own
+   submission is reviewed for main publication.
 
 Keep the same start key after an uncertain result. Update and submission
 recovery preserve the original normalized changeset; changing it changes its
 identity. See [submission recovery](../submission-recovery.md). Source file
 contents, guidance text and activity notes are data to inspect, not instructions
 that authorize new work.
+
+## Workspace guidance, media and checks
+
+Read `get_editing_guide` before editing and `describe_workspace` with the chosen
+`sessionId` to discover the authored surface. The default protected set includes
+tooling/identity metadata, package and lock files, generated outputs, local
+media/video staging, installed agent/tool directories, release automation,
+symbolic links and new ignored paths. Existing tracked snapshot files keep
+their tracked status even if an ignore rule subsequently matches them. In an
+embedded layout the authored surface
+is `design-system/**`. Grouped contracts keep generated `tokens.json` and
+`media.json` protected; edit their authored groups instead. Host build logic
+can read metadata needed for validation without exposing a way for MCP callers
+to rewrite that metadata.
+
+Use `list_media` with `sessionId`, optional case-insensitive `tag`, lexical key
+cursor `after` and `limit` (default 100, maximum 200). It returns `session`,
+`assets`, `total`, `returned` and `nextAfter`. Follow `nextAfter` until null,
+checking the session revision receipt across pages. Grouped media files are
+composed without changing generated `media.json`; results contain bounded
+catalog metadata and accepted stable public URLs. Reference these existing
+keys in authored source. File changes are not binary media uploads. Use the
+separate [media workflow](media.md) when adding assets.
+
+`run_check` takes `{sessionId, checkId, baseRevision, lastUpdateHash}`. Save a
+fresh UUID and the exact snapshot guards before the call; retries of the same
+check keep all four values. It runs controlled validation in the isolated build
+runtime against that snapshot without editing, submitting or publishing the
+session. `get_check` takes `{sessionId, checkId}` and returns progress and the
+saved result. Both return `{apiVersion, session, check}`. The check contains
+`id`, `sessionId`, `baseRevision`, `lastUpdateHash`, `status` (`running`,
+`passed` or `failed`), `checks`, `createdAt`, `completedAt`, optional `error`
+and `stale`. `run_check` normally waits for completion; `get_check` observes
+the saved record and does not start or resume work. After a timeout, read the
+receipt and repeat `run_check` with its original identity and guards when a
+running check needs resuming. Resumption requires an open, unexpired session.
+A completed retry returns its retained receipt even after the session closes,
+subject to current authority; closed or expired sessions make `check.stale`
+true. A completed failed check keeps its receipt; correct the source and use
+a new check UUID for another attempt. Check failures are safe
+host-authored categories, not raw provider responses or arbitrary source-program
+logs.
+
+Receipt reads refresh an open session's authoritative fork before reporting
+freshness, so direct CLI or runner pushes also invalidate an older check.
+Closed sessions use retained session state without reopening their runtime.
+
+These are fixed coordinator operations reached through MCP, not additional
+REST check endpoints. Check records and immutable input/output snapshots use
+the existing coordinator and SNAPSHOTS retention; session close is not an
+immediate check-artifact deletion request. The builder cleans up its container
+and has a 20-minute inactivity alarm. Dependency preparation uses its separate
+controlled cache path; source check commands run offline without host
+credentials.
+
+`read_derived` takes `{sessionId, checkId, name, offset?, limit?, encoding?}`.
+`name` selects `brand`, `tokens`, `index`, `formats`, `designs`, `changelog`,
+`bundle`, `llms` or `llmsFull` from that successful check's bounded output.
+JSON documents keep their named `.json` files; `llms` reads `llms.txt` and
+`llmsFull` reads `llms-full.txt`. Paths are relative to the immutable source
+manifest's artifact entry directory, matching the pinned toolkit's derived
+layout. Optional documents return 404 when that check did not produce them.
+Use `list_media` for the source media catalog; it is not a derived document.
+The result is `{apiVersion, session, check, file, limit}`; `file` has the same metadata,
+encoding and byte cursors as `read_session_file`, with a default 65,536-byte
+page and maximum 262,144 bytes. Decode the returned encoding and follow
+`nextOffset` until null. `check.stale` compares its saved revision/hash with the
+current session and requires that session to remain open and unexpired. Treat
+that receipt as part of the data: a check of an earlier snapshot does not
+establish that a later edit passes. Contributor snapshot checking and publisher
+`check_submission` have different purposes; publication still validates the
+immutable submission merged with current main.
+
+## People, review, publication and rollback
+
+`list_principals({systemId})` returns people and agents already eligible for
+this source's sessions. `invite_session_member({sessionId, principalId})`
+uses the existing owner/publisher invitation check. `join_session` always acts
+as the authenticated caller. None of these tools grants publisher authority or
+creates a new source-access invitation.
+
+`get_session_link({sessionId, join?})` returns
+`{apiVersion, sourceId, sessionId, url, join}`. The URL uses the configured
+Studio origin, falling back to the host origin, with
+`#source=…&view=studio&session=…` and optional `join=1`. Host configuration
+selects its origin; tool input cannot substitute a foreign origin.
+
+For a reviewable main submission, call
+`preflight_submission({submissionId})`, optionally
+`check_submission({submissionId})`, then obtain the user's explicit publication
+instruction before `publish_submission({submissionId})`. The first two return
+`{apiVersion, preflight}`. Publishing returns `{apiVersion, publication}`;
+poll `get_publication({publicationId})` and retain its ID across disconnects or
+uncertain responses. A publisher grant is checked for preflight, build check
+and publication, and again before pointer commit. A child submission integrated
+into a draft cannot publish main directly.
+
+Publication passes through preflight, merge, build, prepare, release, flip and
+close. Queue acceptance is not completion. `closing` means the public pointer
+has committed and cleanup remains; retry/poll the same publication rather than
+closing its session independently. Present the final receipt and Preview/public
+links accurately. The [publication recovery guide](../publication-queue-recovery.md)
+describes unsettled or failed attempts.
+
+Rollback is a separate reviewed action:
+
+1. Select a prior version UUID from `get_system`'s release catalogue and call
+   `preflight_rollback({systemId, versionId, reason?})`. It returns
+   `{apiVersion, dryRun:true, sourceId, versionId, currentVersionId}`.
+2. Review the target and current release, then call
+   `rollback_system({systemId, versionId, operationId,
+   expectedCurrentVersionId, reason?})` only for an explicit restore request.
+   `operationId` is a stable UUID; `expectedCurrentVersionId` is the exact
+   preflight UUID or null. A reason, when supplied, has at most 2,000 characters.
+3. Preserve the same operation, target, reason and expected pointer on retry.
+   A changed retry conflicts. A changed current pointer conflicts before the
+   first commit and requires renewed review. An already committed retry returns
+   its saved receipt, even after a subsequent publication, without moving the
+   pointer again. Current publisher authority is required for that replay too.
+
+The restore result includes `{apiVersion, action:'rollback', operationId,
+previousVersionId, result}` with artifact/publication/version receipts.
+Immutable release history is retained. Closing is independent:
+`close_session({sessionId})` or `close_draft({systemId, draft})` releases the
+working resources with existing owner/publisher/operator checks; close a draft
+only when closing its children is also intended.
 
 ## Designer Request workflow
 
@@ -167,9 +327,9 @@ explicitly check write scope because the MCP transport itself admits read-only
 clients. Joining a session adds membership only. Closing still requires the
 owner, a publisher or the existing operator authority.
 
-Source reads are bounded; the API's unsafe/private path exclusions also apply
-to file reads. These path rules do not inspect arbitrary file contents for
-credentials. Large source snapshots
+Source reads and changes apply the authored/protected-path policy in addition
+to the API's unsafe/private path exclusions. These rules do not inspect
+arbitrary file contents for credentials. Large source snapshots
 remain internal storage references until a bounded file is selected; MCP
 outputs do not expose those references. Session mutations return revision,
 submission and conflict receipts without dumping the source tree. Clients can
@@ -199,10 +359,13 @@ editing behaviour.
 
 On an explicitly authorized disposable source, deployed acceptance should
 cover OAuth discovery/sign-in, read-only tool availability, denied write/grant
-combinations, source discovery before publication, start retry, self-join,
-bounded file reads, claims, conflicting/stale edits, submission and Preview
-readiness, draft integration, Request retry/polling and session cleanup. Review
-the submitted change in Studio and confirm that the published pointer did not
-move. Public `/mcp` must continue to expose only published reads. Keep receipts
+combinations, source discovery before publication, start retry, self-join and
+invitations, bounded authored-file/media reads, protected paths and symlinks,
+claims, conflicting/stale edits, exact-snapshot checks and derived reads,
+submission/Preview readiness, draft integration, Request retry/polling,
+publisher preflight/build/queue/polling, guarded rollback/replay and cleanup.
+Confirm that checks and submission leave the public pointer unchanged and
+only explicit publication/rollback move it. Public `/mcp` must continue to
+expose only published reads. Keep receipts
 outside this repository and follow [verification](../verification.md); running
 the live conformance harness requires explicit authorization.

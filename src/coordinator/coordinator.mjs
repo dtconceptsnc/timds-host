@@ -169,13 +169,14 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
       const verified = await activeActor(actor);
       if (!input || Array.isArray(input) || typeof input !== 'object' || input.apiVersion !== undefined && input.apiVersion !== 1) throw fail(400, 'A compatible rollback version is required');
       if (input.reason !== undefined && (typeof input.reason !== 'string' || input.reason.length > 2000)) throw fail(400, 'Rollback reason must be at most 2,000 characters');
+      if (input.operationId !== undefined && !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(input.operationId)) throw fail(400, 'A stable rollback operation UUID is required');
+      if (input.expectedCurrentVersionId !== undefined && input.expectedCurrentVersionId !== null && !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(input.expectedCurrentVersionId)) throw fail(400, 'The expected current version must be a UUID or null');
       const source = await store.getSource(sourceId);
       if (!source?.artifacts_namespace || source.lifecycle_status !== 'ready' || source.archived_at) throw fail(404, 'Active hosted Design System not found');
       await auth.authorizePublish(source,verified);
       const versionId = input.versionId || (typeof input.version === 'string' && input.version.length <= 100 ? store.resolveRollbackVersion(sourceId,input.version) : null);
       if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(versionId || '')) throw fail(400, 'Select a previously published version');
-      if (input.dryRun !== true && publisher?.verifyArtifact) await publisher.verifyArtifact(store.getVersion(versionId));
-      const result = await store.rollbackVersion({versionId,actor:verified,operationId,reason:input.reason || '',dryRun:input.dryRun === true});
+      const result = await store.rollbackVersion({versionId,actor:verified,operationId:input.operationId??operationId,reason:input.reason || '',dryRun:input.dryRun === true,expectedCurrentVersionId:input.expectedCurrentVersionId,verifyArtifact:publisher?.verifyArtifact?version=>publisher.verifyArtifact(version):undefined});
       await store.flushOutbox(); return result;
     }),
     initializeSource: ({operationId,source,reservation}) => serialized(async () => {

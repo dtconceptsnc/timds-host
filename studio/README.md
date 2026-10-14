@@ -30,11 +30,13 @@ The Overview explains the three ways to make a change, each as a card:
    endpoint, `<origin>/api/timds/mcp`, lets an agent read published guidance,
    edit files in a hosted session, submit changes for review, or send a Request
    to the designer. The client signs in with OAuth and requests read/write
-   access; existing Design System permissions still apply. Publishing stays
-   in Studio or the CLI. Remote editing is implemented, with deployed
-   acceptance still owed; the card keeps its preview badge until that is
-   verified. See [designer MCP](../docs/api/designer-mcp.md) for the tools and
-   contribution workflow.
+   access; existing Design System permissions still apply. Remote MCP also
+   supports checks, invitations and explicit publisher preflight, publication
+   and rollback, sharing Studio's host lifecycle. Deployed acceptance remains
+   owed; the card keeps its preview badge until that is verified. See
+   [designer MCP](../docs/api/designer-mcp.md) for the tools and
+   [contributor setup](../docs/contributing-design-systems.md) for installation,
+   connection and the complete workflow.
 3. **Edit locally with npm.** Install `@dtconcepts/timds` globally, log in
    with OAuth against this origin, `timds start <systemId>` to pull a new
    session to disk, `npm ci`, `timds dev`, and `timds submit` to send it back

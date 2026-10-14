@@ -30,7 +30,7 @@ function inlineBytes(file) {
   if(bytes.length>maxFileBytes||bytes.toString('base64')!==file.content)throw fail(409,'Session file encoding is invalid');
   return bytes;
 }
-async function snapshotFiles(result,bucket) {
+export async function snapshotFiles(result,bucket) {
   snapshotResult(result);
   if(isFileTree(result.files)) {
     const tree=result.files;
@@ -49,6 +49,25 @@ async function snapshotFiles(result,bucket) {
     files.push({path:file.path,size:bytes.length,sha256:await sha256(bytes),mode:file.mode||'100644',inline:file});
   }
   return {files:files.sort(comparePath)};
+}
+
+export async function snapshotFileBytes(snapshot,bucket,file) {
+  const bytes=snapshot.tree?await boundedFileBytes(await readTreeFile(bucket,snapshot.tree,file),file.size):inlineBytes(file.inline);
+  if(await sha256(bytes)!==file.sha256)throw fail(409,'Session file identity changed');
+  return bytes;
+}
+
+export function fileBytePage(file,bytes,{encoding='utf8',offset,limit}={}) {
+  if(!['utf8','base64'].includes(encoding))throw fail(400,'encoding must be utf8 or base64');
+  offset=integer(offset,0,0,12_000_000,'offset');limit=integer(limit,64*1024,1,256*1024,'limit');
+  if(offset>file.size)throw fail(400,'offset is past the end of the file');
+  const end=Math.min(bytes.length,offset+limit),slice=bytes.subarray(offset,end);let content;
+  if(encoding==='utf8') {
+    try {content=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(slice);if(content.includes('\u0000'))encoding='base64';}
+    catch {encoding='base64';}
+  }
+  if(encoding==='base64')content=Buffer.from(slice).toString('base64');
+  return {file:{...metadata(file),encoding,offset,length:slice.length,nextOffset:end<bytes.length?end:null,content},limit};
 }
 
 export async function listSessionFiles(result,bucket,{prefix='',after='',limit}={}) {
@@ -82,18 +101,7 @@ async function boundedFileBytes(object,size) {
  * code point is returned as base64, so concatenating decoded pages is lossless. */
 export async function readSessionFile(result,bucket,{path,encoding='utf8',offset,limit}={}) {
   sessionFilePath(path);
-  if(!['utf8','base64'].includes(encoding))throw fail(400,'encoding must be utf8 or base64');
-  offset=integer(offset,0,0,maxFileBytes,'offset');limit=integer(limit,64*1024,1,256*1024,'limit');
   const snapshot=await snapshotFiles(result,bucket),file=snapshot.files.find(file=>file.path===path);
   if(!file)throw fail(404,'Session file not found');
-  if(offset>file.size)throw fail(400,'offset is past the end of the session file');
-  const bytes=snapshot.tree?await boundedFileBytes(await readTreeFile(bucket,snapshot.tree,file),file.size):inlineBytes(file.inline);
-  if(await sha256(bytes)!==file.sha256)throw fail(409,'Session file identity changed');
-  const end=Math.min(bytes.length,offset+limit),slice=bytes.subarray(offset,end);let content;
-  if(encoding==='utf8') {
-    try {content=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(slice);if(content.includes('\u0000'))encoding='base64';}
-    catch {encoding='base64';}
-  }
-  if(encoding==='base64')content=Buffer.from(slice).toString('base64');
-  return {...snapshotResult(result),file:{...metadata(file),encoding,offset,length:slice.length,nextOffset:end<bytes.length?end:null,content},limit};
+  return {...snapshotResult(result),...fileBytePage(file,await snapshotFileBytes(snapshot,bucket,file),{encoding,offset,limit})};
 }

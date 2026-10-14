@@ -48,7 +48,7 @@
     }
   ],
   "x-timds-mcp": {
-    "description": "MCP is a separate JSON-RPC boundary over Streamable HTTP, not a v1 REST response envelope. Contribution tools reuse the v1 coordinator operations and authority checks. Tool schemas are discovered with tools/list.",
+    "description": "MCP is a separate JSON-RPC boundary over Streamable HTTP, not a v1 REST response envelope. Contribution tools reuse coordinator authority and lifecycle operations; isolated session checks add retained check receipts. Tool schemas are discovered with tools/list.",
     "documentation": "designer-mcp.md",
     "authenticatedEndpoint": "/api/timds/mcp",
     "publicEndpoint": "/mcp",
@@ -57,10 +57,82 @@
     "readScope": "timds:read",
     "writeScope": "timds:write",
     "maxRequestBytes": 16777216,
-    "publishedTools": ["describe_system", "get_tokens", "read_page", "read_derived_layer"],
-    "contributionReadTools": ["list_systems", "get_system", "get_active_work", "get_session", "get_session_history", "list_session_files", "read_session_file", "list_drafts", "list_submissions", "get_request", "get_events"],
-    "contributionWriteTools": ["start_session", "join_session", "claim_session", "update_session", "submit_session", "close_session", "create_draft", "create_request", "report_gap"],
-    "publication": "Use the explicit Studio or CLI publication and rollback operations; MCP submission does not publish."
+    "publishedTools": [
+      "describe_system",
+      "get_tokens",
+      "read_page",
+      "read_derived_layer"
+    ],
+    "contributionReadTools": [
+      "list_systems",
+      "get_system",
+      "get_active_work",
+      "get_session",
+      "get_session_history",
+      "list_session_files",
+      "read_session_file",
+      "list_drafts",
+      "list_submissions",
+      "get_request",
+      "get_events",
+      "get_editing_guide",
+      "describe_workspace",
+      "list_media",
+      "get_check",
+      "read_derived",
+      "list_principals",
+      "get_session_link",
+      "list_draft_files",
+      "read_draft_file",
+      "get_publication"
+    ],
+    "contributionWriteTools": [
+      "start_session",
+      "join_session",
+      "claim_session",
+      "update_session",
+      "submit_session",
+      "close_session",
+      "create_draft",
+      "create_request",
+      "report_gap",
+      "run_check",
+      "invite_session_member",
+      "close_draft",
+      "preflight_submission",
+      "check_submission",
+      "publish_submission",
+      "preflight_rollback",
+      "rollback_system"
+    ],
+    "publication": "Explicit publisher-only tools support preflight, isolated dry-run, publication with durable polling, and rollback with stable operationId plus expectedCurrentVersionId. Session updates, checks and submissions do not publish.",
+    "sessionChecks": {
+      "identity": [
+        "sessionId",
+        "checkId",
+        "baseRevision",
+        "lastUpdateHash"
+      ],
+      "status": [
+        "running",
+        "passed",
+        "failed"
+      ],
+      "retained": true,
+      "requiresPublisher": false,
+      "derivedNames": [
+        "brand",
+        "tokens",
+        "index",
+        "designs",
+        "formats",
+        "changelog",
+        "bundle",
+        "llms",
+        "llmsFull"
+      ],
+      "maxReadBytes": 262144
+    }
   },
   "paths": {
     "/api/timds/sessions": {
@@ -1403,7 +1475,7 @@
                   },
                   "prompt": {
                     "type": "string",
-                    "description": "1\u201332 KiB UTF-8 instruction.",
+                    "description": "1–32 KiB UTF-8 instruction.",
                     "minLength": 1
                   },
                   "requestId": {
@@ -1653,7 +1725,7 @@
       "post": {
         "operationId": "rollbackVersion",
         "summary": "Restore a previously published immutable version",
-        "description": "Requires a source publisher grant at request and pointer transaction. Rejects active or interrupted publication with staged bytes. Does not change source files or any consumer pin.",
+        "description": "Requires a source publisher grant at request and pointer transaction. Rejects active or interrupted publication with staged bytes. Does not change source files or any consumer pin. Optional operationId makes an identical rollback safely retryable; optional expectedCurrentVersionId compares the current pointer atomically before changing it. Dry runs return currentVersionId for that guard. A committed operation replay returns its original receipt without changing a newer pointer.",
         "tags": [
           "Publication"
         ],
@@ -1723,6 +1795,24 @@
                     "type": "string",
                     "description": "Immutable published version label.",
                     "maxLength": 100
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Stable caller-selected rollback UUID. Reuse with the original target, reason and expected-current guard after an uncertain outcome. Omission retains the existing non-idempotent request behavior."
+                  },
+                  "expectedCurrentVersionId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid",
+                    "description": "Current immutable version UUID observed during preflight, or null when no current publication exists. A new rollback rejects a changed pointer with 409; a committed retry returns its saved receipt."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "description": "Human reason retained in the rollback audit receipt."
                   },
                   "dryRun": {
                     "type": "boolean",
@@ -2905,7 +2995,7 @@
       },
       "post": {
         "operationId": "reserveAccessInvitation",
-        "summary": "Reserve explicit source permissions for the invited human\u2019s own Access sign-in",
+        "summary": "Reserve explicit source permissions for the invited human’s own Access sign-in",
         "description": "Active administrator only; ready or importing source. No grant at reservation time. Configured Access issuer and explicit email required. Write requires read. Default disabled; see docs/access-invitations.md. Never merges historical identities or sends email.",
         "parameters": [
           {
@@ -4437,6 +4527,26 @@
           "sourceId": {
             "type": "string",
             "format": "uuid"
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currentVersionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Current pointer captured by a successful rollback preflight."
+          },
+          "previousVersionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Pointer replaced by this committed rollback, retained unchanged on replay."
           },
           "versionId": {
             "type": "string",

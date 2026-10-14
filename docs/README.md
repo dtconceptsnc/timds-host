@@ -13,6 +13,7 @@ work in the repository and which checks apply to a change.
 | [operations.md](operations.md) | You are provisioning, configuring, deploying or operating a host, or need the pinned `cf` limitations. |
 | [ci.md](ci.md) | You want to know what the GitHub Actions workflows prove and how to dispatch live conformance. |
 | [verification.md](verification.md) | You are deciding what counts as validation and what must stay in private operator storage. |
+| [contributing-design-systems.md](contributing-design-systems.md) | You need Studio, CLI or MCP installation/connection instructions and the full contribution, review, publication and rollback lifecycle. |
 
 ## API and contract
 
@@ -22,7 +23,7 @@ work in the repository and which checks apply to a change.
 | [api/media.md](api/media.md) | You touch source media uploads, transfer capabilities, CORS, cancellation or scoped deletion. |
 | [api/provision-receipts.md](api/provision-receipts.md) | You touch the administrator read of a native provisioning receipt. |
 | [api/published-derived-layer.md](api/published-derived-layer.md) | You touch the `read_derived_layer` MCP tool over immutable releases. |
-| [api/designer-mcp.md](api/designer-mcp.md) | You connect an MCP client to contribute through hosted sessions or designer Requests, or change the authenticated MCP tools. |
+| [api/designer-mcp.md](api/designer-mcp.md) | You change authenticated MCP tools or need exact authoring, check, collaboration, publication, rollback and retry contracts. |
 
 ## Features and procedures
 

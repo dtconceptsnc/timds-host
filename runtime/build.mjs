@@ -110,8 +110,9 @@ export class BuildSandbox extends DurableObject {
    stage('result');
    if(result.exitCode!==0){let label='workspace';try{if((await files.stat('/work/.timds-check-result.json')).size>4096)throw new Error('Invalid check metadata');const report=await(await files.readFile('/work/.timds-check-result.json')).json();if(['token_reference','token_cycle','media_reference','artifact_reference'].includes(report.check))label=report.check;}catch{}throw fail(`Isolated publication ${label} check failed`);}
    await execute(container,['node','/opt/timds/build-driver.mjs','manifest']);
-   const artifactManifest=await(await files.readFile('/workspace/artifact-manifest.json')).json();
-   stage('persist');const artifact=await persistContainerTree(bucket,{sourceId:input.sourceId,operationId:input.publicationId,role:'build-artifact',manifest:artifactManifest,artifact:true,readFile:index=>files.readFile('/work/dist/'+artifactManifest.files[index].path)});
+   const {artifactDirectory,...artifactManifest}=await(await files.readFile('/workspace/artifact-manifest.json')).json();
+   if(!['dist','design-system/dist'].includes(artifactDirectory))throw fail('Controlled build artifact location is invalid');
+   stage('persist');const artifact=await persistContainerTree(bucket,{sourceId:input.sourceId,operationId:input.publicationId,role:'build-artifact',manifest:artifactManifest,artifact:true,readFile:index=>files.readFile('/work/'+artifactDirectory+'/'+artifactManifest.files[index].path)});
    return{files:artifact,cacheKey:cache.key,checks:{workspace:true,tokenReferences:true,mediaReferences:true,artifactReferences:true}};
   }catch(error){primary=tag(error);throw primary;}finally{await cleanup(container,this.ctx.storage,stage,tag,primary);}
  }
