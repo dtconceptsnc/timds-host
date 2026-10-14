@@ -41,7 +41,7 @@ export function rewriteNativeBrowser(text,type,prefix){
   const css=value=>value.replace(/url\(\s*(['"]?)(\/[^)'"\s]*)\1\s*\)/gi,(_m,q,v)=>`url(${q}${url(v)}${q})`)
     .replace(/@import\s+(['"])(\/[^'"]*)\1/gi,(_m,q,v)=>`@import ${q}${url(v)}${q}`);
   if(type.startsWith('text/css'))return css(text);
-  return text.replace(/\b(href|src|action|poster)\s*=\s*(['"])([^'"]*)\2/gi,(_m,a,q,v)=>`${a}=${q}${url(v)}${q}`)
+  return text.replace(/\b(href|src|action|poster|value)\s*=\s*(['"])([^'"]*)\2/gi,(_m,a,q,v)=>`${a}=${q}${url(v)}${q}`)
     .replace(/\bcontent=(['"])([^'"]*)\1/gi,(_m,q,v)=>`content=${q}${v.replace(/(\burl\s*=\s*)(\/[^\s]*)/gi,(_n,start,value)=>start+url(value))}${q}`)
     .replace(/\bsrcset=(['"])([^'"]+)\1/gi,(_m,q,v)=>`srcset=${q}${v.replace(/(^|,\s*)(\/[^\s,]*)/g,(_n,start,value)=>start+url(value))}${q}`)
     .replace(/\bstyle=(['"])([\s\S]*?)\1/gi,(_m,q,v)=>`style=${q}${css(v)}${q}`)
