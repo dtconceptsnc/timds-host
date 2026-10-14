@@ -255,8 +255,10 @@ areas (claims) are shown read-only; agents declare them as they edit.
   that fails (an error, a CSP refusal, or no load within 20 seconds) shows a
   card with the URL and an open-in-new-tab button. There is no file viewer and
   no editor.
-- **The stream (left column).** This session's feed events and the source's
-  release events, oldest first, with All / Chat / Events filters. Every Request
+- **The stream (left column).** This session's own feed events, oldest first,
+  with All / Chat / Events filters. Releases published from this session's
+  submissions carry its id and appear; releases from other sessions and the
+  source's earlier history stay on the dashboard Activity page. Every Request
   in the session is a chat thread: the prompt as the requester's message (from
   `request_received`, or this tab's own tracked Request before the feed echoes
   it) and the designer's progress as steps beneath it (`request_started`,

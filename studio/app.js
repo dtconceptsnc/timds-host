@@ -599,18 +599,19 @@ async function destroySession(operation){
 
 // ---- Studio: the live canvas in the middle, chat and events on the left, the session rail on the right.
 // Built once per session; feed events and refreshes patch the stream, rail and head and never rebuild the frame.
-const STUDIO_SOURCE_EVENTS=/^(published|publication_|rollback|authority_changed)/;
 const requestIdOf=event=>detailsOf(event).requestId||event.originating_request_id||null;
 const actorName=event=>event.actor_name||event.principal_name||(event.actor_principal_id?short(event.actor_principal_id):'TimDS');
 const STEP_WORDS={request_received:'Request received',request_started:'Designer started',updated:'Changed the source',submitted:'Submitted for review',request_submitted:'Done',member_joined:'Joined the session'};
 function stepWords(event){const type=String(event.event_type||''),detail=detailsOf(event);if(type==='live_state')return`Live view ${detail.state||'changed'}`;if(type==='claimed')return`Claimed ${Array.isArray(detail.patterns)&&detail.patterns.length?detail.patterns.join(', '):'a working area'}`;if(type==='request_failed')return detail.error||'Could not finish this Request';return STEP_WORDS[type]||eventWords(event);}
 const NOW_WORDS={queued:'Waiting for the designer',starting:'Designer starting',running:'Designer working',submitting:'Submitting for review',unknown:'Sending'};
-// The stream merges this session's events with source-level releases, oldest first.
+// The stream holds this session's own events, oldest first. Releases published from
+// this session's submissions carry its id and appear; the source's wider history
+// stays on the dashboard Activity page.
 // Requests become chat threads: the prompt as the requester's message, the designer's
 // progress as steps beneath it. Everything else is an event row.
 function streamItems(){
   const id=state.session.session.id,threads=new Map(),items=[];
-  const events=(state.work?.events||[]).filter(event=>event.session_id===id||STUDIO_SOURCE_EVENTS.test(String(event.event_type||''))).sort((a,b)=>eventOrder(b,a));
+  const events=(state.work?.events||[]).filter(event=>event.session_id===id).sort((a,b)=>eventOrder(b,a));
   for(const event of events){
     const type=String(event.event_type||''),requestId=requestIdOf(event);
     if(requestId&&/^request_/.test(type)&&!threads.has(requestId)){const thread={kind:'thread',requestId,prompt:event.note||'',requester:type==='request_received'?actorName(event):null,requesterId:type==='request_received'?event.actor_principal_id:null,createdAt:event.created_at,steps:type==='request_received'?[]:[event]};threads.set(requestId,thread);items.push(thread);continue;}
