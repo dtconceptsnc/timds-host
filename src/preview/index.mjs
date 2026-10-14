@@ -1,4 +1,4 @@
-// Portable Workers Builds controller adapted from toperator 74bceaa.
+// Portable Workers Builds controller adapted from the legacy portal.
 // cf beta.14 preview creation, migration and deletion use the configured provider API.
 import {requestDiagnostic,safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 const fail=(statusCode,message)=>Object.assign(new Error(message),{statusCode});

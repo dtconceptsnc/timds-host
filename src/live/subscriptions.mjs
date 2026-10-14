@@ -1,4 +1,4 @@
-// Ownership-checked Artifacts subscriptions from toperator 74bceaa.
+// Ownership-checked Artifacts subscriptions from the legacy portal.
 import { sessionIdPattern } from '../../runtime/policy.mjs';
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
 export function createAgentForkSubscriptions({ env = {}, fetchImpl = fetch } = {}) {

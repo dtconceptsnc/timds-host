@@ -1,4 +1,4 @@
-// Pure validators from dtconceptsnc/toperator at 74bceaa.
+// Pure validators from the legacy portal.
 const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
 export function sessionFilePath(value) {
   if (typeof value !== "string" || value.length > 500 || /[\\\x00-\x1f\x7f]/.test(value) || value.startsWith("/") || /^[A-Za-z]:/.test(value) || value.split("/").some(p => !p || [".", ".."].includes(p) || /^(?:\.git|node_modules|\.github|dist)$/i.test(p)) || /\.(?:pem|key|p12|pfx)$/i.test(value) || /(^|\/)\.timds\/(?:session|start|auth)(?:[./]|$)/i.test(value) || /(^|\/)\.env(?:\.|$)/i.test(value) && !value.endsWith(".env.example")) {

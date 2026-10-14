@@ -1,4 +1,4 @@
-// API v1 semantics extracted from toperator 74bceaa plus durable closed-fork
+// API v1 semantics extracted from the legacy portal plus durable closed-fork
 // Request receipt recovery. Identity and Fetch routing belong to the host edge.
 import { timdsSessionView } from '../domain/sessions.mjs';
 import { requestDiagnostic, safeRequestDiagnostic } from './diagnostics.mjs';
