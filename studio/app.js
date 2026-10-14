@@ -163,7 +163,7 @@ function sessionCreation(){return node('div',{class:'session-creation'},node('se
 // ---- Views -----------------------------------------------------------------
 function renderMain(){const main=$('#main');if(!main)return;if(state.view==='systems'&&state.principal?.admin){main.replaceChildren(manageSystemsView());return;}if(!state.source){main.replaceChildren(pageHead('STUDIO','Your systems will appear here.','Ask your administrator for access to a Design System.'));return;}if(!state.work){main.replaceChildren(loadingBlock('Loading your workspace…','Sessions, Requests and releases are on their way.'));return;}
   if(state.view==='studio'){if(!state.session){main.replaceChildren(loadingBlock('Opening the session…','The stream and the live view appear in a moment.'));return;}renderStudio(main);return;}
-  if(state.view==='overview'){main.replaceChildren(pageHead('YOUR DESIGN SYSTEM',state.source.name,'From the first idea to everything your team needs to bring it to life.'),deliveryView(),node('div',{class:'section-head'},title('h2','Keep creating.'),title('p','Three ways to make your next change.')),waysOverview(),node('div',{class:'grid'},panel('Drafts and sessions',workList()),node('div',{class:'stack'},panel('Recent Requests',requestList()),panel('Releases',releaseList(3)))));return;}
+  if(state.view==='overview'){main.replaceChildren(pageHead('YOUR DESIGN SYSTEM',state.source.name,'From the first idea to everything your team needs to bring it to life.',state.principal?.admin?button('Delete Design System…',()=>deleteSelectedSystem(),'small danger'):null),deliveryView(),node('div',{class:'section-head'},title('h2','Keep creating.'),title('p','Three ways to make your next change.')),waysOverview(),node('div',{class:'grid'},panel('Drafts and sessions',workList()),node('div',{class:'stack'},panel('Recent Requests',requestList()),panel('Releases',releaseList(3)))));return;}
   if(state.view==='deliverables'){main.replaceChildren(pageHead(state.source.name,'Made to be used.','Explore the published system, find the right assets, and hand everything over to your team.'),deliveryView(true));return;}
   if(state.view==='sessions'){main.replaceChildren(pageHead(state.source.name,'Sessions and drafts.','Create a workspace here, then open Studio for Requests, live changes and review.'),sessionCreation(),workList(true));return;}
   if(state.view==='review'){main.replaceChildren(pageHead(state.source.name,'Ready for a closer look.','Open each Preview here, then publish or restore a release.'),node('section',{class:'panel'},reviewList()),panel('Releases',releaseList()));return;}
@@ -241,6 +241,15 @@ async function submitCreation(record){
 }
 const deletionActive=receipt=>['queued','running'].includes(receipt?.status);
 function retireFromWorkspace(sourceId){state.systems=state.systems.filter(row=>row.id!==sourceId);if(state.source?.id===sourceId){feedStop();state.source=null;state.work=null;state.delivery=null;state.session=null;state.generation++;void manageSystems();}else if(state.view==='systems')renderShell();}
+async function deleteSelectedSystem(){
+  const sourceId=state.source?.id,principalId=state.principal?.id,generation=state.generation;
+  if(!sourceId||!state.principal?.admin)throw new Error('An active administrator is required.');
+  await loadManagement(true);
+  if(state.generation!==generation||state.principal?.id!==principalId||!state.principal?.admin||state.source?.id!==sourceId||state.view!=='overview')return;
+  const system=state.management.systems.find(row=>row.id===sourceId);
+  if(!system)throw new Error('This Design System is no longer available. Refresh the workspace.');
+  await deleteSystemDialog(system);
+}
 async function deleteSystemDialog(system,operationId=null){
   if(!state.principal?.admin)throw new Error('An active administrator is required.');
   const saved=read(deletionKey(system.id)),id=operationId||system.deletionOperationId||saved?.operationId||crypto.randomUUID(),host=node('div',{class:'deletion-progress'}),tracker={system,operationId:id,host,principalId:state.principal.id,receipt:null,reading:false};

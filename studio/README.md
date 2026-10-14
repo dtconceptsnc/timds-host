@@ -110,6 +110,13 @@ and permanently deleted systems that are absent from the ordinary workspace
 catalog. Non-administrators keep the existing access-only empty state. An
 administrator with no systems lands on the first-system creation state.
 
+The selected system's **Overview** also has a **Delete Design System…** button
+beside its heading, including at phone width. It is visible only to host
+administrators. The button refreshes the administrative catalog and opens that
+system's existing deletion receipt or a new cleanup review; switching systems,
+leaving Overview or changing identity during the read cancels opening the dialog.
+The same review is available through **Manage Design Systems → Delete…**.
+
 Creation asks for a name, unique lowercase system ID, organization and one of
 the host's configured repository namespaces. When no active organization exists,
 the same flow first creates an organization with a stable UUID. The host creates
