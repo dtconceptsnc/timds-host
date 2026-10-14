@@ -50,7 +50,7 @@ Remote MCP and local toolkit MCP have different tool names and transports.
 | Preview | Embedded live session and frozen submission Preview | Local `dev`/`preview`; hosted URLs from status/submission | Live and frozen Preview URLs for the client to open |
 | Submit | Hosted designer submits the Request | `submit` / `timds_submit` | `submit_session`, or designer Request completion |
 | Publish | Explicit Publish dialog and stage strip | `publish` / `timds_publish`, with confirmation and status polling | Explicit preflight, check, publish and publication-poll tools |
-| Roll back | Review release, then restore | CLI `rollback`; local MCP has no dedicated rollback tool in toolkit 0.1.473 | Rollback preflight and explicit guarded rollback |
+| Roll back | Review release, then restore | CLI `rollback`; local MCP has no dedicated rollback tool in toolkit 0.1.476 | Rollback preflight and explicit guarded rollback |
 | Live progress | Event feed, presence and Request stream | `status`, `history`, `active-work`; local MCP equivalents | `get_events`, `get_session`, `get_request`, `get_publication` polling |
 | Close/disconnect | Close session; Disconnect clears this tab | `sessions close`; `auth logout` removes local credentials | Close tools; remove/disconnect the client's connection separately |
 
@@ -80,20 +80,20 @@ for its views and live behaviour.
 
 ## Install and sign in to the CLI
 
-Use Node.js 22.18+ and npm. The contributor examples pin toolkit `0.1.473`, the
+Use Node.js 22.18+ and npm. The contributor examples pin toolkit `0.1.476`, the
 version declared at this repository's root. The host's build/runtime and
 conformance baseline deliberately stay on `0.1.464`; installing a contributor
 CLI does not change a source's dependencies or those host pins.
 
 ```sh
-npm install --global @dtconcepts/timds@0.1.473
+npm install --global @dtconcepts/timds@0.1.476
 timds auth login --portal-url https://host.example.com --oauth
 timds auth status --portal-url https://host.example.com
 timds whoami --portal-url https://host.example.com
 ```
 
 For a one-off command, replace `timds` with
-`npx --yes --package @dtconcepts/timds@0.1.473 timds`. The `--portal-url` option
+`npx --yes --package @dtconcepts/timds@0.1.476 timds`. The `--portal-url` option
 takes the origin, not `/studio/` or `/api/timds/mcp`. Always provide the intended
 origin before a workspace exists; `TIMDS_PORTAL_URL` also selects it. A started
 workspace records its hosted provider origin.
@@ -165,7 +165,7 @@ and environment with these values, substituting an absolute workspace path:
 {
   "command": "npx",
   "args": [
-    "--yes", "--package", "@dtconcepts/timds@0.1.473",
+    "--yes", "--package", "@dtconcepts/timds@0.1.476",
     "timds", "mcp", "--root", "/absolute/path/to/design-session"
   ],
   "env": {
@@ -226,7 +226,7 @@ timds join 'https://host.example.com/studio/#source=<source-uuid>&view=studio&se
 timds join '<session-uuid>' --root ./joined-session --portal-url https://host.example.com
 ```
 
-These are alternatives, each using an empty destination. Toolkit 0.1.473 can
+These are alternatives, each using an empty destination. Toolkit 0.1.476 can
 sign in to a pasted Studio link's host and choose a new session directory when
 `--root` is omitted. The owner/publisher can list eligible identities with
 `timds principals`, then invite one with

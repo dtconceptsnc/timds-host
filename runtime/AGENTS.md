@@ -9,7 +9,7 @@ Supplements the root [`AGENTS.md`](../AGENTS.md).
 - The Worker reaches a container only through the RPC classes exported from
   `index.mjs` and `build.mjs`. `policy.mjs` holds the outbound network policy;
   widening it is a security change and needs its architecture section updated.
-- The container pins toolkit `0.1.464`; the root package pins `0.1.473` for
+- The container pins toolkit `0.1.464`; the root package pins `0.1.476` for
   the host. Keep them distinct and do not bump either as a side effect.
 - Credentials given to a container are short-lived capabilities minted by the
   Worker. Never persist them, log them, or return them in an error.
