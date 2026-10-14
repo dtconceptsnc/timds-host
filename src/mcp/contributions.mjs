@@ -6,6 +6,7 @@ import { createActiveWorkersUrlProjection } from '../live/url-projection.mjs';
 import { compactSessionResult } from './files.mjs';
 import { oauthOrigin } from '../http.mjs';
 import { registerAuthoringTools, authorizeAuthoredChanges, listAuthoredFiles, readAuthoredFile } from './authoring.mjs';
+import { skillDocument } from './skill.mjs';
 
 const uuid=z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i);
 const system={systemId:z.string().min(1).max(300).describe('Source UUID or immutable system ID from list_systems.')};
@@ -63,6 +64,8 @@ export function createContributionService({env,getCoordinator,actor}) {
       url.hash=new URLSearchParams({source:session.sourceId,view:'studio',session:session.id,...(join?{join:'1'}:{})}).toString();
       return {apiVersion:1,sourceId:session.sourceId,sessionId:session.id,url:url.href,join};
     },
+    // The skill is offered only for systems this identity can already see.
+    async skill(reference){const system=(await this.listSystems()).systems.find(row=>row.id===reference||row.systemId===reference);if(!system)throw fail(404,'Design System not found');return skillDocument({origin:oauthOrigin(env,env.TIMDS_STUDIO_ORIGIN),system});},
     bucket:env.SNAPSHOTS,
   };
 }
@@ -90,6 +93,7 @@ export function registerContributionTools(server,{actor,service}) {
   };
   tool('list_systems','List Design Systems this identity can access, including unpublished systems.',{},()=>service.listSystems());
   tool('get_system','Read source identity, current release and release history before contributing.',system,args=>service.source(args.systemId,'sourceView'));
+  tool('get_skill','Read the Agent Skills SKILL.md for one Design System on this host: how to connect, join or start a session, edit, check and submit. Save it at the returned path inside the skills folder so later conversations start connected.',system,args=>service.skill(args.systemId));
   tool('get_active_work','Read open sessions, drafts, claims, runner state and Request queues before choosing where to contribute.',system,args=>service.source(args.systemId,'activeWork',[SOURCE_ID]));
   tool('get_session','Read session status, members, claims, submissions, Preview links and live state.',session,args=>service.session(args.sessionId,'status'));
   tool('get_session_history','Read retained session history and audit events, including after close.',session,args=>service.session(args.sessionId,'history'));
