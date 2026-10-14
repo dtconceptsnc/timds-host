@@ -81,3 +81,4 @@ html[data-busy]::before{content:"";position:fixed;top:0;left:0;height:3px;width:
 .publishing-indicator .publishing-stage:before{content:"· "}
 .topbar .publishing-indicator{grid-column:1/-1;justify-self:end}
 @media(prefers-reduced-motion:no-preference){.publishing-indicator:before{animation:studio-blink 1s infinite}}
+.agent-tabs{flex-wrap:wrap;margin:14px 0 18px}.agent-tabs button{min-height:36px;padding:7px 12px;font-size:.82rem;font-weight:600}.agent-step{border-top:1px solid var(--line);padding:16px 0 4px}.agent-step h3{margin-bottom:8px}.agent-step .actions{margin:4px 0 10px}.agent-step .help{margin-bottom:10px}.agent-steps{margin:0 0 10px;padding-left:20px;font-size:.88rem}.agent-steps li{margin-bottom:4px}.agent-brief{max-height:220px;font-size:11px}

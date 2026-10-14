@@ -113,7 +113,13 @@ processes; do not copy credentials into a source or MCP configuration.
 
 ## Connect a remote MCP client
 
-Choose your client's remote HTTP MCP connection and enter:
+The quickest route is Studio's **Send to your agent…** button, on the Design
+System's Overview and in each session's Studio rail. Pick your client and it
+gives you the one-time connect command or install link for that client, a
+brief to paste into the agent that joins the session and submits for review,
+and the same instructions as a `SKILL.md` to keep. The
+[Studio specification](../studio/README.md#agent-handoff) lists exactly what
+it contains. By hand, choose your client's remote HTTP MCP connection and enter:
 
 ```text
 https://host.example.com/api/timds/mcp
