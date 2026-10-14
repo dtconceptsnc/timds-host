@@ -1,9 +1,9 @@
 import {portal} from './callback.mjs';
 import {validateRun,sessionIdPattern,safeTaskDiagnostics} from './policy.mjs';
 import {dependencyCacheKey,INSTALL_FLAGS} from '../src/build/cache.mjs';
+import {containerInstanceType} from './instance.mjs';
 // watchMs bounds one coordinator keepalive: a viewer re-sends `viewing` every five minutes.
 const idleMs=10*60_000, taskMs=12*60_000, watchMs=30*60_000;
-const liveInstanceTypes=new Set(['standard-1','standard-2','standard-3','standard-4']);
 const ca='/etc/cloudflare/certs/cloudflare-containers-ca.crt';
 const trust={NODE_EXTRA_CA_CERTS:ca,GIT_SSL_CAINFO:ca,CURL_CA_BUNDLE:ca,SSL_CERT_FILE:ca};
 const active=run=>run && ['starting','running','submitting'].includes(run.state);
@@ -54,7 +54,7 @@ export class LiveSessionRuntime {
   // requestId names the Request a running/failed task belongs to; the host verifies its binding.
   // Live container size. Clone, dependency restore and the dev server are CPU
   // bound, so the default is two vCPUs; TIMDS_LIVE_INSTANCE_TYPE overrides it.
-  instanceType(){const value=this.env?.TIMDS_LIVE_INSTANCE_TYPE;return liveInstanceTypes.has(value)?value:'standard-3';}
+  instanceType(){return containerInstanceType(this.env?.TIMDS_LIVE_INSTANCE_TYPE,'standard-3');}
   // Wake phase durations in milliseconds for diagnostics(): credential, boot,
   // clone, dependencies, server (supervisor answering) and total (wake start
   // until the runtime reported ready or failed). Durations only, never output.

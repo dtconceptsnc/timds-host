@@ -20,9 +20,10 @@ async function writeOnce(bucket,key,{size,digest,body,contentType='application/o
  if(!await verifyObject(bucket,key,size,digest))throw fail('Immutable release write unavailable');
 }
 function fixed(body,size){if(typeof FixedLengthStream==='function')return body.pipeThrough(new FixedLengthStream(size));return body;}
-export async function publishReleaseTree({snapshots,releases},{sourceId,files,stamp}){
+/** `manifest` is the tree's manifest when the caller already read it through readTreeManifest; otherwise it is read here. */
+export async function publishReleaseTree({snapshots,releases},{sourceId,files,stamp,manifest:verified}){
  if(!releases)throw fail('Immutable release storage unavailable');
- const root=prefix(sourceId,stamp?.version),manifest=await readTreeManifest(snapshots,files);
+ const root=prefix(sourceId,stamp?.version),manifest=verified||await readTreeManifest(snapshots,files);
  if(manifest.files.some(file=>file.mode==='120000'||reserved.has(file.path)))throw fail('Release has unsafe or reserved artifact files');
  const receipt={schemaVersion:1,sourceId,version:stamp.version,stamp,manifest};
  const receiptText=JSON.stringify(receipt);if(new TextEncoder().encode(receiptText).length>2*1024*1024)throw fail('Immutable release manifest exceeds limit');

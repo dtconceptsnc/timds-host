@@ -3,16 +3,16 @@ import {DurableObject,WorkerEntrypoint} from 'cloudflare:workers';
 import {readTreeManifest,readTreeFile,persistContainerTree,sha256,transferFiles} from '../src/repository/file-trees.mjs';
 import {dependencyCacheKey,INSTALL_FLAGS} from '../src/build/cache.mjs';
 import {metadataInputFiles} from '../src/build/metadata-inputs.mjs';
+import {containerInstanceType} from './instance.mjs';
 import {nativeBuildResult,unwrapNativeBuildResult,safeRequestDiagnostic} from '../src/requests/diagnostics.mjs';
 export {DirectoryBackupGateway};
 const ca='/etc/cloudflare/certs/cloudflare-containers-ca.crt';
 const cleanEnv={HOME:'/tmp/home',NPM_CONFIG_USERCONFIG:'/dev/null',NPM_CONFIG_GLOBALCONFIG:'/tmp/empty-global.npmrc',NPM_CONFIG_CACHE:'/tmp/npm-cache',NODE_EXTRA_CA_CERTS:ca};
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail=message=>Object.assign(new Error(message),{statusCode:409});
-const instanceTypes=new Set(['standard-1','standard-2','standard-3','standard-4']);
 // Dependency, build and metadata containers share one size. The controlled
 // build is CPU bound; TIMDS_BUILD_INSTANCE_TYPE overrides the default.
-const instanceType=env=>instanceTypes.has(env?.TIMDS_BUILD_INSTANCE_TYPE)?env.TIMDS_BUILD_INSTANCE_TYPE:'standard-2';
+const instanceType=env=>containerInstanceType(env?.TIMDS_BUILD_INSTANCE_TYPE,'standard-2');
 // Wraps the diagnostic stage setter so a successful run also reports how many
 // milliseconds each phase took. A label repeated per tree accumulates. Labels
 // are host-authored identifiers from the diagnostics allowlist, never content.

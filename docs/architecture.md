@@ -577,12 +577,17 @@ large file arrays and container handles are not step outputs.
 Three container runs serve a publication: `release-metadata` in `merge`, the
 controlled build in `build` and `stamp` in `prepare`. `release` does not stamp
 again. The prepared stamp came from two immutable, content-addressed trees, so
-`release` checks that the artifact receipt still names the checkpointed source,
-that the stamp's commit and system match them, and that the artifact tree's
-manifest (digest-verified on read) still has the prepared file count, byte
-total and entry path. A toolkit change between `prepare` and `release` is not
-re-detected by this check; it would surface as a different stamp on the next
-publication.
+`release` checks that its `artifactRef` input and the artifact receipt still
+name the checkpointed artifact and source, that the stamp's commit and system
+match them, and that the artifact tree's manifest (digest-verified on read)
+still has the prepared file count and byte total. That pins the tree's
+identity; the bytes are pinned by the release copy, which hands every blob's
+manifest digest to R2 as its `sha256` so a blob that does not hash to its
+manifest entry is refused. The manifest read in `release` is passed to the
+release copy, which otherwise reads it itself. The entry path is not compared
+because the toolkit normalizes it before its own check and the driver stores
+it raw. A toolkit change between `prepare` and `release` is not re-detected by
+these checks; it would surface as a different stamp on the next publication.
 
 - **Metadata inputs.** A metadata container receives only the files its
   toolkit operation reads, selected by `src/build/metadata-inputs.mjs`:

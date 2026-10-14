@@ -50,17 +50,20 @@ export function createPublicationSteps({store,repository,artifacts,metadata,buil
   async release({publicationId,artifactRef,stamp}){
    let {row,source,submission}=await context(publicationId);if(committed(row))return{publicationId,artifactRef,versionId:row.checkpoints_json.pointerVersionId};ready(source,submission);await authorize(publicationId);
    if(JSON.stringify(stamp)!==JSON.stringify(row.checkpoints_json.stamp))throw fail('Publication stamp differs from prepared receipt');
+   if(artifactRef!==row.checkpoints_json.artifactRef)throw fail('Publication artifact differs from prepared receipt');
    const artifact=await stored(artifactRef),snapshot=await stored(artifact.sourceRef),prepared=row.checkpoints_json.artifact;
-   // prepare hashed these two immutable, content-addressed trees. Re-reading the
-   // digest-checked artifact manifest against the prepared receipt proves the
-   // bytes it names are unchanged without a second stamp container.
+   // prepare hashed these two immutable, content-addressed trees. The
+   // digest-checked artifact manifest against the prepared receipt pins the
+   // tree identity without a second stamp container; the sha256-checked
+   // release copy below pins the bytes. The entry path is not compared here:
+   // the toolkit normalizes it before its own check and the driver does not.
    if(artifact.sourceRef!==row.checkpoints_json.sourceRef||stamp.sourceCommit!==snapshot.sourceCommit||stamp.systemId!==source.system_id)throw fail('Prepared stamp belongs to another source');
    const manifest=await artifactManifest(artifact.files);
-   if(!prepared||prepared.fileCount!==manifest.files.length||prepared.totalBytes!==manifest.totalBytes||!manifest.files.some(file=>file.path===prepared.entryPath))throw fail('Immutable bytes differ from stamp');
+   if(!prepared||prepared.fileCount!==manifest.files.length||prepared.totalBytes!==manifest.totalBytes)throw fail('Immutable bytes differ from stamp');
    const checkout=await repository.preparePublication(source,submission,{sourceCommit:snapshot.sourceCommit,parentRevision:snapshot.parentRevision,commitDate:snapshot.commitDate});
    let primary;try{
     const committedSource=await repository.commitSource(source,checkout.checkoutId,{files:snapshot.releaseFiles,message:`Publish TimDS submission ${submission.id}`});if(committedSource.headCommit!==stamp.sourceCommit)throw fail('Reconstructed source differs from stamp');
-    const releaseRef=await releaseArtifact({sourceId:source.id,files:artifact.files,stamp});
+    const releaseRef=await releaseArtifact({sourceId:source.id,files:artifact.files,stamp,manifest});
     const version={id:publicationId,source_id:source.id,version_label:stamp.version,source_commit:stamp.sourceCommit,content_digest:stamp.contentDigest,artifact_ref:releaseRef,source_ref:snapshot.sourceFiles.ref,stamp,publication_id:publicationId,created_at:snapshot.releasePreparedAt,artifact:prepared};
     const staged=await stageVersion({publicationId,lease,version});row=await checkpoint(row,'release',{versionId:staged.versionId});
     await repository.pushMain(source,checkout.checkoutId);row=await checkpoint(row,'release',{mainPushed:true});
