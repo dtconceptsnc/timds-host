@@ -261,8 +261,9 @@ areas (claims) are shown read-only; agents declare them as they edit.
   the session's people (the member list, plus **Invite…** for the owner and
   publishers while the session is open), the session's state (status, live
   view, designer, queue, expiry) and **Destroy…**. Working areas, other
-  sessions and the release history stay on the dashboard pages. The top bar carries the dashboard breadcrumb, the current release label, the presence avatars and
-  the feed indicator. Review still embeds each submission's Preview with the
+  sessions and the release history stay on the dashboard pages. The top bar carries the dashboard breadcrumb, the current release label, the
+  Publishing pill while a release is in flight, the presence avatars and the feed
+  indicator. Review still embeds each submission's Preview with the
   same frame component.
 - **Changes since the last submission.** Every edit the host records for the
   session is an `updated` event, whichever agent or client made it: `update`
@@ -288,7 +289,13 @@ areas (claims) are shown read-only; agents declare them as they edit.
 - **Publication.** Preflight, optional build-only check, explicit publish and a
   stage strip (preflight, merge, build, prepare, release, flip, close) driven by
   the publication status and by `publication_stage`, `publication_failed` and
-  `published` events. Rollback checks the selected immutable version, then
+  `published` events. While any publication for the selected system is
+  `queued`, `running` or `closing`, a **Publishing** pill with its queue
+  position, current stage or "finishing" sits in the dashboard top bar and the
+  Studio header and opens Review; the Studio rail's Version section shows the
+  same stage. The pill is filled from the `submissions` read and the same
+  publication events, and disappears once the release is live or the
+  publication fails. Rollback checks the selected immutable version, then
   requires the user to restore it.
 - **Conflicts go back through an agent.** When a session's runner is
   `conflicted`, or a publish preflight returns 409 with `conflicts`, Studio shows
@@ -353,6 +360,11 @@ styles, so the CSP is unchanged):
   yet shows a `sending` badge on its card, and "Sending" as the live step in
   the Studio stream. The feed indicator pulses while connecting or
   reconnecting.
+- **Publishing.** Accepting a publication shows the Publishing pill at once in
+  the top bar (dashboard and Studio) and a Publishing row in the Studio rail,
+  with the queue position, the running stage or "finishing" after the pointer
+  flips. It pulses, updates from publication events and polls, links to Review,
+  and clears when the release is live or the publication fails.
 
 With `prefers-reduced-motion`, spinners fade instead of rotating and the
 progress bar is a static line.
