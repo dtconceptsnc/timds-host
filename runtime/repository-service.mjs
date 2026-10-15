@@ -2,7 +2,7 @@ import {portal} from './callback.mjs';
 import {persistContainerTree} from '../src/repository/file-trees.mjs';
 import {sessionIdPattern,validateRun} from './policy.mjs';
 import {requestDiagnostic,safeRequestDiagnostic,finishCleanup} from '../src/requests/diagnostics.mjs';
-export const repositoryMethods=new Set(['provisionFiles','readSource','start','snapshot','stale','submit','update','mergeIntoDraft','history','close','merge','preparePublication','commitSource','pushMain','pushPublished','releaseCheckout','stagePublished','stageSource','removeSource']);
+export const repositoryMethods=new Set(['provisionFiles','readSource','start','snapshot','stale','submit','update','mergeIntoDraft','history','close','merge','preparePublication','commitSource','pushMain','priorPublished','pushPublished','releaseCheckout','stagePublished','stageSource','removeSource']);
 export function repositoryLivePushTarget(method,plan){
  if(!['update','submit','mergeIntoDraft'].includes(method))return null;
  const session=plan.args?.[0],namespace=plan.source?.artifacts_namespace;
@@ -69,7 +69,7 @@ export class RepositorySandboxRuntime{
   if(!sessionIdPattern.test(coordinatorId||'')||!sessionIdPattern.test(input?.operationId||'')||!repositoryMethods.has(input?.method))throw new Error('Invalid repository operation');
   const prior=this.ctx.storage.kv.get('operation');
   if(prior && (prior.coordinatorId!==coordinatorId||prior.sourceId!==input.source?.id||prior.operationId!==input.operationId))throw new Error('Repository operation identity changed');
-  if(prior?.publication&&!['preparePublication','commitSource','stagePublished','stageSource','pushMain','pushPublished','releaseCheckout'].includes(input.method))throw new Error('Publication checkout is reserved');
+  if(prior?.publication&&!['preparePublication','commitSource','stagePublished','stageSource','pushMain','priorPublished','pushPublished','releaseCheckout'].includes(input.method))throw new Error('Publication checkout is reserved');
   this.ctx.storage.kv.put('operation',{coordinatorId,sourceId:input.source.id,operationId:input.operationId,publication:prior?.publication||input.method==='preparePublication'});
   let plan,streaming=false,primary,primaryResponse,primaryPayload;const deadline=Date.now()+10*60_000,signal=AbortSignal.timeout(10*60_000);
   const rememberFailure=async response=>{if(!response.ok){primaryResponse=response;const value=primaryPayload=await response.clone().json().catch(()=>({}));primary=requestDiagnostic(Object.assign(new Error('Repository operation failed'),{statusCode:response.status,...(safeRequestDiagnostic(value.error?.requestDiagnostic)?{requestDiagnostic:safeRequestDiagnostic(value.error.requestDiagnostic)}:{})}),'operation','native-repository');}return response;};
@@ -101,7 +101,7 @@ export class RepositorySandboxRuntime{
     }
     return Response.json(data);
    }
-   const retain=['preparePublication','commitSource','stagePublished','stageSource','pushMain','pushPublished'].includes(input.method);
+   const retain=['preparePublication','commitSource','stagePublished','stageSource','pushMain','priorPublished','pushPublished'].includes(input.method);
    if(retain)return result;
    // Never JSON-buffer a 50 MiB snapshot in the Worker's 128 MiB heap. Keep
    // its service container alive until the RPC response stream drains/cancels.
@@ -114,7 +114,7 @@ export class RepositorySandboxRuntime{
    let cleanupError;
    try{await this.drainCleanup();}catch(error){cleanupError=error;}
    // Publications retain only credential-free Git objects between bounded RPCs.
-   if((!streaming||cleanupError)&&!['preparePublication','commitSource','stagePublished','stageSource','pushMain','pushPublished'].includes(input.method))try{await this.close();}catch(error){cleanupError??=requestDiagnostic(error,'container-cleanup','native-repository');}
+   if((!streaming||cleanupError)&&!['preparePublication','commitSource','stagePublished','stageSource','pushMain','priorPublished','pushPublished'].includes(input.method))try{await this.close();}catch(error){cleanupError??=requestDiagnostic(error,'container-cleanup','native-repository');}
    if(cleanupError){
     await finishCleanup(()=>{throw cleanupError;},primary,'capability-release');
     if(primaryResponse){const value=primaryPayload||{};return Response.json({...value,error:{...(typeof value.error==='object'?value.error:{message:'Repository operation failed'}),requestDiagnostic:safeRequestDiagnostic(primary.requestDiagnostic),cleanupDiagnostic:safeRequestDiagnostic(primary.cleanupDiagnostic)}},{status:primaryResponse.status});}

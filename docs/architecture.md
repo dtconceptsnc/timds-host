@@ -620,7 +620,10 @@ these checks; it would surface as a different stamp on the next publication.
   adapter compares the new artifact manifest with it. The receipt chooses the
   files and the branch tip supplies their blobs, so the adapter first asks the
   repository container (`priorPublished`) whether the tip's
-  `.timds-artifact.json` is that receipt's stamp. A rollback moves only the
+  `.timds-artifact.json` is that receipt's stamp. This call uses the existing
+  publication checkout and a fresh read capability for the source repository;
+  it revokes the capability after the call while retaining the checkout for
+  staging and pushing. A rollback moves only the
   pointer and an interrupted `flip` leaves the tip ahead of it; in both cases
   the tip is another release and nothing is reused. When the stamps match,
   files whose path, size and sha256 match the receipt are not staged into the

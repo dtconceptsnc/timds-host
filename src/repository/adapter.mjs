@@ -3,7 +3,7 @@ import {isFileTree,treeFiles,readTreeManifest} from './file-trees.mjs';
 import {safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
-const methods = new Set(['provisionFiles','readSource','start','snapshot','stale','submit','update','mergeIntoDraft','history','close','merge','preparePublication','commitSource','pushMain','pushPublished','releaseCheckout','stagePublished','stageSource','removeSource']);
+const methods = new Set(['provisionFiles','readSource','start','snapshot','stale','submit','update','mergeIntoDraft','history','close','merge','preparePublication','commitSource','pushMain','priorPublished','pushPublished','releaseCheckout','stagePublished','stageSource','removeSource']);
 /** Native binding adapter. The coordinator injects its local authoritative store. */
 export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBucket,ensurePreview=async()=>{},previewUrl=()=>'',deletePreview=async()=>{}}) {
   async function call(source,method,args=[],operationId=randomUUID()) {
@@ -94,7 +94,7 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
     } else if(input.method==='mergeIntoDraft') {args[0]=await session(args[0]);if(args[0].kind!=='draft')throw fail(409,'Draft required');const candidate=args[1];args[1]=await submission(candidate);const child=await session(args[1].session_id);if(child.draft_session_id!==args[0].id)throw fail(409,'Submission does not target this draft');if(!args[1].head_commit&&args[1].status==='preparing'&&/^[a-f0-9]{40}$/.test(candidate.head_commit||''))args[1].head_commit=candidate.head_commit;add(args[0].fork_repository,'write');add(main);}
     else if(input.method==='preparePublication') {args[0]=await submission(args[0]);add(main);}
     else if(['provisionFiles','pushMain','pushPublished'].includes(input.method)){if(input.method==='provisionFiles'&&input.phase==='prepare')await revoke(ns,main);add(main,'write');}
-    else if(input.method==='readSource')add(main);
+    else if(['readSource','priorPublished'].includes(input.method))add(main);
     else if(input.method==='removeSource'&&input.phase==='prepare') {const repo=await artifacts.getRepository(ns,main);if(repo){if(!source.artifacts_repository_id||String(repo.id)!==String(source.artifacts_repository_id))throw fail(409,'Repository identity changed');await revoke(ns,main);await artifacts.deleteRepository(ns,main);}result={removed:true};}
     if(input.phase==='release') {for(const repository of caps.keys()){const tokens=await artifacts.listTokens(ns,repository).catch(error=>{if(error.statusCode===404)return[];throw error;});for(const token of tokens)if(input.tokenIds?.includes(token.id))await artifacts.revokeToken(ns,token.id,repository);}return {released:true};}
     if(input.phase==='complete') {if(input.method==='close'){
@@ -121,7 +121,7 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
     if(!isFileTree(result.files))return result.files.filter(file=>/^tokens\/.+\.json$/.test(file.path)||file.path==='tokens.json');
     const files=[];for await(const file of treeFiles(snapshotBucket,result.files,{filter:file=>/^tokens\/.+\.json$/.test(file.path)||file.path==='tokens.json'}))files.push(file);return files;
   };
-  for(const method of methods)if(!['control','preparePublication','commitSource','pushMain','pushPublished','releaseCheckout','stagePublished','stageSource'].includes(method))api[method]=(source,...args)=>call(source,method,args);
+  for(const method of methods)if(!['control','preparePublication','commitSource','pushMain','priorPublished','pushPublished','releaseCheckout','stagePublished','stageSource'].includes(method))api[method]=(source,...args)=>call(source,method,args);
   api.preparePublication=async(source,submission,resume={})=>{const checkoutId=randomUUID();return {...await call(source,'preparePublication',[submission,resume],checkoutId),checkoutId};};
   api.commitSource=async(source,checkoutId,input)=>{if(!isFileTree(input?.files)&&!Array.isArray(input?.files))throw fail(502,'Release metadata did not produce a source file tree');if(!isFileTree(input.files))return call(source,'commitSource',[input],checkoutId);await stageTree(source,checkoutId,input.files,'stageSource');return call(source,'commitSource',[{useStaged:true,message:input.message}],checkoutId);};
   api.pushMain=(source,checkoutId)=>call(source,'pushMain',[],checkoutId);

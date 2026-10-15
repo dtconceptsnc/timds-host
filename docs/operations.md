@@ -559,7 +559,7 @@ the allowlist in `src/log.mjs` and this table.
 | `event` | Written when |
 | --- | --- |
 | `request_failed` | `errorResponse` returns a 5xx. The client sees the generic message; the line carries `errorClass`, `statusCode` and the diagnostic. |
-| `publication_stage` | A publication stage attempt finishes: `outcome` `ok`, `failed` (terminal) or `error` (the Workflow retries), with `stage`, `attempt`, `durationMs`, `sourceId` and `publicationId`. |
+| `publication_stage` | A publication stage attempt finishes: `outcome` `ok`, `failed` (terminal) or `error` (the Workflow retries), with `stage`, `attempt`, `durationMs`, `sourceId` and `publicationId`. `attempt` comes from the Workflow step context: 1 for the first execution of that step, 2 for its first retry, and so on. Queue waits do not increment it. |
 | `release_reuse` | The release stage could not load the prior release receipt and stages every artifact file (`outcome` `skipped`). |
 | `queue_message_failed` | The events queue consumer retries a message, with `attempt`. |
 
