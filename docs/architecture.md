@@ -425,7 +425,7 @@ complete files and full `baseRevision`, and may have `status: 'starting'` and
 an empty `liveUrl` while the fork is prepared.
 
 Source limits remain 4,000 files, 10 MiB per file and 50 MiB total. Responses
-preserve file order and prefetch at most 16 R2 blobs or four Artifacts blobs;
+preserve file order and prefetch at most four blobs from R2 or Artifacts: a Worker may hold six open connections, and a wider window made the runtime close prefetched bodies ("Response closed due to connection limit");
 container-to-R2 snapshot transfers run at most eight files concurrently.
 Direct reads verify each file against its Git object identity.
 

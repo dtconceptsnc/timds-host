@@ -134,7 +134,7 @@ async function* jsonFiles(files,readFile,{maxBytes=Infinity,gitObjects=false,con
 }
 async function* jsonTree(bucket,tree){
  const manifest=await readTreeManifest(bucket,tree);
- yield* jsonFiles(manifest.files,file=>readTreeFile(bucket,tree,file),{concurrency:16});
+ yield* jsonFiles(manifest.files,file=>readTreeFile(bucket,tree,file),{concurrency:4});
 }
 export function validateArtifactsTree(tree){
  if(!isArtifactsTree(tree)||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(tree.namespace||'')||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(tree.repository||'')||!/^[a-f0-9]{40}$/.test(tree.revision||'')||!Array.isArray(tree.files)||tree.files.length>ARTIFACTS_TREE_READ_LIMIT)throw fail('Invalid Artifacts tree reference');
