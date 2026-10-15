@@ -93,8 +93,9 @@ test('OpenAPI public preview validates CSS headers and bodyless HEAD', async () 
 test('pinned toolkit owns version headers, auth, session path, body and conflict transport', async () => {
   const pkg = JSON.parse(await readFile(new URL('../node_modules/@dtconcepts/timds/package.json', import.meta.url), 'utf8'));
   assert.equal(pkg.version, '0.1.464');
-  const calls = [];
-  const client = createConformanceClient({ url: 'https://host.example', token: 'test-only', fetchImpl: async (url, init) => {
+  const calls = [], dispatches = [];
+  const client = createConformanceClient({ url: 'https://host.example', token: 'test-only', onDispatch: value => dispatches.push(value), fetchImpl: async (url, init) => {
+    assert.deepEqual(dispatches, [{ operationId: 'startSession' }], 'start dispatch is observed before fetch without request data');
     calls.push({ url, init }); return json(result());
   } });
   await client.start({ systemId: session.systemId, idempotencyKey: 'retry-key' });
@@ -106,6 +107,9 @@ test('pinned toolkit owns version headers, auth, session path, body and conflict
   await client.pull(sessionId);
   assert.equal(calls[1].url, `https://host.example/api/timds/sessions/${sessionId}`);
   assert.equal(calls[1].init.method, 'GET');
+  await client.diagnostics(sessionId);
+  assert.equal(calls[2].url, `https://host.example/api/timds/sessions/${sessionId}/diagnostics`);
+  assert.equal(calls[2].init.method, 'GET');
   const malformed = createConformanceClient({ url: 'https://host.example', token: 'test-only', fetchImpl: async () => json({ apiVersion: 1 }) });
   await assert.rejects(malformed.pull(sessionId), /required property/);
   const denied = createConformanceClient({ url: 'https://host.example', token: 'test-only', fetchImpl: async () => json({ error: 'Access denied' }, 403) });

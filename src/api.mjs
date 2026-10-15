@@ -1,3 +1,4 @@
+import { logEvent } from './log.mjs';
 import { mediaApi } from './media/api.mjs';
 import { Catalog } from './store/catalog.mjs';
 import { fail } from './store/errors.mjs';
@@ -28,9 +29,10 @@ export function createApi({ getCoordinator, provision, mcp }) {
     let statusOverride;
     const call = async (sourceId,operation,args=[]) => {
       const coordinator=getCoordinator(context,sourceId);
-      let envelope;
+      let envelope;const began=performance.now();
       try { envelope = await coordinator.api({operation,actor,args}); }
       catch(error) { throw requestDiagnostic(error,'coordinator-rpc','host-boundary'); }
+      finally {if(['start','createDraft'].includes(operation))logEvent({event:'session_start_step',operation:'session-start',stage:'coordinator',durationMs:performance.now()-began,outcome:envelope?.ok?'ok':'error',sourceId,sessionId:envelope?.value?.session?.id});}
       if (!envelope.ok) throw Object.assign(fail(envelope.error.statusCode,envelope.error.message),envelope.error.details || {});
       statusOverride=envelope.httpStatus;
       // A long-running coordinator can finish on its prior deployment. Apply
@@ -43,7 +45,8 @@ export function createApi({ getCoordinator, provision, mcp }) {
     const respond = (result,status=200) => {
       const { _startTiming, ...value } = result;
       const timing = _startTiming ? Object.fromEntries(['reserve','fork','live','claim','stream'].map(phase => [phase,Math.max(0,Number(_startTiming[phase]) || 0)])) : null;
-      return streamJsonFileTrees(value,env.SNAPSHOTS,{status,artifacts:createArtifactsAdapter({env}),headers:{...apiHeaders,...(timing?{'Server-Timing':Object.entries(timing).map(([phase,duration])=>`${phase};dur=${duration}`).join(', ')}:{})}});
+      const began=performance.now(),onFinish=timing||(value.session?.status==='starting'&&value.files!==undefined)?outcome=>logEvent({event:'session_start_step',operation:'session-start',stage:'response-files',durationMs:performance.now()-began,outcome,sourceId:value.session?.sourceId,sessionId:value.session?.id}):undefined;
+      return streamJsonFileTrees(value,env.SNAPSHOTS,{status,onFinish,artifacts:createArtifactsAdapter({env}),headers:{...apiHeaders,...(timing?{'Server-Timing':Object.entries(timing).map(([phase,duration])=>`${phase};dur=${duration}`).join(', ')}:{})}});
     };
     if (path === '/api/timds/me' && method === 'GET') {
       const principal = await catalog.principal(actor.principalId);

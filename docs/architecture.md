@@ -392,33 +392,50 @@ prefetch at most four blobs and preserve file order; container-to-R2 snapshot
 transfers run at most eight files concurrently. Direct reads verify each file
 against its Git object identity.
 
-The coordinator alarm finishes pending starts under the session lease. It
-rechecks current authority, starts the deterministic session fork at the
-revision already returned to the caller, then checkpoints `fork_repository`
-and `status: 'open'`. Live provisioning is a separate pending step: ensure
-the fork's push subscription and live Worker, persist `live_url` and
-`sandbox_id`, and emit a `live_state` event. Session status and active work
-then expose the URL; Studio's feed refresh replaces its starting placeholder
-without a page reload. Each phase gets at most five background attempts, with
-5-, 10-, 20- and 40-second delays after failures. A durable 15-minute deadline
-recovers an in-flight fork attempt after an isolate restart; the session lease
-still fences fork checkpoints. Live provisioning has its own five-minute lease
-and a four-minute provider-operation deadline, so writes to an open fork do not
-wait for Worker creation. Close returns a retryable 409 while the live
-provisioning lease is active, preventing remote creation from racing cleanup.
-Exhausted work retains its safe error and pending
-state for diagnostics. An explicit start retry renews the automatic retry
-budget for failed or exhausted preparation when no corresponding lease is
-active. Ordinary sessions expire through the existing cleanup path; drafts
-have no expiry and require an explicit retry or close.
+The coordinator alarm starts the deterministic fork and live host preparation
+concurrently, under independent leases. Fork work rechecks authority and pins
+exactly the revision already returned before checkpointing `fork_repository`
+and `status: 'open'`. Host work configures the runner, reads the named Worker's
+metadata, uploads it when absent and enables its subdomain; it needs no fork.
+The targeted lookup uses `GET /workers/scripts/{name}/script-settings`, whose
+response includes [ownership tags](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/settings/methods/get/). The bare script endpoint downloads source
+and cannot establish ownership. The account's subdomain is cached per isolate.
 
-Session and named-draft snapshots, update and submit allow up to 20 seconds
-for a starting session to open and release its operation lease. Waiting leaves the coordinator queue and session lease available for
-the alarm; the operation rechecks authorization and claims its lease before
-using the fork. If the wait expires, the caller receives the existing 409
-starting response. Designer Requests use an internal synchronous start option
-because dispatch needs the fork and live runner immediately; the option is
-not a caller-controlled API field.
+As soon as the fork opens, a third job configures the runner idempotently,
+issues `LiveSession.resume` and ensures the fork's push subscription. Resume
+arms the runner's alarm, allowing its boot, clone and dependency restore to
+run during subscription provisioning. `live-wake` also confirms the runtime's
+actual `wakeStartedAt` with bounded polling for up to 30 seconds, without
+waiting for readiness. Both wake confirmation and subscription settle before
+the lease clears, including on failure. Every client gets this same policy;
+there is no token, cookie, owner or client-id branch. Repeated configure calls
+preserve a pending wake. The host URL stays internal until host preparation
+and the fork-dependent work both complete, then `live_url` and a forced
+`live_state` event refresh Studio's placeholder without a reload.
+
+Each of `fork`, `host` and `live` gets at most five background attempts, with
+5-, 10-, 20- and 40-second delays after failures. A durable 15-minute deadline
+recovers an interrupted fork attempt; its session lease fences checkpoints.
+Both live jobs have independent five-minute leases and four-minute provider
+operation deadlines. Close and deletion reject active live leases, including
+host work on a still-starting session. Each completed step merges timing into
+the current row without overwriting the other job. Exhausted work retains safe
+errors and pending state; an explicit start retry renews the budget when the
+corresponding lease is inactive. Old pending rows acquire host work lazily.
+Ordinary sessions expire through existing cleanup; drafts require retry or close.
+
+A session snapshot while `starting` reads the same pinned Artifacts tree as
+start, with the same 200-entry budget and container fallback. MCP authored-file
+reads accept this reference, verify Git blob identity, derive SHA-256 and size
+with four bounded reads at a time, and reread requested bytes without retaining
+the whole tree in memory. Pull and MCP can therefore read before the fork opens.
+Updates, submissions, named-draft snapshots and snapshot container fallbacks
+wait up to 45 seconds for the fork and its operation lease. This covers the
+approximately 25-second cold fork recorded in issue #45 with bounded headroom;
+actual immediate-write success still requires deployed acceptance. Waiting
+leaves the coordinator queue free, then authorization and the lease are checked
+again before fork access. Timeout preserves the existing starting 409.
+Designer Requests retain their host-internal synchronous start option.
 
 The current host includes `Server-Timing` on start responses; the v1 contract
 keeps this telemetry header optional for older compatible hosts. Its phases
@@ -428,14 +445,46 @@ the response header; `stream` measures tree preparation before the headers are
 sent, not the elapsed time to deliver the streamed body. Session diagnostics
 add `startStartedAt`, `startPhases`, `startBackgroundPhases` and `startRecovery`
 alongside the live runner's `wakePhases`. The request phases retain the values
-reported in its header; background fork/live costs are recorded separately.
-Recovery reports pending state, attempt count, next attempt time and safe
-failure details even before a fork exists. These measurements describe phases,
-not a local guarantee of deployed start latency.
+reported in its header; background costs are separate. `startBackgroundPhases`
+contains `fork`, `host` and `live` attempt totals plus the measured stage keys:
+`repository-prepare`, `repository-boot`, `repository-git`, `repository-complete`,
+`repository-files`, `live-configure`, `live-worker-get`, `live-worker-put`,
+`live-subdomain`, `live-subdomain-lookup`, `live-subscription` and `live-wake`.
+The five repository stages cover cleanup/control preparation, container and
+daemon readiness, Git RPC, control completion and R2 snapshot transfer. Live
+stages wrap their named RPC or provider call. Skipped stages are absent;
+failed attempts retain the stages observed. Timings represent the latest
+observation of each stage, so retries may leave earlier conditional values.
+Concurrent stage durations and enclosing totals must not be summed.
+
+Every measured stage emits `session_start_step`, with operation `session-start`
+or `session-start-job`, stage, duration, outcome and source/session UUIDs.
+`tree-artifacts` measures pinned tree preparation, `coordinator` the API or MCP
+boundary's coordinator RPC, and `response-files` response creation through
+stream close, error or cancellation. Body transfer is logs-only, never a
+header or a claimed delivery acknowledgement. Worker clocks advance across
+I/O; pure CPU portions may be under-reported. Recovery includes each job's
+pending state, attempts, next attempt and safe error, plus `wakeIssued` and
+`wakeIssuedAt`. These observations are not a guarantee of deployed latency.
 
 Non-retained repository operations schedule immediate container expiry through
 the sandbox alarm instead of awaiting destruction before returning. Capability
-revocation remains part of operation completion.
+revocation remains part of operation completion. The optional
+`TIMDS_REPOSITORY_RETENTION_SECONDS` defaults to zero and caps idle reuse at
+300 seconds. With it enabled, ordinary references-transport operations share a
+source-bound sandbox and serialize until file copies finish, capabilities are
+revoked and the outbound credential policy is cleared. Each new operation
+still prepares fresh authority and capabilities; no Git checkout or capability
+is reused. Failures expire immediately. Publication checkouts stay isolated by
+operation ID and retain their existing bounded lifetime.
+An operation marks its shared daemon dirty durably before doing work and clears
+that mark only after a successful response transfer and cleanup. A subsequent
+operation synchronously destroys a dirty daemon before preparing fresh
+capabilities, so a timed-out RPC or isolate restart cannot overlap reuse while
+the expiry alarm is still pending.
+`TIMDS_REPOSITORY_INSTANCE_TYPE` controls trusted Git container size, default
+`standard-1`; both controls require deployed timing and cost measurements before
+changing production defaults.
 
 The trusted repository image executes controlled Git and
 `@dtconcepts/timds/merge`, never source scripts, npm, a dev server or a model.
@@ -503,8 +552,9 @@ principals with a grant on the source, plus the designer agent, for invitations.
 
 A session or draft somebody is looking at stays warm; one nobody watches sleeps
 on the normal idle rule (10 minutes after its last activity); waking is visible
-in the feed. Nothing here is persisted on the coordinator, and it gains no
-timers, so it still hibernates between messages.
+in the feed. New sessions also wake from their start job before a viewer
+arrives. Viewing presence remains socket-derived on the coordinator, with no
+keepalive timer there, so it can still hibernate between messages.
 
 - **Client cadence.** On a session or draft page the Studio feed client sends
   `{type:'viewing', sessionId|draftId}` when the page opens, again after every
@@ -530,7 +580,8 @@ timers, so it still hibernates between messages.
   `min(watchedUntil, now + idle)` instead of sleeping. The reply is `status()`
   plus `reported`, the last state the runtime reported.
 - **Visible wake.** The host writes `live_state` `waking` (deduplicated by
-  `setLiveState`) in two places. The designer writes it when `LiveSession.status()`
+  `setLiveState`) in three places. The start job writes it before eager resume
+  once the fork is open. The designer writes it when `LiveSession.status()`
   says `sleeping` just after its busy check, and writes `sleeping` again if the
   start fails before the runtime is called. The feed writes it when a viewer
   arrives (a changed `viewing`) at a session whose status is `sleeping`, and
@@ -558,6 +609,12 @@ timers, so it still hibernates between messages.
   `TIMDS_LIVE_INSTANCE_TYPE` (`standard-1` to `standard-4`, default
   `standard-3`, two vCPUs), since clone, dependency restore and the dev server
   are all CPU bound.
+- **Usage estimates.** The durable live record accumulates `containerUsage`:
+  accepted wakes, awake milliseconds/minutes, idle sleeps, current awake start
+  and interrupted-window count. Diagnostics include the open interval. A
+  platform stop lacks an exact observed end, so that interval is estimated
+  from the last observation plus the configured idle timeout, capped at the
+  observation of the stop. This is host telemetry rather than billing data.
 
 Warm reload after a push stays inside the five-second budget without timers on
 the coordinator. A session push reaches `LiveSession.pushed` directly through

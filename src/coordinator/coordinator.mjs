@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logEvent } from '../log.mjs';
 import { createDesignSystemSessions } from '../domain/sessions.mjs';
 import { createSqliteCollaborationStore, SESSION_WORK_MAX_ATTEMPTS } from '../store/sqlite.mjs';
 import { fail, principalId } from '../store/errors.mjs';
@@ -89,35 +90,52 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
   // Forks and live provisioning leave the writer queue free. Durable attempt
   // deadlines survive eviction; each checkpoint rechecks current authority.
   const recoverSessionWork = async work => {
-    const prefix=work.phase==='fork'?'start':'live';
-    let claimed;
+    const prefix=work.phase==='fork'?'start':work.phase==='host'?'live_host':'live';
+    let claimed,attemptStarted;
     try {
       const prepared=await serialized(async()=>{
         if(!store.pendingSessionWork({limit:100}).some(item=>item.sessionId===work.sessionId&&item.phase===work.phase))return null;
         const row=store.get(work.sessionId),attempts=(row[`${prefix}_attempts`]||0)+1,token=ids();
         claimed={row,attempts,token};
         store.updateSession(row.id,{[`${prefix}_attempts`]:attempts,[`${prefix}_retry_at`]:new Date(clock()+(prefix==='start'?900_000:300_000)).toISOString(),
-          ...(prefix==='live'?{live_lease_token:token,live_lease_expires_at:new Date(clock()+300_000).toISOString()}:{})});
+          ...(prefix!=='start'?{[`${prefix}_lease_token`]:token,[`${prefix}_lease_expires_at`]:new Date(clock()+300_000).toISOString()}:{})});
         return {row,...await backgroundActor(row)};
       });
       if(!prepared)return {sessionId:work.sessionId,phase:work.phase,status:'skipped'};
+      attemptStarted=performance.now();
       if(work.phase==='fork')await sessions.finishStart(prepared.actor,work.sessionId,{live:false,background:true,runMutation:serialized});
       else {
         const began=performance.now();
         const liveRow=()=>{
           const row=store.get(work.sessionId);
-          if(row?.status!=='open'||row.live_lease_token!==claimed.token||Date.parse(row.live_lease_expires_at)<=clock())throw fail(409,'Live provisioning lease changed');
+          if(!row || !(work.phase==='host'?['starting','open'].includes(row.status):row.status==='open') || row[`${prefix}_lease_token`]!==claimed.token || Date.parse(row[`${prefix}_lease_expires_at`])<=clock())throw fail(409,'Live provisioning lease changed');
           return row;
         };
         const authorize=()=>serialized(async()=>{await backgroundActor(liveRow());liveRow();});
-        const patch=await requestService.live.ensure(prepared.row,prepared.source,{authorize,signal:AbortSignal.timeout(240_000)});
+        const step=async(stage,task)=>{
+          const started=performance.now();let outcome='ok';
+          try{return await task();}catch(error){outcome='error';throw error;}
+          finally{
+            const durationMs=Math.round(performance.now()-started);
+            logEvent({event:'session_start_step',operation:'session-start-job',stage,durationMs,outcome,sourceId,sessionId:work.sessionId});
+            await serialized(()=>{const row=liveRow();store.updateSession(row.id,{start_background_phases:{...row.start_background_phases,[stage]:durationMs}});});
+          }
+        };
+        const wakeIssued=at=>serialized(async()=>{await backgroundActor(liveRow());store.updateSession(work.sessionId,{live_wake_issued_at:at});});
+        const method=work.phase==='host'?'ensureHost':'ensureFork';
+        // Old pending rows have no host phase; recover them without requiring a
+        // client retry. New starts always claim independent host and fork work.
+        if(work.phase==='live' && prepared.row.live_host_pending===undefined && !prepared.row.live_host_url){
+          await serialized(()=>{const row=liveRow();store.updateSession(row.id,{live_host_pending:true,live_host_retry_at:new Date(clock()).toISOString()});});
+        }
+        const patch=await requestService.live[method](prepared.row,prepared.source,{authorize,step,wakeIssued,signal:AbortSignal.timeout(240_000)});
         await serialized(async()=>{
           await backgroundActor(liveRow());
           const row=liveRow();
           const state=row.live_state&&!['stopped','unavailable'].includes(row.live_state)?row.live_state:patch.live_state;
-          store.updateSession(row.id,{...patch,live_state:state,live_pending:false,live_retry_at:null,live_error:'',live_diagnostic:null,live_lease_token:null,live_lease_expires_at:null,start_background_phases:{...row.start_background_phases,live:Math.round(performance.now()-began)}});
-          // Even an unchanged sleeping state must repaint the newly arrived URL.
-          store.setLiveState(row.id,state,{expectedStatus:'open',force:true});
+          const url=work.phase==='host'?(row.status==='open'&&!row.live_pending?patch.live_host_url:''):(!row.live_host_pending?row.live_host_url:'');
+          store.updateSession(row.id,{...patch,...(url?{live_url:url}:{}),live_state:state,[`${prefix}_pending`]:false,[`${prefix}_retry_at`]:null,[`${prefix}_error`]:'',[`${prefix}_diagnostic`]:null,[`${prefix}_lease_token`]:null,[`${prefix}_lease_expires_at`]:null,start_background_phases:{...row.start_background_phases,[work.phase]:Math.round(performance.now()-began)}});
+          if(row.status==='open')store.setLiveState(row.id,state,{expectedStatus:'open',force:true});
           await store.flushOutbox(100,{requireDrained:false});
         });
       }
@@ -128,13 +146,13 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
       const terminal=await serialized(async()=>{
         const row=store.get(work.sessionId);
         if(!row||!['starting','open'].includes(row.status)||store.deletionFence())return true;
-        if(prefix==='start' && (row.status!=='starting'||row.start_attempts!==claimed.attempts) || prefix==='live' && row.live_lease_token!==claimed.token)return false;
-        store.updateSession(row.id,{[`${prefix}_error`]:prefix==='start'?'Session fork preparation failed':'Live preview provisioning failed',[`${prefix}_diagnostic`]:diagnostic,
+        if(prefix==='start' && (row.status!=='starting'||row.start_attempts!==claimed.attempts) || prefix!=='start' && row[`${prefix}_lease_token`]!==claimed.token)return false;
+        store.updateSession(row.id,{...(attemptStarted!==undefined?{start_background_phases:{...row.start_background_phases,[work.phase]:Math.round(performance.now()-attemptStarted)}}:{}),[`${prefix}_error`]:prefix==='start'?'Session fork preparation failed':'Live preview provisioning failed',[`${prefix}_diagnostic`]:diagnostic,
           [`${prefix}_retry_at`]:claimed.attempts<SESSION_WORK_MAX_ATTEMPTS?new Date(clock()+Math.min(60_000,5_000*2**(claimed.attempts-1))).toISOString():null,
-          ...(prefix==='live'?{live_lease_token:null,live_lease_expires_at:null}:{})});
+          ...(prefix!=='start'?{[`${prefix}_lease_token`]:null,[`${prefix}_lease_expires_at`]:null}:{})});
         return false;
       });
-      if(terminal && prefix==='live')await requestService.live.remove(claimed.row,await store.getSource(sourceId));
+      if(terminal && prefix!=='start')await requestService.live.remove(claimed.row,await store.getSource(sourceId));
       return {sessionId:work.sessionId,phase:work.phase,status:'failed'};
     }
   };
@@ -156,7 +174,8 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
       });
       // Poll committed rows before joining the writer queue, otherwise the
       // waiting caller would prevent its own background fork from checkpointing.
-      if(['snapshot','update','submit'].includes(operation))return activeActor(actor).then(verified=>sessions.waitForOpen(verified,args[0])).then(invoke);
+      if(operation==='snapshot')return activeActor(actor).then(async verified=>await sessions.pinnedSnapshot(verified,args[0]) || (await sessions.waitForOpen(verified,args[0]),invoke()));
+      if(['update','submit'].includes(operation))return activeActor(actor).then(verified=>sessions.waitForOpen(verified,args[0])).then(invoke);
       if(operation==='draftSnapshot')return activeActor(actor).then(verified=>sessions.waitForDraft(verified,args[0],args[1])).then(invoke);
       return invoke();
     },
@@ -324,9 +343,17 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
         return {projection,expired,publications:queued.length};
       });
       const recovered=[];
-      if(!result.deleting)for(let index=0;index<2;index++){
-        const work=store.pendingSessionWork({limit:1})[0];if(!work)break;
-        recovered.push(await recoverSessionWork(work));
+      if(!result.deleting){
+        // Each job owns its durable lease; a slow host upload cannot postpone
+        // the newly open fork's wake/subscription job.
+        const work=store.pendingSessionWork({limit:2});
+        await Promise.all(work.map(async item=>{
+          const completed=await recoverSessionWork(item);recovered.push(completed);
+          if(item.phase==='fork'&&completed.status==='completed'){
+            const live=store.pendingSessionWork({limit:100}).find(next=>next.sessionId===item.sessionId&&next.phase==='live');
+            if(live)recovered.push(await recoverSessionWork(live));
+          }
+        }));
       }
       return {...result,recovered};
     },

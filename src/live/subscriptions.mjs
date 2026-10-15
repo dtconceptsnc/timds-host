@@ -1,6 +1,6 @@
 // Ownership-checked Artifacts subscriptions from the legacy portal.
 import { sessionIdPattern } from '../../runtime/policy.mjs';
-const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
+import { fail } from '../store/errors.mjs';
 export function createAgentForkSubscriptions({ env = {}, fetchImpl = fetch } = {}) {
   const account = env.TIMDS_ARTIFACTS_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID;
   // Reuse the registered Builds deployment credential for Workers Scripts Write.
@@ -36,12 +36,14 @@ export function createAgentForkSubscriptions({ env = {}, fetchImpl = fetch } = {
     throw fail(502, 'Agent subscription pagination limit reached');
   }
   return {
-    async ensure(session, source, {signal,authorize = async()=>{}} = {}) {
-      const rows = await matching(session, source, signal);
-      if (rows.length) return rows[0];
-      const expected = identity(session, source);
-      // Subscription filters are source-relative; delivered event types are fully qualified.
-      await authorize();return request('', 'POST', { ...expected, enabled:true, events:['pushed'], destination:{ type:'queues.queue', queue_id:queue } },signal);
+    async ensure(session, source, {signal,authorize = async()=>{},step = (_stage,run)=>run()} = {}) {
+      return step('live-subscription',async()=>{
+        const rows = await matching(session, source, signal);
+        if (rows.length) return rows[0];
+        const expected = identity(session, source);
+        // Subscription filters are source-relative; delivered event types are fully qualified.
+        await authorize();return request('', 'POST', { ...expected, enabled:true, events:['pushed'], destination:{ type:'queues.queue', queue_id:queue } },signal);
+      });
     },
     async close(session, source) {
       for (const row of await matching(session, source)) await request(`/${encodeURIComponent(row.id)}`, 'DELETE');

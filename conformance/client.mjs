@@ -2,7 +2,7 @@ import { createHostProvider } from '@dtconcepts/timds/hosted';
 import { createContractValidator } from './contract.mjs';
 
 /** The pinned toolkit owns work operations. Only routes absent from its client use fetch. */
-export function createConformanceClient({ url, token, fetchImpl = fetch, onResponse = () => {}, onCreatedSession = () => {}, onPublicationAttempt = () => {}, onAcceptedPublication = () => {}, timeoutMs = 120_000 }) {
+export function createConformanceClient({ url, token, fetchImpl = fetch, onDispatch = () => {}, onResponse = () => {}, onCreatedSession = () => {}, onPublicationAttempt = () => {}, onAcceptedPublication = () => {}, timeoutMs = 120_000 }) {
   const origin = new URL(url).origin;
   const validate = createContractValidator();
   const transport = async (input, init = {}) => {
@@ -13,6 +13,7 @@ export function createConformanceClient({ url, token, fetchImpl = fetch, onRespo
       try { body = JSON.parse(init.body); } catch { /* Unknown requests may still be writes. */ }
       if (body?.dryRun !== true && body?.preflight !== true) await onPublicationAttempt(decodeURIComponent(publish[1]));
     }
+    if (init.method === 'POST' && new URL(input).pathname === '/api/timds/sessions') onDispatch({ operationId: 'startSession' });
     const response = await fetchImpl(input, { ...init, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) });
     // A successful create may still violate the response schema. Preserve its
     // minimal identity before validation so teardown can remove its resources.
@@ -34,12 +35,13 @@ export function createConformanceClient({ url, token, fetchImpl = fetch, onRespo
     }, ...(body ? { body: JSON.stringify({ ...body, apiVersion: 1 }) } : {}) });
     if (publicRead) return response;
     const payload = await response.json();
-    if (!response.ok) throw new Error(`Host extension returned HTTP ${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`Host extension returned HTTP ${response.status}`), { status: response.status });
     return payload;
   };
   const sourcePath = id => `/api/timds/design-systems/${encodeURIComponent(id)}`;
   return {
     ...createHostProvider({ url: origin, token, fetchImpl: transport }),
+    diagnostics: id => extension('GET', `/api/timds/sessions/${encodeURIComponent(id)}/diagnostics`),
     startRequest: (id, input) => extension('POST', `${sourcePath(id)}/requests`, input),
     requestStatus: (id, requestId) => extension('GET', `${sourcePath(id)}/requests/${encodeURIComponent(requestId)}`),
     submissions: id => extension('GET', `${sourcePath(id)}/submissions`),

@@ -2,6 +2,9 @@ import {portal} from './callback.mjs';
 import {persistContainerTree} from '../src/repository/file-trees.mjs';
 import {sessionIdPattern,validateRun} from './policy.mjs';
 import {requestDiagnostic,safeRequestDiagnostic,finishCleanup} from '../src/requests/diagnostics.mjs';
+import {containerInstanceType} from './instance.mjs';
+import {repositoryRetentionSeconds,reusableRepositoryMethods,repositoryPhases} from '../src/repository/settings.mjs';
+import {logEvent} from '../src/log.mjs';
 export const repositoryMethods=new Set(['provisionFiles','readSource','start','snapshot','stale','submit','update','mergeIntoDraft','history','close','merge','preparePublication','commitSource','pushMain','priorPublished','pushPublished','releaseCheckout','stagePublished','stageSource','removeSource']);
 export function repositoryLivePushTarget(method,plan){
  if(!['update','submit','mergeIntoDraft'].includes(method))return null;
@@ -39,17 +42,18 @@ export function validateRepositoryCredentials(plan){
 }
 export class RepositorySandboxRuntime{
  constructor(ctx,env,{portalCall=portal,snapshotBucket}={}){this.ctx=ctx;this.env=env;this.portal=portalCall;this.snapshotBucket=snapshotBucket;this.serial=Promise.resolve();}
- run(coordinatorId,input){const work=this.serial.then(()=>this.execute(coordinatorId,input)).catch(error=>Response.json({ok:false,error:{message:'Repository operation failed',requestDiagnostic:safeRequestDiagnostic(requestDiagnostic(error,'operation','native-repository').requestDiagnostic),...(safeRequestDiagnostic(error.cleanupDiagnostic)?{cleanupDiagnostic:safeRequestDiagnostic(error.cleanupDiagnostic)}:{})}},{status:Number.isInteger(error.statusCode)&&error.statusCode>=400&&error.statusCode<=599?error.statusCode:502}));this.serial=work.catch(()=>{});return work;}
+ run(coordinatorId,input){const work=this.serial.then(()=>this.execute(coordinatorId,input)).catch(error=>Response.json({ok:false,...(this.snapshotBucket?{repositoryPhases:repositoryPhases(error.repositoryPhases)}:{}),error:{message:'Repository operation failed',requestDiagnostic:safeRequestDiagnostic(requestDiagnostic(error,'operation','native-repository').requestDiagnostic),...(safeRequestDiagnostic(error.cleanupDiagnostic)?{cleanupDiagnostic:safeRequestDiagnostic(error.cleanupDiagnostic)}:{})}},{status:Number.isInteger(error.statusCode)&&error.statusCode>=400&&error.statusCode<=599?error.statusCode:502}));this.serial=work.catch(()=>{});return work;}
  cleanupRows(){return [...this.ctx.storage.kv.list({prefix:'capability-cleanup:'})].filter(([,row])=>row.status==='pending');}
  async drainCleanup(){
   let failure;
+  const settle=(key,row)=>this.ctx.storage.kv.get('operation')?.sharedSource?this.ctx.storage.kv.delete(key):this.ctx.storage.kv.put(key,row);
   for(const [key,row] of this.cleanupRows()){
-   if(Date.now()>=row.expiresAt){this.ctx.storage.kv.put(key,{...row,status:'expired',completedAt:Date.now()});continue;}
+   if(Date.now()>=row.expiresAt){settle(key,{...row,status:'expired',completedAt:Date.now()});continue;}
    try{
     const response=await this.portal(this.env,'repository-control',row.input);
     const value=await response.json().catch(()=>null);
     if(!response.ok||value?.released!==true)throw Object.assign(new Error('Repository capability cleanup is pending'),{statusCode:503});
-    this.ctx.storage.kv.put(key,{...row,status:'revoked',completedAt:Date.now(),diagnostic:null});
+    settle(key,{...row,status:'revoked',completedAt:Date.now(),diagnostic:null});
    }catch(cause){
     const error=requestDiagnostic(Object.assign(new Error('Repository capability cleanup is pending'),{statusCode:503}),'capability-release','native-repository');
     this.ctx.storage.kv.put(key,{...row,attempts:(row.attempts||0)+1,diagnostic:safeRequestDiagnostic(error.requestDiagnostic)});
@@ -66,40 +70,54 @@ export class RepositorySandboxRuntime{
   await this.ctx.storage.setAlarm(Date.now()+30_000);
  }
  async execute(coordinatorId,input){
-  if(!sessionIdPattern.test(coordinatorId||'')||!sessionIdPattern.test(input?.operationId||'')||!repositoryMethods.has(input?.method))throw new Error('Invalid repository operation');
+  if(!sessionIdPattern.test(coordinatorId||'')||!sessionIdPattern.test(input?.operationId||'')||input.source?.id!==coordinatorId||!repositoryMethods.has(input?.method))throw new Error('Invalid repository operation');
+  const sharedSource=input.sharedSource===true;
+  if(sharedSource&&(!this.snapshotBucket||!repositoryRetentionSeconds(this.env)||!reusableRepositoryMethods.has(input.method)||input.source.lifecycleOperationId))throw new Error('Repository source reuse is unavailable');
   const prior=this.ctx.storage.kv.get('operation');
-  if(prior && (prior.coordinatorId!==coordinatorId||prior.sourceId!==input.source?.id||prior.operationId!==input.operationId))throw new Error('Repository operation identity changed');
+  if(prior&&(prior.coordinatorId!==coordinatorId||prior.sourceId!==input.source.id||Boolean(prior.sharedSource)!==sharedSource||!sharedSource&&prior.operationId!==input.operationId))throw new Error('Repository operation identity changed');
   if(prior?.publication&&!['preparePublication','commitSource','stagePublished','stageSource','pushMain','priorPublished','pushPublished','releaseCheckout'].includes(input.method))throw new Error('Publication checkout is reserved');
-  this.ctx.storage.kv.put('operation',{coordinatorId,sourceId:input.source.id,operationId:input.operationId,publication:prior?.publication||input.method==='preparePublication'});
-  let plan,streaming=false,primary,primaryResponse,primaryPayload;const deadline=Date.now()+10*60_000,signal=AbortSignal.timeout(10*60_000);
-  const rememberFailure=async response=>{if(!response.ok){primaryResponse=response;const value=primaryPayload=await response.clone().json().catch(()=>({}));primary=requestDiagnostic(Object.assign(new Error('Repository operation failed'),{statusCode:response.status,...(safeRequestDiagnostic(value.error?.requestDiagnostic)?{requestDiagnostic:safeRequestDiagnostic(value.error.requestDiagnostic)}:{})}),'operation','native-repository');}return response;};
+  this.ctx.storage.kv.put('operation',{coordinatorId,sourceId:input.source.id,operationId:input.operationId,sharedSource,publication:prior?.publication||input.method==='preparePublication'});
+  const resetContainer=sharedSource&&this.ctx.storage.kv.get('container-dirty')!==false;
+  // A cancelled fetch does not stop the image's RPC handler. Keep an eviction-
+  // durable fence until the whole operation and capability cleanup finish.
+  if(sharedSource)this.ctx.storage.kv.put('container-dirty',true);
+  let plan,streaming=false,successful=false,primary,primaryResponse,primaryPayload;const deadline=Date.now()+10*60_000,signal=AbortSignal.timeout(10*60_000),phases={};
+  const step=async(stage,task)=>{const began=Date.now();let outcome='error';try{const value=await task();outcome=value instanceof Response&&!value.ok?'error':'ok';return value;}finally{const durationMs=phases[stage]=Math.max(0,Date.now()-began);if(input.method==='start')logEvent({event:'session_start_step',operation:input.timingOperation==='session-start-job'?'session-start-job':'session-start',stage,durationMs,outcome,sourceId:input.source.id,sessionId:input.args?.[0]?.sessionId});}};
+  const rememberFailure=async response=>{if(!response.ok){primaryResponse=response;const value=primaryPayload=await response.clone().json().catch(()=>({}));primary=requestDiagnostic(Object.assign(new Error('Repository operation failed'),{statusCode:response.status,...(safeRequestDiagnostic(value.error?.requestDiagnostic)?{requestDiagnostic:safeRequestDiagnostic(value.error.requestDiagnostic)}:{})}),'operation','native-repository');}return this.snapshotBucket?Response.json({...primaryPayload,repositoryPhases:phases},{status:response.status}):response;};
   try{
-   await this.drainCleanup();
-   const response=await this.portal(this.env,'repository-control',{...input,coordinatorId,phase:'prepare'});if(!response.ok)return await rememberFailure(response);
+   const response=await step('repository-prepare',async()=>{
+    // Destroy an interrupted daemon before minting or installing capabilities
+    // for a new operation, even if the previous expiry alarm has not fired.
+    if(resetContainer&&this.ctx.container?.running)await this.ctx.container.destroy();
+    await this.drainCleanup();return this.portal(this.env,'repository-control',{...input,coordinatorId,phase:'prepare'});
+   });if(!response.ok)return await rememberFailure(response);
    plan=await response.json();validateRepositoryCredentials(plan);
    await this.rememberCleanup(coordinatorId,input,plan);
-   if(plan.result!==undefined)return Response.json({ok:true,result:plan.result});
+   if(plan.result!==undefined){successful=true;return Response.json({ok:true,result:plan.result,...(this.snapshotBucket?{repositoryPhases:phases}:{})});}
    const container=this.ctx.container;
    if(!container)throw new Error('Repository container unavailable');
-   if(!container.running){container.start({image:container.images.repository,instance:'standard-1',enableInternet:false});await container.exec(['node','/usr/local/lib/timds-repository/repository-daemon.mjs'],{cwd:'/workspace',env:{NODE_EXTRA_CA_CERTS:'/etc/cloudflare/certs/cloudflare-containers-ca.crt',GIT_SSL_CAINFO:'/etc/cloudflare/certs/cloudflare-containers-ca.crt'},stdout:'ignore',stderr:'ignore'});}
-   await container.setInactivityTimeout(20*60_000);const containerExpiresAt=Date.now()+20*60_000;this.ctx.storage.kv.put('container-expires-at',containerExpiresAt);await this.ctx.storage.setAlarm(containerExpiresAt);
-   const outbound=this.ctx.exports.RepositoryOutbound({props:{repositories:plan.repositories,livePushTarget:repositoryLivePushTarget(input.method,plan)}});
-   await container.interceptAllOutboundHttp(outbound);await container.interceptOutboundHttps('*',outbound);
-   const port=container.getTcpPort(8081),readinessDeadline=Date.now()+15_000;let ready=false;
-   while(Date.now()<readinessDeadline){try{const probe=await port.fetch('http://repository/health',{signal:AbortSignal.timeout(1000)});await probe.body?.cancel();ready=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}}
-   if(!ready)throw new Error('Repository service did not start');
+   const port=await step('repository-boot',async()=>{
+    if(!container.running){container.start({image:container.images.repository,instance:containerInstanceType(this.env?.TIMDS_REPOSITORY_INSTANCE_TYPE,'standard-1'),enableInternet:false});await container.exec(['node','/usr/local/lib/timds-repository/repository-daemon.mjs'],{cwd:'/workspace',env:{NODE_EXTRA_CA_CERTS:'/etc/cloudflare/certs/cloudflare-containers-ca.crt',GIT_SSL_CAINFO:'/etc/cloudflare/certs/cloudflare-containers-ca.crt'},stdout:'ignore',stderr:'ignore'});}
+    await container.setInactivityTimeout(20*60_000);const containerExpiresAt=Date.now()+20*60_000;this.ctx.storage.kv.put('container-expires-at',containerExpiresAt);await this.ctx.storage.setAlarm(containerExpiresAt);
+    const outbound=this.ctx.exports.RepositoryOutbound({props:{repositories:plan.repositories,livePushTarget:repositoryLivePushTarget(input.method,plan)}});
+    await container.interceptAllOutboundHttp(outbound);await container.interceptOutboundHttps('*',outbound);
+    const port=container.getTcpPort(8081),readinessDeadline=Date.now()+15_000;let ready=false;
+    while(Date.now()<readinessDeadline){try{const probe=await port.fetch('http://repository/health',{signal:AbortSignal.timeout(1000)});await probe.body?.cancel();ready=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,100));}}
+    if(!ready)throw new Error('Repository service did not start');return port;
+   });
    // Deliberately strip tokens before crossing the container boundary.
    const payload={...(this.snapshotBucket?{transport:'references'}:{}),method:input.method,source:plan.source,args:plan.args||input.args||[],previewOrigin:plan.previewOrigin,repositories:plan.repositories.map(({namespace,repository,remote})=>({namespace,repository,remote}))};
-   const result=await port.fetch('http://repository/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal});
-   if(result.ok){const finished=await this.portal(this.env,'repository-control',{...input,coordinatorId,phase:'complete'});if(!finished.ok){await result.body?.cancel();return await rememberFailure(finished);}}
-   else await rememberFailure(result);
+   const result=await step('repository-git',()=>port.fetch('http://repository/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal}));
+   if(result.ok){const finished=await step('repository-complete',()=>this.portal(this.env,'repository-control',{...input,coordinatorId,phase:'complete'}));if(!finished.ok){await result.body?.cancel();return await rememberFailure(finished);}}
+   else if(this.snapshotBucket)return await rememberFailure(result);else await rememberFailure(result);
    if(this.snapshotBucket&&result.ok){
     const data=await result.json();
-    for(const role of ['files','priorFiles'])if(data.result?.[role]?.kind==='timds-container-tree'){
-     const descriptor=data.result[role];
-     data.result[role]=await persistContainerTree(this.snapshotBucket,{sourceId:input.source.id,operationId:input.operationId,role:`${input.method}-${role}`,manifest:descriptor.manifest,deadline,readFile:index=>port.fetch(`http://repository/trees/${role}/${index}`,{signal})});
-    }
-    return Response.json(data);
+    const roles=['files','priorFiles'].filter(role=>data.result?.[role]?.kind==='timds-container-tree');
+    if(roles.length)await step('repository-files',async()=>{for(const role of roles){
+      const descriptor=data.result[role];
+      data.result[role]=await persistContainerTree(this.snapshotBucket,{sourceId:input.source.id,operationId:input.operationId,role:`${input.method}-${role}`,manifest:descriptor.manifest,deadline,readFile:index=>port.fetch(`http://repository/trees/${role}/${index}`,{signal})});
+    }});
+    successful=data.ok===true;return Response.json({...data,repositoryPhases:phases});
    }
    const retain=['preparePublication','commitSource','stagePublished','stageSource','pushMain','priorPublished','pushPublished'].includes(input.method);
    if(retain)return result;
@@ -110,20 +128,25 @@ export class RepositorySandboxRuntime{
     async pull(controller){try{const item=reader?await reader.read():{done:true};if(item.done){await runtime.expire();controller.close();}else controller.enqueue(item.value);}catch(error){await runtime.expire();controller.error(error);}},
     async cancel(reason){try{await reader?.cancel(reason);}finally{await runtime.expire();}}
    }),result);
-  }catch(error){primary=requestDiagnostic(error,'operation','native-repository');throw primary;}finally{
+  }catch(error){primary=requestDiagnostic(error,'operation','native-repository');primary.repositoryPhases=phases;throw primary;}finally{
    let cleanupError;
    try{await this.drainCleanup();}catch(error){cleanupError=error;}
+   // Remove even revoked capabilities from the idle container's egress policy
+   // before another operation may use this source's retained daemon.
+   if(sharedSource&&this.ctx.container?.running)try{const blocked=this.ctx.exports.RepositoryOutbound({props:{repositories:[]}});await this.ctx.container.interceptAllOutboundHttp(blocked);await this.ctx.container.interceptOutboundHttps('*',blocked);}catch(error){cleanupError??=requestDiagnostic(error,'container-cleanup','native-repository');}
    // Publications retain only credential-free Git objects between bounded RPCs.
    // Persist teardown intent before replying; the alarm performs the slow
    // destroy after this request has returned and any response has drained.
-   if((!streaming||cleanupError)&&!['preparePublication','commitSource','stagePublished','stageSource','pushMain','priorPublished','pushPublished'].includes(input.method))try{await this.expire();}catch(error){cleanupError??=requestDiagnostic(error,'container-cleanup','native-repository');}
+   if((!streaming||cleanupError)&&!['preparePublication','commitSource','stagePublished','stageSource','pushMain','priorPublished','pushPublished'].includes(input.method))try{await this.expire(sharedSource&&successful&&!cleanupError?repositoryRetentionSeconds(this.env)*1000:0);}catch(error){cleanupError??=requestDiagnostic(error,'container-cleanup','native-repository');}
+   if(sharedSource&&successful&&!primary&&!cleanupError)this.ctx.storage.kv.put('container-dirty',false);
    if(cleanupError){
+    cleanupError.repositoryPhases=phases;
     await finishCleanup(()=>{throw cleanupError;},primary,'capability-release');
-    if(primaryResponse){const value=primaryPayload||{};return Response.json({...value,error:{...(typeof value.error==='object'?value.error:{message:'Repository operation failed'}),requestDiagnostic:safeRequestDiagnostic(primary.requestDiagnostic),cleanupDiagnostic:safeRequestDiagnostic(primary.cleanupDiagnostic)}},{status:primaryResponse.status});}
+    if(primaryResponse){const value=primaryPayload||{};return Response.json({...value,...(this.snapshotBucket?{repositoryPhases:phases}:{}),error:{...(typeof value.error==='object'?value.error:{message:'Repository operation failed'}),requestDiagnostic:safeRequestDiagnostic(primary.requestDiagnostic),cleanupDiagnostic:safeRequestDiagnostic(primary.cleanupDiagnostic)}},{status:primaryResponse.status});}
    }
   }
  }
- async expire(){const expiresAt=Date.now();this.ctx.storage.kv.put('container-expires-at',expiresAt);await this.ctx.storage.setAlarm(expiresAt);}
+ async expire(retentionMs=0){const expiresAt=Date.now()+retentionMs;this.ctx.storage.kv.put('container-expires-at',expiresAt);if(retentionMs&&this.ctx.container?.running)await this.ctx.container.setInactivityTimeout(retentionMs);await this.ctx.storage.setAlarm(expiresAt);}
  async close(){let failure;try{if(this.ctx.container?.running)await this.ctx.container.destroy();this.ctx.storage.kv.delete('container-expires-at');}catch(error){failure=error;}finally{if(this.cleanupRows().length||failure)await this.ctx.storage.setAlarm(Date.now()+30_000);else await this.ctx.storage.deleteAlarm();}if(failure)throw failure;return{closed:true};}
  alarm(){const work=this.serial.then(async()=>{
   let primary;try{await this.drainCleanup();}catch(error){primary=error;throw error;}finally{

@@ -116,6 +116,17 @@ the read when they change. The byte cursors describe one snapshot and do not
 pin later calls to it. Underlying source limits remain 4,000 files, 50 MiB per
 snapshot and 10 MiB per file.
 
+While a session is `starting`, `list_session_files`, `read_session_file`,
+`describe_workspace`, `list_media` and authored-change authorization read the
+pinned Artifacts tree returned by start. They share its revision, 200 combined
+tree-read/file-entry budget and fallback to the repository container for larger
+trees or symlinks. Metadata reads stream four blobs at a time, verify Git object
+identity and compute sizes/SHA-256 without retaining a whole tree; selected file
+bytes are reread and verified. Update and submit wait up to 45 seconds for the
+fork, then recheck current authority and concurrency guards. CLI, MCP and Studio
+use the same host start and eager-wake policy.
+
+
 `list_draft_files` and `read_draft_file` replace `sessionId` with `systemId`
 and `draft` (draft name or session UUID). Their prefix, cursor, encoding and
 byte limits are the same. Reading a draft does not join it; join its session

@@ -103,9 +103,14 @@ async function* jsonTree(bucket,tree){
  const manifest=await readTreeManifest(bucket,tree);
  yield* jsonFiles(manifest.files,file=>readTreeFile(bucket,tree,file));
 }
-async function* jsonArtifactsTree(artifacts,tree){
- if(!artifacts||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(tree.namespace||'')||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(tree.repository||'')||!/^[a-f0-9]{40}$/.test(tree.revision||'')||!Array.isArray(tree.files)||tree.files.length>ARTIFACTS_TREE_READ_LIMIT)throw fail('Invalid Artifacts tree reference');
+export function validateArtifactsTree(tree){
+ if(!isArtifactsTree(tree)||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(tree.namespace||'')||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(tree.repository||'')||!/^[a-f0-9]{40}$/.test(tree.revision||'')||!Array.isArray(tree.files)||tree.files.length>ARTIFACTS_TREE_READ_LIMIT)throw fail('Invalid Artifacts tree reference');
  const seen=new Set();for(const file of tree.files){safeSessionTreePath(file.path);if(seen.has(file.path)||!['100644','100755'].includes(file.mode)||!/^[a-f0-9]{40}$/.test(file.oid||''))throw fail('Invalid Artifacts tree entry');seen.add(file.path);}
+ return tree;
+}
+async function* jsonArtifactsTree(artifacts,tree){
+ if(!artifacts)throw fail('Artifacts binding unavailable');
+ validateArtifactsTree(tree);
  yield* jsonFiles(tree.files,file=>artifacts.readFileStream(tree.namespace,tree.repository,file.path,tree.revision,{maxBytes:10*1024*1024}),{maxBytes:50*1024*1024,gitObjects:true});
 }
 async function* jsonValue(value,bucket,artifacts){
@@ -116,7 +121,11 @@ async function* jsonValue(value,bucket,artifacts){
  yield JSON.stringify(value)??'null';
 }
 /** Public v1 JSON stays byte-compatible, but a 50 MiB tree never enters Worker heap. */
-export function streamJsonFileTrees(result,bucket,{status=200,headers={},artifacts}={}){
- const iterator=jsonValue(result,bucket,artifacts)[Symbol.asyncIterator]();
- return new Response(new ReadableStream({async pull(controller){try{const item=await iterator.next();if(item.done)controller.close();else controller.enqueue(encoder.encode(item.value));}catch(error){controller.error(error);}},async cancel(){await iterator.return?.();}}),{status,headers:{'Content-Type':'application/json; charset=utf-8',...headers}});
+export function streamJsonFileTrees(result,bucket,{status=200,headers={},artifacts,onFinish}={}){
+ const iterator=jsonValue(result,bucket,artifacts)[Symbol.asyncIterator]();let finished=false;
+ const finish=outcome=>{if(finished)return;finished=true;try{onFinish?.(outcome);}catch{}};
+ return new Response(new ReadableStream({async pull(controller){
+  try{const item=await iterator.next();if(item.done){controller.close();finish('ok');}else controller.enqueue(encoder.encode(item.value));}
+  catch(error){finish('error');controller.error(error);await iterator.return?.();}
+ },async cancel(){finish('cancelled');await iterator.return?.();}}),{status,headers:{'Content-Type':'application/json; charset=utf-8',...headers}});
 }

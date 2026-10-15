@@ -23,7 +23,7 @@ fork and live preview are pending; a Request dispatch needs the fork and live
 runner before it can begin model work. The synchronous option keeps that
 dispatch ordering and the same idempotency key, authorization and session
 lease checks. It is not exposed as an API request field.
-Requests targeting a starting session first wait up to 20 seconds for its
+Requests targeting a starting session first wait up to 45 seconds for its
 fork outside the coordinator mutation queue, then recheck the session before
 dispatch.
 

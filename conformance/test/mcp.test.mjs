@@ -8,8 +8,9 @@ const json = body => new Response(JSON.stringify(body), { headers: { 'Content-Ty
 const initialized = { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'fixture', version: '1.0.0' } };
 
 test('remote MCP handshake, paged tool directory and call use the selected origin and bearer', async () => {
-  const calls = [], counts = [];
-  const client = createMcpConformanceClient({ url: 'https://host.example', token: 'test-only', onResponse: value => counts.push(value), fetchImpl: async (url, init) => {
+  const calls = [], counts = [], dispatches = [];
+  const client = createMcpConformanceClient({ url: 'https://host.example', token: 'test-only', onDispatch: value => dispatches.push(value), onResponse: value => counts.push(value), fetchImpl: async (url, init) => {
+    assert.equal(dispatches.length, calls.length + 1, 'dispatch is observed before each fetch');
     const request = JSON.parse(init.body); calls.push({ url, init, request });
     if (request.method === 'initialize') return json(reply(request.id, initialized));
     if (request.method === 'notifications/initialized') return new Response(null, { status: 202, headers: { 'Cache-Control': 'no-store' } });
@@ -26,6 +27,7 @@ test('remote MCP handshake, paged tool directory and call use the selected origi
   assert.equal(calls[1].init.headers['MCP-Protocol-Version'], initialized.protocolVersion);
   assert.deepEqual(calls.at(-1).request.params, { name: 'list_systems', arguments: {} });
   assert.deepEqual(counts.at(-1), { operationId: 'mcp:list_systems', status: 200 });
+  assert.deepEqual(dispatches.at(-1), { operationId: 'mcp:list_systems' }, 'dispatch telemetry contains no arguments or credentials');
 });
 
 test('SSE MCP responses ignore notifications and select the matching request receipt', async () => {
