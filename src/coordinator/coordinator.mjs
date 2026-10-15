@@ -47,6 +47,7 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     submissions: store.submissions, getLifecycleOperation: store.getLifecycleOperation,
     getExecutionJob: store.getExecutionJob, findFork: store.findFork, updateSession: store.updateSession,
     sessionRepository:store.sessionRepository,recordSessionRepository:store.recordSessionRepository,
+    treeSnapshot:store.treeSnapshot,recordTreeSnapshot:store.recordTreeSnapshot,
     sessionForRequest: store.sessionForRequest, requestReceipt: store.requestReceipt,
     appendEvent: store.appendEvent, eventForHead: store.eventForHead,
     authorizeProvision: input => provisionState(input),
@@ -180,7 +181,7 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
       // waiting caller would prevent its own background fork from checkpointing.
       if(operation==='snapshot')return activeActor(actor).then(async verified=>await sessions.pinnedSnapshot(verified,args[0]) || (await sessions.waitForOpen(verified,args[0]),invoke()));
       if(['update','submit'].includes(operation))return activeActor(actor).then(verified=>sessions.waitForOpen(verified,args[0])).then(invoke);
-      if(operation==='draftSnapshot')return activeActor(actor).then(verified=>sessions.waitForDraft(verified,args[0],args[1])).then(invoke);
+      if(operation==='draftSnapshot')return activeActor(actor).then(async verified=>await sessions.pinnedDraftSnapshot(verified,args[0],args[1]) || (await sessions.waitForDraft(verified,args[0],args[1]),invoke()));
       return invoke();
     },
     previewTokens: (...args) => serialized(() => sessions.previewTokens(...args)),

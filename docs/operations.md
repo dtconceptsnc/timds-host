@@ -609,9 +609,9 @@ like every other receipt (see [`verification.md`](verification.md)).
 The Worker writes one JSON line per operational event through `src/log.mjs`.
 A line carries only allowlisted keys: the labels `event`, `operation`,
 `stage`, `outcome`, `errorClass`, `fault`, `diagnosticOperation`,
-`diagnosticStage` and `queue`; the numbers `statusCode`, `durationMs` and
-`attempt`; and the UUIDs `sourceId`, `sessionId`, `publicationId` and
-`requestId`. Any other key or value shape is dropped before the line is
+`diagnosticStage` and `queue`; the numbers `statusCode`, `durationMs`,
+`attempt`, `hit`, `blobsRead` and `blobsFound`; and the UUIDs `sourceId`,
+`sessionId`, `publicationId` and `requestId`. Any other key or value shape is dropped before the line is
 written, so a log line never holds an error message, a stack, a prompt, model
 output, file contents, a request body, a system id or a credential. The
 diagnostic keys are the allowlisted `requestDiagnostic` of the failing step,
@@ -620,11 +620,20 @@ the allowlist in `src/log.mjs` and this table.
 
 | `event` | Written when |
 | --- | --- |
-| `session_start_step` | A start stage finishes, with `operation` (`session-start` or `session-start-job`), `stage`, `durationMs`, `outcome`, `sourceId` and `sessionId`. `response-files` records body close, error or cancellation and never appears in `Server-Timing`. Retries and independent jobs can emit the same stage again. |
+| `session_start_step` | A start stage finishes, with `operation` (`session-start` or `session-start-job`), `stage`, `durationMs`, `outcome`, `sourceId` and `sessionId`. `tree-index` records revision-index lookup with outcome `ok` and `hit` 1 or 0; a hit skips `tree-artifacts` and request-side repository stages. `repository-files` adds `blobsRead` and `blobsFound`; background forks omit this stage. `response-files` records body close, error or cancellation and never appears in `Server-Timing`. Retries and independent jobs can emit the same stage again. |
+| `repository_step` | A non-start repository file transfer finishes, with the repository method in `operation`, stage `repository-files`, `durationMs`, `outcome`, source/session UUIDs and `blobsRead`/`blobsFound`. Use this event to measure repeat snapshot, update and submit transfers. |
 | `request_failed` | `errorResponse` returns a 5xx. The client sees the generic message; the line carries `errorClass`, `statusCode` and the diagnostic. |
 | `publication_stage` | A publication stage attempt finishes: `outcome` `ok`, `failed` (terminal) or `error` (the Workflow retries), with `stage`, `attempt`, `durationMs`, `sourceId` and `publicationId`. `attempt` comes from the Workflow step context: 1 for the first execution of that step, 2 for its first retry, and so on. Queue waits do not increment it. |
 | `release_reuse` | The release stage could not load the prior release receipt and stages every artifact file (`outcome` `skipped`). |
 | `queue_message_failed` | The events queue consumer retries a message, with `attempt`. |
+
+`blobsRead` counts unique blobs requested from the container and `blobsFound`
+counts those already stored in R2, summed across trees in the operation. When
+a complete manifest is reused, its unique blobs count as found without any
+container blob reads. Source trees share content-addressed blobs across
+operations; build artifacts keep their existing layout. These are transfer
+counts, not the number of paths in the source tree. A repeated copy can reuse
+all its blobs while still paying for repository preparation and Git work.
 
 Read the lines in the dashboard (Workers & Pages, the Worker, Logs) or with
 the pinned CLI, which takes the Workers Observability telemetry query body

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { decode, fail, json, principalId, storageError } from './errors.mjs';
 import { AccessInvitations,applyInvitationClaim,invitationOperation } from '../invitations/catalog.mjs';
 import { PUBLICATION_STAGES } from '../publication/steps.mjs';
+import { isFileTree } from '../repository/file-trees.mjs';
 
 const schema = `
 CREATE TABLE IF NOT EXISTS coordinator_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK
 CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS lifecycle_operations(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS session_repositories(session_id TEXT PRIMARY KEY REFERENCES sessions(id),namespace TEXT NOT NULL,repository TEXT NOT NULL,repository_id TEXT NOT NULL,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS tree_snapshots(repository TEXT NOT NULL,revision TEXT NOT NULL,ref_json TEXT NOT NULL CHECK(json_valid(ref_json)),created_at TEXT NOT NULL,PRIMARY KEY(repository,revision));
 CREATE TABLE IF NOT EXISTS preview_builds(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)),
  seq INTEGER GENERATED ALWAYS AS(json_extract(row_json,'$.seq')) VIRTUAL);
@@ -190,6 +192,22 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     if (!prior) return;
     const saved = get('versions',prior.design_system_version_id);
     if (!saved || saved.content_digest !== version.content_digest || saved.source_commit !== version.source_commit || json(saved.stamp) !== json(version.stamp)) throw fail(409, 'A published version label cannot identify different bytes or provenance');
+  };
+  const treeIdentity = async (repository,revision) => {
+    if(typeof repository!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(repository)||!/^[a-f0-9]{40}$/.test(revision||''))throw fail(409,'Invalid snapshot repository or revision');
+    const source=await store.getSource(sourceId);
+    if(!source||['deleting','deleted'].includes(source.lifecycle_status)||meta('deletion_fence'))throw fail(410,'Snapshot source is unavailable');
+    if(repository!==source.artifacts_repository){
+      const row=/^session-[a-f0-9-]{36}$/.test(repository)?get('sessions',repository.slice(8)):null;
+      if(!row||row.source_id!==sourceId||row.fork_repository&&row.fork_repository!==repository)throw fail(409,'Snapshot repository does not belong to this source');
+    }
+  };
+  const treeReference = ref => {
+    if(!isFileTree(ref)||ref.artifact||typeof ref.ref!=='string'||!ref.ref.startsWith(`snapshots/${sourceId}/`)||
+        !/^snapshots\/[a-f0-9-]{36}\/(?:trees|[a-f0-9-]{36}\/[a-zA-Z][a-zA-Z0-9-]{0,79})\/[a-f0-9]{64}\/manifest\.json$/.test(ref.ref)||
+        !/^[a-f0-9]{64}$/.test(ref.digest||'')||!ref.ref.endsWith(`/${ref.digest}/manifest.json`)||
+        !Number.isSafeInteger(ref.entryCount)||ref.entryCount<0||ref.entryCount>4000||!Number.isSafeInteger(ref.totalBytes)||ref.totalBytes<0||ref.totalBytes>50*1024*1024)throw fail(409,'Invalid source snapshot reference');
+    return {kind:ref.kind,ref:ref.ref,digest:ref.digest,entryCount:ref.entryCount,totalBytes:ref.totalBytes};
   };
 
   atomic(() => { const saved = meta('source_id'); if (saved && saved !== sourceId) throw fail(409, 'Coordinator source identity mismatch'); setMeta('source_id',sourceId); sequenceEvents(); });
@@ -464,6 +482,21 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     deletionInventory(id) { own(id); return {sessions:list('sessions').map(({id,status,expires_at}) => ({id,status,expires_at})),submissions:list('submissions').map(({id,status,review_branch,preview_url}) => ({id,status,review_branch,preview_url}))}; },
     getLifecycleOperation: id => get('lifecycle_operations',id),
     sessionRepository: id => scalar('SELECT * FROM session_repositories WHERE session_id=?',id),
+    async treeSnapshot(repository,revision) {
+      await treeIdentity(repository,revision);
+      const ref=decode(scalar('SELECT ref_json FROM tree_snapshots WHERE repository=? AND revision=?',repository,revision)?.ref_json);
+      return ref?treeReference(ref):null;
+    },
+    async recordTreeSnapshot({repository,revision,ref}) {
+      await treeIdentity(repository,revision);const next=treeReference(ref);
+      return atomic(()=>{
+        if(meta('deletion_fence'))throw fail(410,'Snapshot source is unavailable');
+        const prior=decode(scalar('SELECT ref_json FROM tree_snapshots WHERE repository=? AND revision=?',repository,revision)?.ref_json);
+        if(prior&&(prior.digest!==next.digest||prior.entryCount!==next.entryCount||prior.totalBytes!==next.totalBytes))throw fail(409,'Immutable revision snapshot changed');
+        if(!prior)sql.exec('INSERT INTO tree_snapshots(repository,revision,ref_json,created_at) VALUES(?,?,?,?)',repository,revision,json(next),timestamp());
+        return prior?treeReference(prior):next;
+      });
+    },
     recordSessionRepository: ({sessionId,namespace,repository,repositoryId}) => atomic(()=>{
       const row=session(sessionId);
       if(row.source_id!==sourceId||repository!==`session-${sessionId}`||typeof namespace!=='string'||!namespace||typeof repositoryId!=='string'||!repositoryId||repositoryId.length>200||/[\x00-\x20\x7f]/.test(repositoryId))throw fail(409,'Fork creation receipt does not match this session');

@@ -146,7 +146,7 @@
       "post": {
         "operationId": "startSession",
         "summary": "Start or recover a hosted editing session",
-        "description": "Reserves a 24-hour session and returns the complete source tree at its pinned baseRevision. The reply may have status starting and an empty liveUrl while the fork and live preview finish in the background. Reusing an idempotency key while starting returns the same session and pinned tree; a changed origin fails. Snapshot reads the pinned tree while starting when it fits the direct Artifacts budget. Update, submit and snapshot container fallbacks wait up to 45 seconds for the fork before returning a starting 409. Source access is rechecked.",
+        "description": "Reserves a 24-hour session and returns the complete source tree at its pinned baseRevision. A revision-index hit streams the stored tree without a repository container or per-file Artifacts reads; an unindexed revision uses bounded direct Artifacts reads or the container fallback, whose complete result is indexed. The reply may have status starting and an empty liveUrl while the fork and live preview finish in the background. Background fork creation does not copy the tree again. Reusing an idempotency key while starting returns the same session and pinned tree; a changed origin fails. Snapshot uses the same index-first path while starting. Update, submit and snapshot container fallbacks wait up to 45 seconds for the fork before returning a starting 409. Current source and session authority are rechecked before serving the tree.",
         "tags": [
           "Sessions"
         ],
@@ -321,7 +321,7 @@
             "$ref": "#/components/responses/HostError"
           }
         },
-        "description": "A starting session returns the tree at its pinned start revision directly from Artifacts, with the same 200 combined tree-read/file-entry budget as start. Larger trees and symlinks fall back to the container after waiting up to 45 seconds for the fork. Source access is rechecked before returning the pinned reference; authorization and the session lease are checked before fork reads."
+        "description": "A starting session first looks up the tree at its pinned start revision in the revision index, then tries direct Artifacts reads within the same 200 combined tree-read/file-entry budget as start. An open session reads its fork head once and returns an indexed tree without a repository container when the head equals session.baseRevision. Historical sessions without a fork creation receipt, unindexed larger trees, symlinks and changed fork heads use the container fallback after waiting up to 45 seconds for the fork. Current source and session authority are rechecked before returning any indexed or direct reference; authorization and the operation lease are checked before container reads. Container results populate the revision index."
       }
     },
     "/api/timds/sessions/{sessionId}/status": {
@@ -1353,7 +1353,7 @@
       "get": {
         "operationId": "snapshotDraft",
         "summary": "Read a draft snapshot for source-authorized integration",
-        "description": "A starting draft waits up to 45 seconds for its fork before returning the existing starting 409. Waiting leaves the coordinator queue free; source authorization and the operation lease are checked before reading.",
+        "description": "Uses the same snapshot path as a session: a starting draft reads its pinned revision through the revision index or bounded direct Artifacts reads; an open draft with an unchanged indexed fork head returns the stored tree without a repository container. Container fallbacks wait up to 45 seconds for the fork before returning the existing starting 409. Waiting leaves the coordinator queue free; current source and session authority are rechecked before returning a tree, and the operation lease is checked before container reads.",
         "tags": [
           "Drafts"
         ],
@@ -5147,7 +5147,7 @@
           },
           "startBackgroundPhases": {
             "type": "object",
-            "description": "Milliseconds in the latest observed fork, host and live attempts and their stages. Stages: repository-prepare, repository-boot, repository-git, repository-complete, repository-files, live-configure, live-worker-get (named script settings with ownership tags), live-worker-put, live-subdomain, live-subdomain-lookup, live-subscription and live-wake (resume plus up to 30 seconds confirming actual wake start, concurrent with subscription). Skipped stages are absent; previous observations can remain after retries. Independent stages overlap and totals must not be summed. Workers clocks can under-report CPU-only work.",
+            "description": "Milliseconds in the latest observed fork, host and live attempts and their stages. Stages: repository-prepare, repository-boot, repository-git, repository-complete, repository-files, live-configure, live-worker-get (named script settings with ownership tags), live-worker-put, live-subdomain, live-subdomain-lookup, live-subscription and live-wake (resume plus up to 30 seconds confirming actual wake start, concurrent with subscription). Background forks omit repository-files because they do not copy trees. tree-index lookups are logged with numeric hit 1 or 0; repository-files logs also include numeric blobsRead and blobsFound, rather than adding these counts to phase durations. Skipped stages are absent; previous observations can remain after retries. Independent stages overlap and totals must not be summed. Workers clocks can under-report CPU-only work.",
             "properties": {
               "fork": {
                 "type": "integer",
