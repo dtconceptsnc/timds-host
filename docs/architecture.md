@@ -605,10 +605,28 @@ these checks; it would surface as a different stamp on the next publication.
   `hit` or a `miss`. The stage stores them on the checkpoint as
   `timings.releaseMetadata`, `timings.build` and `timings.stamp`, keyed by the
   attempt that ran the container (a reused artifact records nothing), and
-  `flip` copies `timings` into the published result. Stage wall time is on the
-  `publication_stage` feed rows. The container size for all three runs is
+  `flip` copies `timings` into the published result. `release` has no
+  container, so it times its own Worker-side phases (`prior-release`,
+  `checkout`, `commit`, `release-copy`, `stage-version`, `push-main`,
+  `push-published`) as `timings.release`, with `reusedRelease` naming the
+  version whose blobs the published-branch push reused. Stage wall time is on
+  the `publication_stage` feed rows. The container size for all three runs is
   `TIMDS_BUILD_INSTANCE_TYPE` (default `standard-2`), see
   [`operations.md`](operations.md).
+- **Diffed published-branch push.** Before `release` pushes the artifact to
+  the `timds-published` branch, the Workflow loads the current pointer's
+  immutable release receipt (`store.getVersion` plus `loadRelease`) and the
+  adapter compares the new artifact manifest with it. Files whose path, size
+  and sha256 match are not staged into the repository container; the engine
+  fetches the prior published commit first and takes their blob ids from its
+  tree, refusing a reused path the prior tree lacks. Only changed files cross
+  the RPC and get hashed, and the whole index is written with one
+  `update-index --index-info` instead of one process per file. An unchanged
+  republish stages nothing. Reuse is an optimisation: a pointer on the legacy
+  snapshot layout or an unreadable receipt disables it for that release, and
+  the tree comparison and push are unchanged. The release-bucket copy runs
+  through the bounded four-way `transferFiles` instead of one object at a
+  time; every object still verifies before and after its write.
 
 Configure explicit bounded transient retries/backoff and timeouts per step.
 Treat deterministic validation, grant denial, CAS and named check failures as

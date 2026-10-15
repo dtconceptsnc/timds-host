@@ -1,7 +1,7 @@
 import {WorkflowEntrypoint} from 'cloudflare:workers';
 import {NonRetryableError} from 'cloudflare:workflows';
 import {createRepositoryAdapter} from '../repository/adapter.mjs';
-import {publishReleaseTree} from './releases.mjs';
+import {publishReleaseTree,loadRelease} from './releases.mjs';
 import {createPublicationArtifactStore} from './artifacts.mjs';
 import {createPublicationSteps,PUBLICATION_STAGES} from './steps.mjs';
 import {publicUrls} from './urls.mjs';
@@ -15,7 +15,15 @@ const QUEUE_WAIT_LIMIT=720;
 export function publicationStoreProxy(coordinator){return new Proxy({}, {get:(_target,name)=>(...args)=>coordinator.publicationStore(name,args)});}
 export function publicationServices(ctx,env,coordinator,lease){
  const store=publicationStoreProxy(coordinator),repository=createRepositoryAdapter({store,getSandbox:id=>ctx.exports.RepositorySandbox.getByName(id),snapshotBucket:env.SNAPSHOTS});
- return createPublicationSteps({store,repository,lease,artifacts:createPublicationArtifactStore(env.SNAPSHOTS),metadata:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`metadata:${input.publicationId}`).metadata(input),input.operation),build:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`build:${input.publicationId}`).run(input),'build'),artifactManifest:tree=>readTreeManifest(env.SNAPSHOTS,tree),releaseArtifact:input=>publishReleaseTree({snapshots:env.SNAPSHOTS,releases:env.RELEASES},input),stageVersion:input=>coordinator.stageVersion(input),closePublishedSession:(_source,submission,publicationId)=>coordinator.closeForPublication(submission.session_id,publicationId),publicUrls:(source,version)=>publicUrls(env,source,version),verifyPublic:verifyPublishedRead});
+ // The current pointer's immutable release receipt, so the published-branch
+ // push can reuse unchanged blobs. Reuse is an optimisation: a pointer on a
+ // legacy artifact layout or an unreadable receipt means no reuse, not failure.
+ const priorRelease=async source=>{
+  if(!source.published_version_id)return null;
+  try{const version=await store.getVersion(source.published_version_id);if(!version?.artifact_ref?.startsWith('release:')||version.source_id!==source.id)return null;const {root,receipt}=await loadRelease({RELEASES:env.RELEASES},version);return {root,version:version.version_label,files:new Map(receipt.manifest.files.map(file=>[file.path,file]))};}
+  catch{return null;}
+ };
+ return createPublicationSteps({store,repository,lease,priorRelease,artifacts:createPublicationArtifactStore(env.SNAPSHOTS),metadata:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`metadata:${input.publicationId}`).metadata(input),input.operation),build:input=>unwrapNativeBuildResult(ctx.exports.BuildSandbox.getByName(`build:${input.publicationId}`).run(input),'build'),artifactManifest:tree=>readTreeManifest(env.SNAPSHOTS,tree),releaseArtifact:input=>publishReleaseTree({snapshots:env.SNAPSHOTS,releases:env.RELEASES},input),stageVersion:input=>coordinator.stageVersion(input),closePublishedSession:(_source,submission,publicationId)=>coordinator.closeForPublication(submission.session_id,publicationId),publicUrls:(source,version)=>publicUrls(env,source,version),verifyPublic:verifyPublishedRead});
 }
 export class PublicationWorkflow extends WorkflowEntrypoint {
  async run(event,step){

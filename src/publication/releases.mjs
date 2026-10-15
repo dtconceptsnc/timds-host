@@ -1,6 +1,6 @@
 // RELEASES has a bucket lock on sources/. Objects become public only after the
 // coordinator commits an event; partial copies are safe to resume byte-for-byte.
-import {readTreeManifest,readTreeFile,sha256,validateTreeManifest} from '../repository/file-trees.mjs';
+import {readTreeManifest,readTreeFile,sha256,validateTreeManifest,transferFiles} from '../repository/file-trees.mjs';
 const fail=message=>Object.assign(new Error(message),{statusCode:409});
 const pattern=/^release:(sources\/[a-f0-9-]{36}\/v\/[^/]+\/)\.timds-release\.json$/;
 const stampText=stamp=>JSON.stringify(stamp,null,2)+'\n';
@@ -30,7 +30,8 @@ export async function publishReleaseTree({snapshots,releases},{sourceId,files,st
  const receiptDigest=await sha256(new TextEncoder().encode(receiptText)),ref=`release:${root}.timds-release.json`;
  // A finalized label cannot acquire different bytes even if all file names differ.
  const prior=await releases.get(root+'.timds-release.json');if(prior){if(prior.size>2*1024*1024||await prior.text()!==receiptText)throw fail('Immutable release label already names different bytes');}
- for(const file of manifest.files)await writeOnce(releases,root+file.path,{size:file.size,digest:file.sha256,body:async()=>fixed((await readTreeFile(snapshots,files,file)).body,file.size)});
+ // Bounded parallel copy; each object still verifies before and after its write.
+ await transferFiles(manifest.files,file=>writeOnce(releases,root+file.path,{size:file.size,digest:file.sha256,body:async()=>fixed((await readTreeFile(snapshots,files,file)).body,file.size)}));
  const stampBytes=new TextEncoder().encode(stampText(stamp));await writeOnce(releases,root+'.timds-artifact.json',{size:stampBytes.length,digest:await sha256(stampBytes),body:async()=>stampBytes,contentType:'application/json'});
  const receiptBytes=new TextEncoder().encode(receiptText);await writeOnce(releases,root+'.timds-release.json',{size:receiptBytes.length,digest:receiptDigest,body:async()=>receiptBytes,contentType:'application/json'});
  return ref;

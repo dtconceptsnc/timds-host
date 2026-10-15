@@ -51,6 +51,18 @@ async function tree(cwd, ref) {
   return entries;
 }
 
+// The published branch's tree: paths are artifact paths, not session paths, so
+// this reads oids without the session path rules or the 4000-entry session cap.
+async function publishedTree(cwd, ref) {
+  const result = await git(cwd, ["ls-tree", "-r", "-z", ref], { maxOutputBytes: 4 * 1024 * 1024 });
+  const entries = new Map();
+  for (const record of result.bytes.toString().split("\0").filter(Boolean)) {
+    const tab = record.indexOf("\t"); const [mode, type, oid] = record.slice(0, tab).split(" ");
+    if (type === "blob" && /^[a-f0-9]{40}$/.test(oid)) entries.set(record.slice(tab + 1), { mode, oid });
+  }
+  return entries;
+}
+
 // Git's batch protocol is binary-safe only when payloads are consumed by the
 // declared byte count. Never split the entire output on newlines or decode it.
 export function parseGitBlobBatch(bytes, expected) {
@@ -335,26 +347,36 @@ export function createSandboxRepositoryEngine({ artifacts, ensurePreview = async
             if (!resumed) await push(cwd, source, source.artifacts_repository, committedHead, "main", parentRevision);
             return { headCommit: committedHead };
           },
-          async pushPublished({ files: artifactFiles, stamp }) {
+          // `reuse` names artifact paths whose bytes the Worker verified against
+          // the previous release receipt; their blobs come from the prior
+          // published tree, so only changed files were staged and get hashed.
+          async pushPublished({ files: artifactFiles, stamp, reuse = [] }) {
             if (!committedHead || stamp?.sourceCommit !== committedHead) throw fail(409, "Publication stamp does not match its source");
-            await git(cwd, ["read-tree", "--empty"]);
-            const seen = new Set(); let bytes = 0;
-            for (const file of [...artifactFiles, { path: ".timds-artifact.json", content: Buffer.from(`${JSON.stringify(stamp, null, 2)}\n`) }]) {
-              // Artifact paths may include dist; secrets and Git internals may not.
-              const path = file.path;
-              sessionFilePath(path.replace(/(^|\/)dist(?=\/)/g, "$1artifact-output"));
-              if (seen.has(path)) throw fail(400, "Duplicate artifact path"); seen.add(path);
-              const content = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content, file.encoding || "utf8");
-              bytes += content.length; if (bytes > 100 * 1024 * 1024 || seen.size > 10000) throw fail(413, "Publication artifact is too large");
-              const oid = (await git(cwd, ["hash-object", "-w", "--stdin"], { input: content })).text;
-              await git(cwd, ["update-index", "--add", "--cacheinfo", "100644", oid, path]);
-            }
-            const desired = (await git(cwd, ["write-tree"])).text;
             const prior = await currentRef(cwd, source, source.artifacts_repository, "timds-published");
-            if (prior) {
-              await fetchRef(cwd, source, source.artifacts_repository, "refs/heads/timds-published", "refs/published/main");
-              if ((await git(cwd, ["rev-parse", `${prior}^{tree}`])).text === desired) return { headCommit: prior };
+            if (prior) await fetchRef(cwd, source, source.artifacts_repository, "refs/heads/timds-published", "refs/published/main");
+            const priorTree = prior ? await publishedTree(cwd, "refs/published/main") : new Map();
+            await git(cwd, ["read-tree", "--empty"]);
+            const seen = new Set(), index = []; let bytes = 0;
+            // Artifact paths may include dist; secrets and Git internals may not.
+            const place = path => { sessionFilePath(path.replace(/(^|\/)dist(?=\/)/g, "$1artifact-output")); if (seen.has(path)) throw fail(400, "Duplicate artifact path"); seen.add(path); if (seen.size > 10000) throw fail(413, "Publication artifact is too large"); };
+            for (const path of reuse) {
+              if (typeof path !== "string") throw fail(400, "Invalid reused artifact path");
+              place(path);
+              const entry = priorTree.get(path);
+              if (!entry || entry.mode !== "100644") throw fail(409, "Published tree lacks a reused artifact file");
+              index.push(`100644 ${entry.oid}\t${path}`);
             }
+            for (const file of [...artifactFiles, { path: ".timds-artifact.json", content: Buffer.from(`${JSON.stringify(stamp, null, 2)}\n`) }]) {
+              const path = file.path; place(path);
+              const content = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content, file.encoding || "utf8");
+              bytes += content.length; if (bytes > 100 * 1024 * 1024) throw fail(413, "Publication artifact is too large");
+              const oid = (await git(cwd, ["hash-object", "-w", "--stdin"], { input: content })).text;
+              index.push(`100644 ${oid}\t${path}`);
+            }
+            // One index write for every entry instead of one process per file.
+            await git(cwd, ["update-index", "--index-info"], { input: index.join("\n") + "\n" });
+            const desired = (await git(cwd, ["write-tree"])).text;
+            if (prior && (await git(cwd, ["rev-parse", `${prior}^{tree}`])).text === desired) return { headCommit: prior };
             const published = await commit(cwd, desired, [], `TimDS ${stamp.version} ${stamp.contentDigest}`, resume.commitDate || submission.created_at);
             await push(cwd, source, source.artifacts_repository, published, "timds-published", prior);
             return { headCommit: published };

@@ -49,7 +49,7 @@ export async function dispatch(input){
    const sourceStage=method==='stageSource';if(target.length>(sourceStage?4000:10000)||target.reduce((n,file)=>n+Buffer.byteLength(file.content,'base64'),0)>(sourceStage?50:100)*1024*1024)throw fail(413,'Publication staging is too large');
    if(sourceStage)stagedSource=target;else staged=target;return{files:target.length};
   }
-  return checkout.pushPublished({files:staged.map(file=>({...file,content:Buffer.from(file.content,'base64')})),stamp:args[0].stamp});
+  return checkout.pushPublished({files:staged.map(file=>({...file,content:Buffer.from(file.content,'base64')})),stamp:args[0].stamp,reuse:Array.isArray(args[0].reuse)?args[0].reuse:[]});
  }
  return engine[method](source,...args);
 }

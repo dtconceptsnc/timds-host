@@ -4,7 +4,7 @@ import {finishCleanup} from '../requests/diagnostics.mjs';
 import {verifyPublishedRead} from './public-read.mjs';
 const fail=message=>Object.assign(new Error(message),{statusCode:409});
 export const PUBLICATION_STAGES=['preflight','merge','build','prepare','release','flip','close'];
-export function createPublicationSteps({store,repository,artifacts,metadata,build,artifactManifest,releaseArtifact,stageVersion,closePublishedSession,lease,publicUrls,verifyPublic=verifyPublishedRead,now=()=>new Date().toISOString()}){
+export function createPublicationSteps({store,repository,artifacts,metadata,build,artifactManifest,priorRelease=async()=>null,releaseArtifact,stageVersion,closePublishedSession,lease,publicUrls,verifyPublic=verifyPublishedRead,now=()=>new Date().toISOString()}){
  const context=async id=>{const row=await store.publication(id);if(!row)throw fail('Publication not found');const [source,submission]=await Promise.all([store.getSource(row.source_id),store.getSubmission(row.submission_id)]);if(!source||!submission||submission.source_id!==source.id)throw fail('Publication source identity changed');return{row,source,submission};};
  const save=(id,patch)=>store.checkpointPublication(id,lease,patch);
  const checkpoint=(row,stage,patch={})=>save(row.id,{status:'running',stage,error_message:null,checkpoints_json:{...row.checkpoints_json,...patch}});
@@ -14,7 +14,7 @@ export function createPublicationSteps({store,repository,artifacts,metadata,buil
  const authorize=(id)=>store.authorizePublication(id,lease);
  // Container phase durations from this attempt, keyed by operation. They live
  // in the checkpoint, not in the immutable artifact receipt a retry may reuse.
- const timed=(row,name,result)=>result?.phases?{timings:{...(row.checkpoints_json?.timings||{}),[name]:{phases:result.phases,...(result.dependencyCache?{dependencyCache:result.dependencyCache}:{})}}}:{};
+ const timed=(row,name,result)=>result?.phases?{timings:{...(row.checkpoints_json?.timings||{}),[name]:{phases:result.phases,...(result.dependencyCache?{dependencyCache:result.dependencyCache}:{}),...(result.reusedRelease?{reusedRelease:result.reusedRelease}:{})}}}:{};
  return {
   async preflight({publicationId}){const {row,source,submission}=await context(publicationId);if(!committed(row)){ready(source,submission);await authorize(publicationId);}return{publicationId,sourceId:source.id,submissionId:submission.id};},
   async merge({publicationId}){
@@ -60,14 +60,18 @@ export function createPublicationSteps({store,repository,artifacts,metadata,buil
    if(artifact.sourceRef!==row.checkpoints_json.sourceRef||stamp.sourceCommit!==snapshot.sourceCommit||stamp.systemId!==source.system_id)throw fail('Prepared stamp belongs to another source');
    const manifest=await artifactManifest(artifact.files);
    if(!prepared||prepared.fileCount!==manifest.files.length||prepared.totalBytes!==manifest.totalBytes)throw fail('Immutable bytes differ from stamp');
-   const checkout=await repository.preparePublication(source,submission,{sourceCommit:snapshot.sourceCommit,parentRevision:snapshot.parentRevision,commitDate:snapshot.commitDate});
+   // Release has no container, so its Worker-side phases are timed here.
+   const phases={},phase=async(name,task)=>{const started=Date.now();try{return await task();}finally{phases[name]=(phases[name]||0)+Date.now()-started;}};
+   const previous=await phase('prior-release',()=>priorRelease(source));
+   const checkout=await phase('checkout',()=>repository.preparePublication(source,submission,{sourceCommit:snapshot.sourceCommit,parentRevision:snapshot.parentRevision,commitDate:snapshot.commitDate}));
    let primary;try{
-    const committedSource=await repository.commitSource(source,checkout.checkoutId,{files:snapshot.releaseFiles,message:`Publish TimDS submission ${submission.id}`});if(committedSource.headCommit!==stamp.sourceCommit)throw fail('Reconstructed source differs from stamp');
-    const releaseRef=await releaseArtifact({sourceId:source.id,files:artifact.files,stamp,manifest});
+    const committedSource=await phase('commit',()=>repository.commitSource(source,checkout.checkoutId,{files:snapshot.releaseFiles,message:`Publish TimDS submission ${submission.id}`}));if(committedSource.headCommit!==stamp.sourceCommit)throw fail('Reconstructed source differs from stamp');
+    const releaseRef=await phase('release-copy',()=>releaseArtifact({sourceId:source.id,files:artifact.files,stamp,manifest}));
     const version={id:publicationId,source_id:source.id,version_label:stamp.version,source_commit:stamp.sourceCommit,content_digest:stamp.contentDigest,artifact_ref:releaseRef,source_ref:snapshot.sourceFiles.ref,stamp,publication_id:publicationId,created_at:snapshot.releasePreparedAt,artifact:prepared};
-    const staged=await stageVersion({publicationId,lease,version});row=await checkpoint(row,'release',{versionId:staged.versionId});
-    await repository.pushMain(source,checkout.checkoutId);row=await checkpoint(row,'release',{mainPushed:true});
-    await repository.pushPublished(source,checkout.checkoutId,{files:artifact.files,stamp});await checkpoint(row,'release',{artifactPushed:true});
+    const staged=await phase('stage-version',()=>stageVersion({publicationId,lease,version}));row=await checkpoint(row,'release',{versionId:staged.versionId});
+    await phase('push-main',()=>repository.pushMain(source,checkout.checkoutId));row=await checkpoint(row,'release',{mainPushed:true});
+    await phase('push-published',()=>repository.pushPublished(source,checkout.checkoutId,{files:artifact.files,stamp,previous}));
+    await checkpoint(row,'release',{artifactPushed:true,...timed(row,'release',{phases,...(previous?{reusedRelease:previous.version}:{})})});
     return{publicationId,artifactRef,versionId:staged.versionId};
    }catch(error){primary=error;throw error;}finally{await finishCleanup(()=>repository.releaseCheckout(source,checkout.checkoutId),primary);}
   },

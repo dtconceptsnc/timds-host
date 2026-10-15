@@ -10,7 +10,7 @@ const domainOperations = new Set(['activeWork','sourceEvents','join','claim','cr
 // Git snapshots/history can acquire repository capabilities and stay serialized.
 // sourceEvents is the event feed: committed SQLite rows after the activeWork read check.
 const metadataOperations = new Set(['activeWork','sourceEvents','listDrafts','status']);
-const publicationOperations = new Set(['getSource','get','getSubmission','submissions','submissionsForSource','publicationsForSource','publication','publicationBySubmission','reservePublication','attachPublicationJob','publicationReadiness','claimPublicationJob','renewPublicationLease','yieldPublicationLease','authorizePublication','checkpointPublication','recordPublicationStage','releasePublicationVersion','getExecutionJob','getLifecycleOperation','resolveRollbackVersion','publishedRelease','publicationEventsForSources']);
+const publicationOperations = new Set(['getSource','getVersion','get','getSubmission','submissions','submissionsForSource','publicationsForSource','publication','publicationBySubmission','reservePublication','attachPublicationJob','publicationReadiness','claimPublicationJob','renewPublicationLease','yieldPublicationLease','authorizePublication','checkpointPublication','recordPublicationStage','releasePublicationVersion','getExecutionJob','getLifecycleOperation','resolveRollbackVersion','publishedRelease','publicationEventsForSources']);
 const sameProvisionInput = (left, right) => left == null && right == null ||
   left != null && right != null && left.fileTreeDigest === right.fileTreeDigest && left.grantPublisher === right.grantPublisher;
 

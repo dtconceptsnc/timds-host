@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import {isFileTree,treeFiles} from './file-trees.mjs';
+import {isFileTree,treeFiles,readTreeManifest} from './file-trees.mjs';
 import {safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
@@ -126,16 +126,25 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
   api.commitSource=async(source,checkoutId,input)=>{if(!isFileTree(input?.files)&&!Array.isArray(input?.files))throw fail(502,'Release metadata did not produce a source file tree');if(!isFileTree(input.files))return call(source,'commitSource',[input],checkoutId);await stageTree(source,checkoutId,input.files,'stageSource');return call(source,'commitSource',[{useStaged:true,message:input.message}],checkoutId);};
   api.pushMain=(source,checkoutId)=>call(source,'pushMain',[],checkoutId);
   api.releaseCheckout=(source,checkoutId)=>call(source,'releaseCheckout',[],checkoutId);
-  async function stageTree(source,checkoutId,files,method){
+  async function stageTree(source,checkoutId,files,method,filter=()=>true){
     let batch=[],size=0,reset=true;
     const flush=async()=>{await call(source,method,[{reset,files:batch}],checkoutId);reset=false;batch=[];size=0;};
     const limit=8*1024*1024; // Base64 boundary; every native RPC stays below 32 MiB.
-    for await(const file of isFileTree(files)?treeFiles(snapshotBucket,files):files){
+    for await(const file of isFileTree(files)?treeFiles(snapshotBucket,files,{filter}):files.filter(filter)){
       const content=typeof file.content==='string'&&file.encoding==='base64'?file.content:Buffer.from(file.content).toString('base64');
       for(let offset=0;offset<content.length||offset===0;offset+=limit){const part=content.slice(offset,offset+limit);if(size+part.length>limit&&batch.length)await flush();batch.push({path:file.path,encoding:'base64',content:part,offset});size+=part.length;}
     }
     await flush();
   }
-  api.pushPublished=async(source,checkoutId,{files,stamp})=>{await stageTree(source,checkoutId,files,'stagePublished');return call(source,'pushPublished',[{stamp}],checkoutId);};
+  // Artifact files whose path, size and sha256 match the previous release's
+  // manifest are reused from the published branch's prior tree; only the rest
+  // cross into the container. An unchanged republish stages nothing.
+  api.pushPublished=async(source,checkoutId,{files,stamp,previous})=>{
+    let reuse=[];
+    if(isFileTree(files)&&previous?.files?.size){const manifest=await readTreeManifest(snapshotBucket,files);reuse=manifest.files.filter(file=>{const prior=previous.files.get(file.path);return Boolean(prior)&&prior.sha256===file.sha256&&prior.size===file.size;}).map(file=>file.path);}
+    const reused=new Set(reuse);
+    await stageTree(source,checkoutId,files,'stagePublished',file=>!reused.has(file.path));
+    return call(source,'pushPublished',[{stamp,reuse}],checkoutId);
+  };
   return api;
 }
