@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import {isFileTree,treeFiles,readTreeManifest,safeSessionTreePath,ARTIFACTS_TREE_KIND,ARTIFACTS_TREE_READ_LIMIT} from './file-trees.mjs';
 import {safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 import {repositoryRetentionSeconds,reusableRepositoryMethods,repositoryPhases} from './settings.mjs';
+import {logEvent} from '../log.mjs';
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
 const methods = new Set(['provisionFiles','readSource','start','snapshot','stale','submit','update','mergeIntoDraft','history','close','merge','preparePublication','commitSource','pushMain','priorPublished','pushPublished','releaseCheckout','stagePublished','stageSource','removeSource']);
@@ -15,7 +16,26 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
     const data=await response.json().catch(()=>({}));
     const phases=repositoryPhases(data.repositoryPhases);
     if(!response.ok||data.ok!==true)throw Object.assign(fail(response.status===200?502:response.status,data.error?.message||'Hosted repository operation failed'),{repositoryPhases:phases},data.error?.conflicts?{conflicts:data.error.conflicts,mainRevision:data.error.mainRevision}:{},safeRequestDiagnostic(data.error?.requestDiagnostic)?{requestDiagnostic:safeRequestDiagnostic(data.error.requestDiagnostic)}:{},safeRequestDiagnostic(data.error?.cleanupDiagnostic)?{cleanupDiagnostic:safeRequestDiagnostic(data.error.cleanupDiagnostic)}:{});
+    await indexResult(source,method,args,data.result);
     return Object.keys(phases).length&&data.result&&typeof data.result==='object'&&!Array.isArray(data.result)?{...data.result,repositoryPhases:phases}:data.result;
+  }
+  async function indexResult(source,method,args,result) {
+    if(!isFileTree(result?.files)||!['start','snapshot','stale','update','submit'].includes(method))return;
+    if(!/^[a-f0-9]{40}$/.test(result.baseRevision||''))throw fail(409,'Repository snapshot revision is unavailable');
+    const row=await store.get(method==='start'?args[0]?.sessionId:args[0]?.id);
+    if(!row||row.source_id!==source.id||row.fork_repository&&row.fork_repository!==`session-${row.id}`)throw fail(409,'Snapshot session repository changed');
+    const repository=`session-${row.id}`;
+    if(method==='start'){
+      const pinned=row.start_revision||row.origin_revision||null,current=await store.getSource(source.id),draft=row.draft_session_id?await store.get(row.draft_session_id):null;
+      if(result.forkRepository!==repository||pinned&&result.baseRevision!==pinned)throw fail(409,'Session fork does not match its reserved revision');
+      if(!current?.artifacts_repository||row.draft_session_id&&(!draft||draft.source_id!==source.id||draft.fork_repository!==`session-${draft.id}`))throw fail(409,'Session start origin is unavailable');
+      const origin=draft?.fork_repository||current.artifacts_repository;
+      // A reserved revision was already verified in the origin before the
+      // engine pushed that exact commit. Legacy unpinned starts verify it now.
+      if(!pinned&&(await artifacts.readCommit(current.artifacts_namespace,origin,result.baseRevision))?.hash!==result.baseRevision)throw fail(409,'Session start revision is unavailable');
+      await store.recordTreeSnapshot({repository:origin,revision:result.baseRevision,ref:result.files});
+    }
+    await store.recordTreeSnapshot({repository,revision:result.baseRevision,ref:result.files});
   }
   async function revoke(namespace,repository) { let tokens;try{tokens=await artifacts.listTokens(namespace,repository);}catch(error){if(error.statusCode===404)return;throw error;}for(const token of tokens)await artifacts.revokeToken(namespace,token.id,repository); }
   async function control(input) {
@@ -64,7 +84,7 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
     if(input.method==='start') {
       const row=await session(args[0]?.sessionId), from=row.draft_session_id?await session(row.draft_session_id):null;
       if(from&&from.status!=='open')throw fail(409,'Draft repository is unavailable');
-      fork=row.fork_repository;args[0]={sessionId:row.id,fromRepository:from?.fork_repository||main,fromRevision:row.start_revision||row.origin_revision||null};
+      fork=row.fork_repository;args[0]={sessionId:row.id,fromRepository:from?.fork_repository||main,fromRevision:row.start_revision||row.origin_revision||null,...(args[0]?.files===false?{files:false}:{})};
       if(input.phase==='prepare') {
         let actual=await artifacts.getRepository(ns,fork);const receipt=await store.sessionRepository(row.id);
         if(!actual){
@@ -125,42 +145,63 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
     return {source,args,previewOrigin:origin,repositories};
   }
   const api={control};
-  api.startTree=async(source,{sessionId,fromRepository,fromRevision}={})=>{
+  api.startTree=async(source,{sessionId,fromRepository,fromRevision,indexOnly=false,expectedRevision,timingOperation='session-start'}={})=>{
+    timingOperation=timingOperation==='session-snapshot'?'session-snapshot':'session-start';
     const row=await store.get(sessionId),current=await store.getSource(source.id);
     if(!row||row.source_id!==source.id||!current?.artifacts_namespace||!current.artifacts_repository)throw fail(404,'Hosted source not found');
     if(['closing','closed','expired'].includes(row.status)||['deleting','deleted'].includes(current.lifecycle_status))throw fail(410,'Session closed');
-    const draft=row.draft_session_id?await store.get(row.draft_session_id):null;
-    if(row.draft_session_id&&(!draft||draft.source_id!==source.id||draft.fork_repository!==`session-${draft.id}`||draft.status!=='open'))throw fail(409,'Draft repository is unavailable');
-    const namespace=current.artifacts_namespace,repository=draft?.fork_repository||current.artifacts_repository,pinned=row.start_revision||row.origin_revision||null;
+    if(indexOnly&&row.status!=='open')return {baseRevision:row.base_revision,files:null};
+    const draft=!indexOnly&&row.draft_session_id?await store.get(row.draft_session_id):null;
+    if(!indexOnly&&row.draft_session_id&&(!draft||draft.source_id!==source.id||draft.fork_repository!==`session-${draft.id}`||draft.status!=='open'))throw fail(409,'Draft repository is unavailable');
+    if(indexOnly&&row.fork_repository!==`session-${row.id}`)throw fail(409,'Session fork repository is unavailable');
+    const namespace=current.artifacts_namespace,repository=indexOnly?row.fork_repository:draft?.fork_repository||current.artifacts_repository,pinned=indexOnly?null:row.start_revision||row.origin_revision||null;
     if(fromRepository&&fromRepository!==repository||fromRevision&&fromRevision!==pinned)throw fail(409,'Session start origin changed');
-    const actual=await artifacts.getRepository(namespace,repository),receipt=draft?await store.sessionRepository(draft.id):null,repositoryId=draft?receipt?.repository_id:current.artifacts_repository_id;
-    if(!actual||!repositoryId||String(actual.id)!==String(repositoryId)||draft&&(receipt.namespace!==namespace||receipt.repository!==repository))throw fail(409,'Session start repository identity changed');
+    const fork=indexOnly?row:draft,receipt=fork?await store.sessionRepository(fork.id):null;
+    // Historical open sessions without a creation receipt retain their existing
+    // container path; only a verified repository identity can use this index.
+    if(indexOnly&&!receipt)return {baseRevision:row.base_revision,files:null};
+    const actual=await artifacts.getRepository(namespace,repository),repositoryId=fork?receipt?.repository_id:current.artifacts_repository_id;
+    if(!actual||!repositoryId||String(actual.id)!==String(repositoryId)||fork&&(receipt.namespace!==namespace||receipt.repository!==repository))throw fail(409,'Session start repository identity changed');
     const commit=pinned?await artifacts.readCommit(namespace,repository,pinned):(await artifacts.log(namespace,repository,{ref:'main',limit:1}))[0];
     const baseRevision=commit?.hash,root=commit?.tree_hash||commit?.treeHash;
-    if(!/^[a-f0-9]{40}$/.test(baseRevision||'')||pinned&&baseRevision!==pinned||!root||!/^[a-f0-9]{40}$/.test(root))throw fail(409,'Session start revision is unavailable');
-    if(!artifacts.supportsTreeStreaming?.(namespace))return {baseRevision,files:null};
-    const files=[],directories=[{path:'',hash:root}],seen=new Set();let treeReads=0;
-    // A binding read includes acquiring/disposal of the repository handle.
-    // Budget trees together with blobs, leaving headroom for authority reads.
-    while(directories.length){
-      if(treeReads+directories.length+files.length>ARTIFACTS_TREE_READ_LIMIT)return {baseRevision,files:null};
-      const batch=directories.splice(0,4),trees=await Promise.all(batch.map(async directory=>({directory,entries:await artifacts.readTree(namespace,repository,directory.hash)})));treeReads+=batch.length;
-      for(const {directory,entries} of trees){
-        if(!Array.isArray(entries))throw fail(502,'Artifacts source tree is unavailable');
-        for(const entry of entries){
-          if(typeof entry.name!=='string'||entry.name.includes('/')||!/^[a-f0-9]{40}$/.test(entry.hash||''))throw fail(502,'Invalid Artifacts source tree');
-          const path=safeSessionTreePath(directory.path+entry.name);if(seen.has(path))throw fail(502,'Duplicate Artifacts source path');seen.add(path);
-          if(entry.type==='tree'&&['40000','040000'].includes(entry.mode))directories.push({path:path+'/',hash:entry.hash});
-          else if(entry.type==='symlink'&&entry.mode==='120000')return {baseRevision,files:null};
-          else if(entry.type==='blob'&&entry.mode==='100644'||entry.type==='exec'&&entry.mode==='100755')files.push({path,mode:entry.mode,oid:entry.hash});
-          else throw fail(409,'Gitless sessions require plain files and relative links; remove source submodules first');
-          if(treeReads+directories.length+files.length>ARTIFACTS_TREE_READ_LIMIT)return {baseRevision,files:null};
+    if(!/^[a-f0-9]{40}$/.test(baseRevision||'')||pinned&&baseRevision!==pinned)throw fail(409,'Session start revision is unavailable');
+    const began=performance.now();let indexed=null,outcome='ok';
+    try{if(!indexOnly||baseRevision===row.base_revision&&baseRevision===expectedRevision)indexed=await store.treeSnapshot(repository,baseRevision);}
+    catch(error){outcome='error';throw error;}
+    finally{logEvent({event:'session_start_step',operation:timingOperation,stage:'tree-index',durationMs:performance.now()-began,outcome,hit:indexed?1:0,sourceId:source.id,sessionId});}
+    if(indexed)return {baseRevision,files:indexed};
+    if(indexOnly)return {baseRevision,files:null};
+    return readArtifactsTree({sourceId:source.id,sessionId,namespace,repository,baseRevision,root,timingOperation});
+  };
+  async function readArtifactsTree({sourceId,sessionId,namespace,repository,baseRevision,root,timingOperation}) {
+    const began=performance.now();let outcome='ok';
+    try{
+      if(!root||!/^[a-f0-9]{40}$/.test(root))throw fail(409,'Session start revision is unavailable');
+      if(!artifacts.supportsTreeStreaming?.(namespace))return {baseRevision,files:null};
+      const files=[],directories=[{path:'',hash:root}],seen=new Set();let treeReads=0;
+      // A binding read includes acquiring/disposal of the repository handle.
+      // Budget trees together with blobs, leaving headroom for authority reads.
+      while(directories.length){
+        if(treeReads+directories.length+files.length>ARTIFACTS_TREE_READ_LIMIT)return {baseRevision,files:null};
+        const batch=directories.splice(0,4),trees=await Promise.all(batch.map(async directory=>({directory,entries:await artifacts.readTree(namespace,repository,directory.hash)})));treeReads+=batch.length;
+        for(const {directory,entries} of trees){
+          if(!Array.isArray(entries))throw fail(502,'Artifacts source tree is unavailable');
+          for(const entry of entries){
+            if(typeof entry.name!=='string'||entry.name.includes('/')||!/^[a-f0-9]{40}$/.test(entry.hash||''))throw fail(502,'Invalid Artifacts source tree');
+            const path=safeSessionTreePath(directory.path+entry.name);if(seen.has(path))throw fail(502,'Duplicate Artifacts source path');seen.add(path);
+            if(entry.type==='tree'&&['40000','040000'].includes(entry.mode))directories.push({path:path+'/',hash:entry.hash});
+            else if(entry.type==='symlink'&&entry.mode==='120000')return {baseRevision,files:null};
+            else if(entry.type==='blob'&&entry.mode==='100644'||entry.type==='exec'&&entry.mode==='100755')files.push({path,mode:entry.mode,oid:entry.hash});
+            else throw fail(409,'Gitless sessions require plain files and relative links; remove source submodules first');
+            if(treeReads+directories.length+files.length>ARTIFACTS_TREE_READ_LIMIT)return {baseRevision,files:null};
+          }
         }
       }
-    }
-    files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
-    return {baseRevision,files:{kind:ARTIFACTS_TREE_KIND,namespace,repository,revision:baseRevision,files}};
-  };
+      files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
+      return {baseRevision,files:{kind:ARTIFACTS_TREE_KIND,namespace,repository,revision:baseRevision,files}};
+    }catch(error){outcome='error';throw error;}
+    finally{logEvent({event:'session_start_step',operation:timingOperation,stage:'tree-artifacts',durationMs:performance.now()-began,outcome,sourceId,sessionId});}
+  }
   api.tokenFiles=async(source,session)=>{
     const result=await call(source,'snapshot',[session]);
     if(!isFileTree(result.files))return result.files.filter(file=>/^tokens\/.+\.json$/.test(file.path)||file.path==='tokens.json');

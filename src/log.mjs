@@ -6,7 +6,7 @@
 // an operator tool; the per-source `events` table stays the user-visible log.
 import { safeRequestDiagnostic } from './requests/diagnostics.mjs';
 const LABELS = new Set(['event','operation','stage','outcome','errorClass','fault','diagnosticOperation','diagnosticStage','queue']);
-const NUMBERS = new Set(['statusCode','durationMs','attempt']);
+const NUMBERS = new Set(['statusCode','durationMs','attempt','hit','blobsRead','blobsFound']);
 const IDS = new Set(['sourceId','sessionId','publicationId','requestId']);
 const LABEL = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/, UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function logEvent(fields, write = console) {

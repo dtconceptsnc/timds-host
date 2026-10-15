@@ -82,7 +82,7 @@ export class RepositorySandboxRuntime{
   // durable fence until the whole operation and capability cleanup finish.
   if(sharedSource)this.ctx.storage.kv.put('container-dirty',true);
   let plan,streaming=false,successful=false,primary,primaryResponse,primaryPayload;const deadline=Date.now()+10*60_000,signal=AbortSignal.timeout(10*60_000),phases={};
-  const step=async(stage,task)=>{const began=Date.now();let outcome='error';try{const value=await task();outcome=value instanceof Response&&!value.ok?'error':'ok';return value;}finally{const durationMs=phases[stage]=Math.max(0,Date.now()-began);if(input.method==='start')logEvent({event:'session_start_step',operation:input.timingOperation==='session-start-job'?'session-start-job':'session-start',stage,durationMs,outcome,sourceId:input.source.id,sessionId:input.args?.[0]?.sessionId});}};
+  const step=async(stage,task,fields={})=>{const began=Date.now();let outcome='error';try{const value=await task();outcome=value instanceof Response&&!value.ok?'error':'ok';return value;}finally{const durationMs=phases[stage]=Math.max(0,Date.now()-began);if(input.method==='start')logEvent({event:'session_start_step',operation:input.timingOperation==='session-start-job'?'session-start-job':'session-start',stage,durationMs,outcome,sourceId:input.source.id,sessionId:input.args?.[0]?.sessionId,...fields});else if(stage==='repository-files')logEvent({event:'repository_step',operation:input.method,stage,durationMs,outcome,sourceId:input.source.id,sessionId:input.args?.[0]?.id,...fields});}};
   const rememberFailure=async response=>{if(!response.ok){primaryResponse=response;const value=primaryPayload=await response.clone().json().catch(()=>({}));primary=requestDiagnostic(Object.assign(new Error('Repository operation failed'),{statusCode:response.status,...(safeRequestDiagnostic(value.error?.requestDiagnostic)?{requestDiagnostic:safeRequestDiagnostic(value.error.requestDiagnostic)}:{})}),'operation','native-repository');}return this.snapshotBucket?Response.json({...primaryPayload,repositoryPhases:phases},{status:response.status}):response;};
   try{
    const response=await step('repository-prepare',async()=>{
@@ -113,10 +113,11 @@ export class RepositorySandboxRuntime{
    if(this.snapshotBucket&&result.ok){
     const data=await result.json();
     const roles=['files','priorFiles'].filter(role=>data.result?.[role]?.kind==='timds-container-tree');
+    const stats={blobsRead:0,blobsFound:0};
     if(roles.length)await step('repository-files',async()=>{for(const role of roles){
       const descriptor=data.result[role];
-      data.result[role]=await persistContainerTree(this.snapshotBucket,{sourceId:input.source.id,operationId:input.operationId,role:`${input.method}-${role}`,manifest:descriptor.manifest,deadline,readFile:index=>port.fetch(`http://repository/trees/${role}/${index}`,{signal})});
-    }});
+      data.result[role]=await persistContainerTree(this.snapshotBucket,{sourceId:input.source.id,operationId:input.operationId,role:`${input.method}-${role}`,manifest:descriptor.manifest,deadline,stats,readFile:index=>port.fetch(`http://repository/trees/${role}/${index}`,{signal})});
+    }},stats);
     successful=data.ok===true;return Response.json({...data,repositoryPhases:phases});
    }
    const retain=['preparePublication','commitSource','stagePublished','stageSource','pushMain','priorPublished','pushPublished'].includes(input.method);

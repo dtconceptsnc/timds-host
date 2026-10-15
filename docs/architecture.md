@@ -140,6 +140,7 @@ other long network work. The proposed tables are:
 | --- | --- |
 | `source_state` | Single source identity; lifecycle; authority epoch; current version/digest/commit; monotonic pointer generation and next queue sequence. |
 | `sessions` | UUID, source, owner, kind/name, base/head revisions, pinned start revision, pending fork/live work and retry state, start phase timings, status, expiry, durable close/expiry intent, operation lease/generation, fork identity, originating Request. Unique owner/idempotency key locally, backed by a global D1 reservation; draft names remain unique while starting/open/closing. |
+| `tree_snapshots` | Immutable `(repository, revision)` to source-tree reference, with JSON validation and creation time. The repository is the source repository or a session fork; the revision is a full Git commit. Re-recording requires the same digest, file count and byte total. Added with `CREATE TABLE IF NOT EXISTS` in per-source SQLite; no D1 migration. |
 | `members` | Unique `(session_id,principal_id)` and role. Membership does not replace active principal/source access. |
 | `claims` | Unique `(session_id,principal_id,kind)`, bounded path/key payload and expiry. Expired claims never block a write. |
 | `submissions` | UUID, session/source, request hash, immutable base/head, diff/note, review branch/preview status, integration/publication state. Unique session/request hash. |
@@ -371,6 +372,38 @@ Every operation is bound to stored source and resource identity. Prepared
 capabilities expire, completion is fenced, and release revokes capabilities
 even when the caller fails.
 
+Source snapshots store shared blobs at
+`snapshots/<sourceId>/blobs/<sha256>` and manifests at
+`snapshots/<sourceId>/trees/<digest>/manifest.json`. The manifest digest is the
+SHA-256 of its JSON bytes; the internal `timds-file-tree` reference retains
+`ref`, `digest`, `entryCount` and `totalBytes`. A repeat manifest verifies its
+stored digest, file count and byte total and returns without reading container
+blobs. Otherwise the transfer checks each unique blob's size and SHA-256
+metadata in R2 and reads only missing blobs from the container. Conditional
+writes and collision checks preserve immutability across concurrent transfers.
+Uploads hash and count bytes in transit, withholding the final byte until the
+SHA-256 and length match the manifest. A final fixed-length stream preserves
+R2's upload length, and R2's checksum option independently checks the received
+bytes. Empty uploads validate their expected digest before writing. Failed or
+superseded uploads cancel and drain the transfer before cleanup; they never
+delete a shared key that a concurrent successful upload may own. No manifest
+is recorded for a failed transfer.
+Readers accept both this layout and older operation-scoped snapshot prefixes.
+Build trees marked `artifact: true` keep their existing operation-scoped layout,
+including the paths used by MCP checks. Existing prefixes are not migrated or
+garbage-collected by this change.
+
+The coordinator's `tree_snapshots` index maps a repository and verified commit
+to a complete source-tree reference. A container start records its returned
+base tree for both the new fork and the origin repository: the engine pushes
+exactly that pinned commit. Snapshot, stale-write, update and submit results record the
+returned fork revision. Publication `commitSource` and `pushMain` do not index
+main: the commit can apply a patch over a merged tree, and its input tree does
+not establish the complete committed main tree. A published main revision is
+indexed by its first container-backed start. Session close retains immutable
+index entries and shared blobs; source deletion fences index access along with
+the rest of the coordinator's source data.
+
 ### Two-phase session start
 
 Session start reserves its identity and pins the source revision before it
@@ -380,23 +413,30 @@ draft's fork. The pinned revision is stored separately from the requested
 origin used to validate idempotency. A retry while `starting`
 returns that same session and tree even if main or the draft has advanced.
 
-For a bounded source tree, the response reads the pinned Artifacts tree and
-files directly through the binding. It needs neither a repository container
-nor an R2 snapshot round trip. The API v1 response shape is unchanged: it
-includes the complete files, a full `baseRevision`, `status: 'starting'` and
-an empty `liveUrl`. The direct path allows at most 200 combined directory
-tree reads and file entries, leaving room for other subrequests. Larger trees
-and trees with symbolic links use the trusted container and R2 path. Existing
-source limits remain 4,000 files, 10 MiB per file and 50 MiB total. Responses
-prefetch at most four blobs and preserve file order; container-to-R2 snapshot
-transfers run at most eight files concurrently. Direct reads verify each file
-against its Git object identity.
+After resolving the pinned revision, start checks the revision index first.
+An index hit streams its complete R2 tree without a container or per-file
+Artifacts reads, including trees over the direct-read budget. On a miss, a
+bounded source tree reads directly through the Artifacts binding. This direct
+path allows at most 200 combined directory tree reads and file entries,
+leaving room for other subrequests. Larger unindexed trees and trees with
+symbolic links use the trusted container and R2 path, then index the result
+before streaming it. The API v1 response shape is unchanged: it includes the
+complete files and full `baseRevision`, and may have `status: 'starting'` and
+an empty `liveUrl` while the fork is prepared.
+
+Source limits remain 4,000 files, 10 MiB per file and 50 MiB total. Responses
+preserve file order and prefetch at most 16 R2 blobs or four Artifacts blobs;
+container-to-R2 snapshot transfers run at most eight files concurrently.
+Direct reads verify each file against its Git object identity.
 
 The coordinator alarm starts the deterministic fork and live host preparation
 concurrently, under independent leases. Fork work rechecks authority and pins
 exactly the revision already returned before checkpointing `fork_repository`
-and `status: 'open'`. Host work configures the runner, reads the named Worker's
-metadata, uploads it when absent and enables its subdomain; it needs no fork.
+and `status: 'open'`. The background start passes `files: false`, so the
+repository engine skips tree enumeration and the transport does not copy files
+to R2. After the fork checkpoint it copies the origin's indexed reference to
+the fork's pinned revision when one exists, without blob work. Host work
+configures the runner, reads the named Worker's metadata, uploads it when absent and enables its subdomain; it needs no fork.
 The targeted lookup uses `GET /workers/scripts/{name}/script-settings`, whose
 response includes [ownership tags](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/settings/methods/get/). The bare script endpoint downloads source
 and cannot establish ownership. The account's subdomain is cached per isolate.
@@ -427,18 +467,27 @@ retains safe errors and pending state; an explicit start retry renews the budget
 when the corresponding lease is inactive. Old pending rows acquire host work lazily.
 Ordinary sessions expire through existing cleanup; drafts require retry or close.
 
-A session snapshot while `starting` reads the same pinned Artifacts tree as
-start, with the same 200-entry budget and container fallback. MCP authored-file
-reads accept this reference, verify Git blob identity, derive SHA-256 and size
-with four bounded reads at a time, and reread requested bytes without retaining
-the whole tree in memory. Pull and MCP can therefore read before the fork opens.
-Updates, submissions, named-draft snapshots and snapshot container fallbacks
-wait up to 45 seconds for the fork and its operation lease. This covers the
-approximately 25-second cold fork recorded in issue #45 with bounded headroom;
-actual immediate-write success still requires deployed acceptance. Waiting
-leaves the coordinator queue free, then authorization and the lease are checked
-again before fork access. Timeout preserves the existing starting 409.
-Designer Requests retain their host-internal synchronous start option.
+Session and named-draft snapshots share the same reference-read helper. While
+`starting`, it uses the pinned revision and the same index-first, bounded
+Artifacts path as start. For an open session it reads the fork's `main` head
+once; when that head equals the stored `base_revision` and has an index entry,
+it returns the R2 tree without taking the repository operation lease or
+starting a container. The path verifies the fork against its recorded creation
+receipt; historical sessions without that receipt keep the container fallback.
+A changed or unindexed head also uses the existing container path and indexes
+its returned tree. Every reference-read path rechecks current
+source and session authority after asynchronous work before serving the tree.
+
+MCP authored-file reads accept both reference kinds. R2 reads use the verified
+manifest's file identities and sizes; direct Artifacts reads verify Git blob
+identity and derive SHA-256 and size with four bounded reads at a time. Pull
+and MCP can therefore read before the fork opens. Updates, submissions and
+snapshot container fallbacks wait up to 45 seconds for the fork and its
+operation lease. The bound remains unchanged pending deployed acceptance.
+Waiting leaves the coordinator queue free,
+then authorization and the lease are checked again before fork access. Timeout
+preserves the existing starting 409. Designer Requests retain their
+host-internal synchronous start option and complete file response.
 
 The current host includes `Server-Timing` on start responses; the v1 contract
 keeps this telemetry header optional for older compatible hosts. Its phases
@@ -454,7 +503,8 @@ contains `fork`, `host` and `live` attempt totals plus the measured stage keys:
 `repository-files`, `live-configure`, `live-worker-get`, `live-worker-put`,
 `live-subdomain`, `live-subdomain-lookup`, `live-subscription` and `live-wake`.
 The five repository stages cover cleanup/control preparation, container and
-daemon readiness, Git RPC, control completion and R2 snapshot transfer. Live
+daemon readiness, Git RPC, control completion and R2 snapshot transfer. A
+background fork omits `repository-files` because it does not request files. Live
 stages wrap their named RPC or provider call. Skipped stages are absent;
 failed attempts retain the stages observed. Timings represent the latest
 observation of each stage, so retries may leave earlier conditional values.
@@ -462,9 +512,17 @@ Concurrent stage durations and enclosing totals must not be summed.
 
 Every measured stage emits `session_start_step`, with operation `session-start`
 or `session-start-job`, stage, duration, outcome and source/session UUIDs.
-`tree-artifacts` measures pinned tree preparation, `coordinator` the API or MCP
-boundary's coordinator RPC, and `response-files` response creation through
-stream close, error or cancellation. Body transfer is logs-only, never a
+Requested session and named-draft reads use operation `session-snapshot` for
+their `tree-index` and `tree-artifacts` stages, including while still starting.
+Start replays retain `session-start`; operation labels describe the request,
+independent of its client.
+`tree-index` measures a revision-index lookup with outcome `ok` and numeric
+`hit` (1 or 0); `tree-artifacts` measures pinned direct tree preparation.
+`repository-files` includes numeric `blobsRead` and `blobsFound` counts of
+unique blobs read from the container or reused in R2. A reused manifest counts
+all its unique blobs as found without visiting their container endpoints.
+`coordinator` measures the API or MCP boundary's coordinator RPC, and
+`response-files` response creation through stream close, error or cancellation. Body transfer is logs-only, never a
 header or a claimed delivery acknowledgement. Worker clocks advance across
 I/O; pure CPU portions may be under-reported. Recovery includes each job's
 pending state, attempts, next attempt and safe error, plus `wakeIssued` and
@@ -667,6 +725,18 @@ archive even when their lockfile matches.
   `restore-failed` or `backup-failed`, next to the `wakePhases` timings above.
   The key is a digest, never source content. The session diagnostics route
   (`GET /api/timds/sessions/{sessionId}/diagnostics`) exposes it.
+
+The cache key is stable across wakes with identical package/lock bytes, image
+identity and runtime fields; it has no session, revision, timestamp or instance
+size input. The startup overlap change in #47 changed none of the key function,
+install flags, runtime identity probe, toolkit pin or live image inputs. The
+pinned CLI deploys named images by repository and digest, so a new temporary
+build tag alone does not invalidate a deployed cache. A changed deployed image,
+Node/runtime identity or package bytes produces a new key and can cause a
+one-time miss. The reported post-#47 miss cannot be attributed to one of these
+inputs without comparing private before/after receipts; it is not evidence of
+per-wake instability. Acceptance compares consecutive wakes under the same
+inputs before tuning or changing the cache.
 
 The cache changes nothing about what is warm or for how long: it shortens the
 wake, and the idle rule above still decides when the container is destroyed.

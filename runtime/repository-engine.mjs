@@ -409,7 +409,7 @@ export function createSandboxRepositoryEngine({ artifacts, ensurePreview = async
         });
       });
     },
-    async start(source, { sessionId, fromRepository = source.artifacts_repository, fromRevision = null }) {
+    async start(source, { sessionId, fromRepository = source.artifacts_repository, fromRevision = null, files: includeFiles = true }) {
       if (!/^[a-f0-9-]{36}$/.test(sessionId)) throw fail(400, "Invalid session identity");
       const forkRepository = `session-${sessionId}`;
       // A DB reservation owns this UUID before the first external write.
@@ -423,7 +423,7 @@ export function createSandboxRepositoryEngine({ artifacts, ensurePreview = async
           const initial = await fetchRef(cwd, source, fromRepository, fromRevision, 'refs/origin/start');
           await push(cwd, source, forkRepository, initial, 'main', baseRevision); baseRevision = initial;
         }
-        return { forkRepository, tokenId: null, expiresAt: new Date(Date.now() + sessionTtlMs).toISOString(), baseRevision, files: await files(cwd, baseRevision) };
+        return { forkRepository, tokenId: null, expiresAt: new Date(Date.now() + sessionTtlMs).toISOString(), baseRevision, ...(includeFiles === false ? {} : { files: await files(cwd, baseRevision) }) };
       });
     },
     async snapshot(source, session) { return temporary(async cwd => { const baseRevision = await sessionTree(cwd, source, session); return { baseRevision, files: await files(cwd, baseRevision) }; }); },
