@@ -163,7 +163,8 @@ for explicit atomic groups; it accepts only synchronous operations.
 ### Event feed
 
 `events` is the only activity log and the only feed source; there is no stream
-product. `audit()` assigns `seq = event_seq + 1` and stores the counter in the
+product. Workers Logs (see [`operations.md`](operations.md) "Logs and
+observability") is operator telemetry and never feeds a client. `audit()` assigns `seq = event_seq + 1` and stores the counter in the
 same SQLite transaction as the row and its `event` outbox projection, so `seq`
 order is commit order and survives restarts. Construction numbers legacy or
 raw-imported rows without `seq` by `created_at`, then `id`. Every accepted
@@ -605,10 +606,42 @@ these checks; it would surface as a different stamp on the next publication.
   `hit` or a `miss`. The stage stores them on the checkpoint as
   `timings.releaseMetadata`, `timings.build` and `timings.stamp`, keyed by the
   attempt that ran the container (a reused artifact records nothing), and
-  `flip` copies `timings` into the published result. Stage wall time is on the
-  `publication_stage` feed rows. The container size for all three runs is
+  `flip` copies `timings` into the published result. `release` has no
+  container, so it times its own Worker-side phases (`prior-release`,
+  `checkout`, `commit`, `release-copy`, `stage-version`, `push-main`,
+  `push-published`) as `timings.release`, with `reusedRelease` naming the
+  version whose blobs the published-branch push reused. Stage wall time is on
+  the `publication_stage` feed rows. The container size for all three runs is
   `TIMDS_BUILD_INSTANCE_TYPE` (default `standard-2`), see
   [`operations.md`](operations.md).
+- **Diffed published-branch push.** Before `release` pushes the artifact to
+  the `timds-published` branch, the Workflow loads the current pointer's
+  immutable release receipt (`store.getVersion` plus `loadRelease`) and the
+  adapter compares the new artifact manifest with it. The receipt chooses the
+  files and the branch tip supplies their blobs, so the adapter first asks the
+  repository container (`priorPublished`) whether the tip's
+  `.timds-artifact.json` is that receipt's stamp. This call uses the existing
+  publication checkout and a fresh read capability for the source repository;
+  it revokes the capability after the call while retaining the checkout for
+  staging and pushing. A rollback moves only the
+  pointer and an interrupted `flip` leaves the tip ahead of it; in both cases
+  the tip is another release and nothing is reused. When the stamps match,
+  files whose path, size and sha256 match the receipt are not staged into the
+  container; the engine rechecks the stamp, reads the tip's tree only when
+  there is something to reuse, takes the reused blob ids from it and refuses a
+  reused path the tree lacks. A tip that changed between the two checks fails
+  the push retryably (502) and the retried release stages everything. Only
+  changed files cross the RPC and get hashed, and the whole index is written
+  with one NUL-terminated `update-index -z --index-info` instead of one
+  process per file. An unchanged republish stages nothing but the stamp.
+  Reuse is an optimisation: a pointer on the legacy snapshot layout or an
+  unreadable receipt disables it for that release (logged as
+  `release_reuse` `skipped`, see [`operations.md`](operations.md) "Logs and
+  observability"), and the tree comparison and push are unchanged.
+  `timings.release.reusedRelease` and `reusedFiles` are recorded only when at
+  least one blob was reused. The release-bucket copy runs through the bounded
+  four-way `transferFiles` instead of one object at a time; every object
+  still verifies before and after its write.
 - **Failure diagnostic.** A failed stage stores the allowlisted diagnostic of
   its error (`operation`, the container or host `stage` label, `errorClass`,
   `fault`, optional `statusCode`) and any cleanup diagnostic on the checkpoint.

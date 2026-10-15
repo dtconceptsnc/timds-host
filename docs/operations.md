@@ -530,6 +530,53 @@ rows in the source event feed give the same wake its `waking`, `starting` and
 `ready` timestamps. See [`architecture.md`](architecture.md) "Warm drafts and
 wake" for what each phase covers.
 
+### Logs and observability
+
+Both `cloudflare.config.ts` files enable Workers Logs (`observability.logs`),
+so every invocation of the API host, its Durable Objects, the publication
+Workflow and the queue consumer, and of the public companion, is recorded with
+its own context. The repository, live, build and dependency containers set
+`observability.logs.enabled`, so the JSON objects their programs print with
+`console` are captured too. Query strings are redacted (`redactQueryString`)
+because the feed upgrade carries its single-use ticket there. Sampling is the
+platform default and retention is the platform's; the pinned CLI describes its
+query window as clamped to a seven-day retention period. Logs live in the
+Cloudflare account, are operational records, and stay out of this repository
+like every other receipt (see [`verification.md`](verification.md)).
+
+The Worker writes one JSON line per operational event through `src/log.mjs`.
+A line carries only allowlisted keys: the labels `event`, `operation`,
+`stage`, `outcome`, `errorClass`, `fault`, `diagnosticOperation`,
+`diagnosticStage` and `queue`; the numbers `statusCode`, `durationMs` and
+`attempt`; and the UUIDs `sourceId`, `sessionId`, `publicationId` and
+`requestId`. Any other key or value shape is dropped before the line is
+written, so a log line never holds an error message, a stack, a prompt, model
+output, file contents, a request body, a system id or a credential. The
+diagnostic keys are the allowlisted `requestDiagnostic` of the failing step,
+the same vocabulary the publication view returns. Add a key only by extending
+the allowlist in `src/log.mjs` and this table.
+
+| `event` | Written when |
+| --- | --- |
+| `request_failed` | `errorResponse` returns a 5xx. The client sees the generic message; the line carries `errorClass`, `statusCode` and the diagnostic. |
+| `publication_stage` | A publication stage attempt finishes: `outcome` `ok`, `failed` (terminal) or `error` (the Workflow retries), with `stage`, `attempt`, `durationMs`, `sourceId` and `publicationId`. `attempt` comes from the Workflow step context: 1 for the first execution of that step, 2 for its first retry, and so on. Queue waits do not increment it. |
+| `release_reuse` | The release stage could not load the prior release receipt and stages every artifact file (`outcome` `skipped`). |
+| `queue_message_failed` | The events queue consumer retries a message, with `attempt`. |
+
+Read the lines in the dashboard (Workers & Pages, the Worker, Logs) or with
+the pinned CLI, which takes the Workers Observability telemetry query body
+as JSON and prints the request without sending it under `--dry-run`:
+
+```bash
+npx cf o11y telemetry query --body '{"view":"events","limit":50,"timeframe":{"from":1760400000000,"to":1760486400000},"parameters":{"datasets":["cloudflare-workers"],"filters":[{"key":"$metadata.service","operation":"eq","type":"string","value":"timds-example"},{"key":"event","operation":"eq","type":"string","value":"publication_stage"}]}}'
+```
+
+`npx cf o11y telemetry keys` and `values` list the indexed keys and their
+values for the same window. If a longer window is ever needed, the
+`observability.logs.destinations` setting and `cf o11y destinations` export
+to an OpenTelemetry destination; nothing is configured for that today, and a
+Tail Worker or Logpush is not part of this host.
+
 Workflows checkpoint source/build/release receipts and commit the pointer once.
 An interrupted post-pointer verification resumes verification/cleanup; it does
 not rerun publication. Use the original publication ID when diagnosing recovery.
