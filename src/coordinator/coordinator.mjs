@@ -118,7 +118,11 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
           finally{
             const durationMs=Math.round(performance.now()-started);
             logEvent({event:'session_start_step',operation:'session-start-job',stage,durationMs,outcome,sourceId,sessionId:work.sessionId});
-            await serialized(()=>{const row=liveRow();store.updateSession(row.id,{start_background_phases:{...row.start_background_phases,[stage]:durationMs}});});
+            try{await serialized(()=>{const row=liveRow();store.updateSession(row.id,{start_background_phases:{...row.start_background_phases,[stage]:durationMs}});});}
+            catch(error){
+              // Timing persistence must not replace the stage's original failure.
+              if(outcome==='ok')throw error;
+            }
           }
         };
         const wakeIssued=at=>serialized(async()=>{await backgroundActor(liveRow());store.updateSession(work.sessionId,{live_wake_issued_at:at});});

@@ -22,6 +22,11 @@ same source shape, dependency-cache state and instance sizes. For each client:
    Compare the returned `baseRevision`, file identity and bytes with start.
    Do not wait for `open` before this read. The response may already be open
    if preparation won the race; never require `starting` in a latency sample.
+   Record each MCP call's elapsed time and compare it with time to `open`:
+   starting-session reads rehash the pinned tree for each call. Keep this path
+   if the small fixture responds within a couple of seconds; consider caching
+   file metadata by `start_revision` only if reads are slower than waiting for
+   `open`.
 3. Replay start with the same key and origin; require the same session and
    pinned revision. A changed origin must fail. Record an immediate update
    and submit separately, including any 409 and elapsed wait. The write wait

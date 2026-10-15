@@ -237,7 +237,11 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
           finally{
             const durationMs=Math.round(performance.now()-started);
             logEvent({event:'session_start_step',operation:background?'session-start-job':'session-start',stage,durationMs,outcome,sourceId:source.id,sessionId:id});
-            await save({start_background_phases:{[stage]:durationMs}});
+            try{await save({start_background_phases:{[stage]:durationMs}});}
+            catch(error){
+              // Timing persistence must not replace the stage's original failure.
+              if(outcome==='ok')throw error;
+            }
           }
         };
         const patch = await onSessionStarted(row, source, {step,authorize:()=>save({}),wakeIssued:at=>save({live_wake_issued_at:at})});
@@ -245,7 +249,9 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
       }
       return output(row, source, { ...(files ? { files, conflicts: [] } : {}), _startTiming: row.start_phases });
     } catch (error) {
-      if (error.repositoryPhases) await save({ start_background_phases: { ...(await store.get(id)).start_background_phases, ...error.repositoryPhases } });
+      try {
+        if (error?.repositoryPhases) await save({ start_background_phases: error.repositoryPhases });
+      } catch { /* Preserve the repository failure if its timing checkpoint fails. */ }
       throw error;
     } finally { await runMutation(() => store.release(id, lease)); }
   }

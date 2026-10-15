@@ -419,9 +419,12 @@ recovers an interrupted fork attempt; its session lease fences checkpoints.
 Both live jobs have independent five-minute leases and four-minute provider
 operation deadlines. Close and deletion reject active live leases, including
 host work on a still-starting session. Each completed step merges timing into
-the current row without overwriting the other job. Exhausted work retains safe
-errors and pending state; an explicit start retry renews the budget when the
-corresponding lease is inactive. Old pending rows acquire host work lazily.
+the current row without overwriting the other job. If a stage or repository
+operation fails, a subsequent timing checkpoint failure preserves the original
+error. Timing checkpoint errors after successful stages still propagate;
+operational checkpoints retain their authority and lease checks. Exhausted work
+retains safe errors and pending state; an explicit start retry renews the budget
+when the corresponding lease is inactive. Old pending rows acquire host work lazily.
 Ordinary sessions expire through existing cleanup; drafts require retry or close.
 
 A session snapshot while `starting` reads the same pinned Artifacts tree as
