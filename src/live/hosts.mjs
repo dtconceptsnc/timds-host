@@ -15,10 +15,10 @@ export function createLivePreviewHosts({ env = {}, fetchImpl = fetch } = {}) {
   const service = env.TIMDS_HOST_WORKER_NAME;
   const base = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account || '')}`;
   let subdomain;
-  async function call(route, method = 'GET', body) {
+  async function call(route, method = 'GET', body, signal) {
     if (!account || !token || !service) throw fail(503, 'Live Preview credentials are not configured');
     let response;
-    try { response = await fetchImpl(`${base}${route}`, { method, headers:{Authorization:`Bearer ${token}`, ...(body && !(body instanceof FormData) ? {'Content-Type':'application/json'} : {})}, body:body instanceof FormData ? body : body ? JSON.stringify(body) : undefined, signal:AbortSignal.timeout(30_000) }); }
+    try { response = await fetchImpl(`${base}${route}`, { method, headers:{Authorization:`Bearer ${token}`, ...(body && !(body instanceof FormData) ? {'Content-Type':'application/json'} : {})}, body:body instanceof FormData ? body : body ? JSON.stringify(body) : undefined, signal:signal?AbortSignal.any([signal,AbortSignal.timeout(30_000)]):AbortSignal.timeout(30_000) }); }
     catch { throw fail(502, 'Live Preview provisioning failed'); }
     if (response.status === 404 && method === 'DELETE') return null;
     const value = await response.json().catch(() => ({}));
@@ -26,22 +26,22 @@ export function createLivePreviewHosts({ env = {}, fetchImpl = fetch } = {}) {
     return value.result;
   }
   const tags = (session, source) => [`timds-live:${session.id}`, `timds-source:${source.id}`];
-  async function owned(session, source) {
-    const row = (await call('/workers/scripts') || []).find(row => row.id === liveWorkerName(session.id));
+  async function owned(session, source, signal) {
+    const row = (await call('/workers/scripts','GET',undefined,signal) || []).find(row => row.id === liveWorkerName(session.id));
     if (row && !tags(session, source).every(tag => row.tags?.includes(tag))) throw fail(409, 'Live Preview ownership does not match this session');
     return row;
   }
   return {
-    async ensure(session, source) {
+    async ensure(session, source, {signal,authorize = async()=>{}} = {}) {
       const name = liveWorkerName(session.id);
-      if (!await owned(session, source)) {
+      if (!await owned(session, source, signal)) {
         const body = new FormData();
         body.set('metadata', JSON.stringify({ main_module:'index.mjs', compatibility_date:'2026-10-12', tags:tags(session,source), bindings:[{type:'service', name:'LIVE', service, entrypoint:'LivePreview'}] }));
         body.set('index.mjs', new Blob([`export default { fetch(request, env) { const headers = new Headers(request.headers); headers.set('x-timds-live-session', ${JSON.stringify(session.id)}); return env.LIVE.fetch(new Request(request, {headers})); } };`], {type:'application/javascript+module'}), 'index.mjs');
-        await call(`/workers/scripts/${name}`, 'PUT', body);
+        await authorize();await call(`/workers/scripts/${name}`, 'PUT', body,signal);
       }
-      await call(`/workers/scripts/${name}/subdomain`, 'POST', {enabled:true, previews_enabled:false});
-      subdomain ||= (await call('/workers/subdomain'))?.subdomain;
+      await authorize();await call(`/workers/scripts/${name}/subdomain`, 'POST', {enabled:true, previews_enabled:false},signal);
+      subdomain ||= (await call('/workers/subdomain','GET',undefined,signal))?.subdomain;
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(subdomain || '')) throw fail(502, 'Live Preview hostname is unavailable');
       return `https://${name}.${subdomain}.workers.dev${designSystemPreviewPath(source.manifest_json)}`;
     },

@@ -3,6 +3,7 @@ import { Catalog } from './store/catalog.mjs';
 import { fail } from './store/errors.mjs';
 import { apiHeaders, assertApiVersion, readJson, jsonResponse } from './http.mjs';
 import { streamJsonFileTrees } from './repository/file-trees.mjs';
+import { createArtifactsAdapter } from './repository/artifacts.mjs';
 import { hostOrigin, oauthOrigin } from './http.mjs';
 import { verifyBootstrapSecret } from './auth/access.mjs';
 import { importApi } from './imports/api.mjs';
@@ -39,7 +40,11 @@ export function createApi({ getCoordinator, provision, mcp }) {
       const preflightSubmission=operation==='publish'&&envelope.value?.preflight?await coordinator.resource('submission',args[0]):undefined;
       return project(envelope.value,{preflightSubmission});
     };
-    const respond = (result,status=200) => streamJsonFileTrees(result,env.SNAPSHOTS,{status,headers:apiHeaders});
+    const respond = (result,status=200) => {
+      const { _startTiming, ...value } = result;
+      const timing = _startTiming ? Object.fromEntries(['reserve','fork','live','claim','stream'].map(phase => [phase,Math.max(0,Number(_startTiming[phase]) || 0)])) : null;
+      return streamJsonFileTrees(value,env.SNAPSHOTS,{status,artifacts:createArtifactsAdapter({env}),headers:{...apiHeaders,...(timing?{'Server-Timing':Object.entries(timing).map(([phase,duration])=>`${phase};dur=${duration}`).join(', ')}:{})}});
+    };
     if (path === '/api/timds/me' && method === 'GET') {
       const principal = await catalog.principal(actor.principalId);
       return jsonResponse({ principal:{id:principal.id,type:principal.type,name:principal.name,admin:principal.admin} });

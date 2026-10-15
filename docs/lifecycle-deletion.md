@@ -42,6 +42,13 @@ continue; the source cannot be restored or reprovisioned under the same UUID.
 The current admin can confirm the same hash/name again to resume a failed step
 or refresh an expired portal proof. Completed confirmations return the receipt.
 
+The first confirmation returns HTTP 409 while a session operation or background
+live provisioning holds an unexpired lease. Retry after preparation finishes;
+if its results change the reviewed inventory, prepare a fresh operation. This
+keeps cleanup from racing a fork, Worker or subscription still being created.
+An already-fenced deletion can resume despite a lease left by an interrupted
+operation, because the fence prevents further authoring checkpoints.
+
 Sources need an actual native provisioning reservation, or an active import
 reservation that proves the original dedicated standalone repository. Unknown
 provenance, shared/embedded repositories, changed opaque provider IDs and pending

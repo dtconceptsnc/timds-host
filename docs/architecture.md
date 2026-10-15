@@ -139,7 +139,7 @@ other long network work. The proposed tables are:
 | Table | Key state and constraints |
 | --- | --- |
 | `source_state` | Single source identity; lifecycle; authority epoch; current version/digest/commit; monotonic pointer generation and next queue sequence. |
-| `sessions` | UUID, source, owner, kind/name, base/head revisions, status, expiry, durable close/expiry intent, operation lease/generation, fork identity, originating Request. Unique owner/idempotency key locally, backed by a global D1 reservation; draft names remain unique while starting/open/closing. |
+| `sessions` | UUID, source, owner, kind/name, base/head revisions, pinned start revision, pending fork/live work and retry state, start phase timings, status, expiry, durable close/expiry intent, operation lease/generation, fork identity, originating Request. Unique owner/idempotency key locally, backed by a global D1 reservation; draft names remain unique while starting/open/closing. |
 | `members` | Unique `(session_id,principal_id)` and role. Membership does not replace active principal/source access. |
 | `claims` | Unique `(session_id,principal_id,kind)`, bounded path/key payload and expiry. Expired claims never block a write. |
 | `submissions` | UUID, session/source, request hash, immutable base/head, diff/note, review branch/preview status, integration/publication state. Unique session/request hash. |
@@ -370,6 +370,72 @@ The current factory is
 Every operation is bound to stored source and resource identity. Prepared
 capabilities expire, completion is fenced, and release revokes capabilities
 even when the caller fails.
+
+### Two-phase session start
+
+Session start reserves its identity and pins the source revision before it
+returns files. A published `from` label selects its immutable source commit;
+otherwise the host reads the head of the source's `main`, or the selected
+draft's fork. The pinned revision is stored separately from the requested
+origin used to validate idempotency. A retry while `starting`
+returns that same session and tree even if main or the draft has advanced.
+
+For a bounded source tree, the response reads the pinned Artifacts tree and
+files directly through the binding. It needs neither a repository container
+nor an R2 snapshot round trip. The API v1 response shape is unchanged: it
+includes the complete files, a full `baseRevision`, `status: 'starting'` and
+an empty `liveUrl`. The direct path allows at most 200 combined directory
+tree reads and file entries, leaving room for other subrequests. Larger trees
+and trees with symbolic links use the trusted container and R2 path. Existing
+source limits remain 4,000 files, 10 MiB per file and 50 MiB total. Responses
+prefetch at most four blobs and preserve file order; container-to-R2 snapshot
+transfers run at most eight files concurrently. Direct reads verify each file
+against its Git object identity.
+
+The coordinator alarm finishes pending starts under the session lease. It
+rechecks current authority, starts the deterministic session fork at the
+revision already returned to the caller, then checkpoints `fork_repository`
+and `status: 'open'`. Live provisioning is a separate pending step: ensure
+the fork's push subscription and live Worker, persist `live_url` and
+`sandbox_id`, and emit a `live_state` event. Session status and active work
+then expose the URL; Studio's feed refresh replaces its starting placeholder
+without a page reload. Each phase gets at most five background attempts, with
+5-, 10-, 20- and 40-second delays after failures. A durable 15-minute deadline
+recovers an in-flight fork attempt after an isolate restart; the session lease
+still fences fork checkpoints. Live provisioning has its own five-minute lease
+and a four-minute provider-operation deadline, so writes to an open fork do not
+wait for Worker creation. Close returns a retryable 409 while the live
+provisioning lease is active, preventing remote creation from racing cleanup.
+Exhausted work retains its safe error and pending
+state for diagnostics. An explicit start retry renews the automatic retry
+budget for failed or exhausted preparation when no corresponding lease is
+active. Ordinary sessions expire through the existing cleanup path; drafts
+have no expiry and require an explicit retry or close.
+
+Session and named-draft snapshots, update and submit allow up to 20 seconds
+for a starting session to open and release its operation lease. Waiting leaves the coordinator queue and session lease available for
+the alarm; the operation rechecks authorization and claims its lease before
+using the fork. If the wait expires, the caller receives the existing 409
+starting response. Designer Requests use an internal synchronous start option
+because dispatch needs the fork and live runner immediately; the option is
+not a caller-controlled API field.
+
+The current host includes `Server-Timing` on start responses; the v1 contract
+keeps this telemetry header optional for older compatible hosts. Its phases
+are `reserve`, `fork`, `live`,
+`claim` and `stream`, in milliseconds. Deferred fork and live work are zero in
+the response header; `stream` measures tree preparation before the headers are
+sent, not the elapsed time to deliver the streamed body. Session diagnostics
+add `startStartedAt`, `startPhases`, `startBackgroundPhases` and `startRecovery`
+alongside the live runner's `wakePhases`. The request phases retain the values
+reported in its header; background fork/live costs are recorded separately.
+Recovery reports pending state, attempt count, next attempt time and safe
+failure details even before a fork exists. These measurements describe phases,
+not a local guarantee of deployed start latency.
+
+Non-retained repository operations schedule immediate container expiry through
+the sandbox alarm instead of awaiting destruction before returning. Capability
+revocation remains part of operation completion.
 
 The trusted repository image executes controlled Git and
 `@dtconcepts/timds/merge`, never source scripts, npm, a dev server or a model.

@@ -51,7 +51,11 @@ CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHE
 CREATE TABLE IF NOT EXISTS publication_events(id TEXT PRIMARY KEY,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 CREATE TABLE IF NOT EXISTS outbox(sequence INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,row_json TEXT NOT NULL CHECK(json_valid(row_json)));
 `;
-const sessionPatchFields = ['fork_repository','token_id','base_revision','last_update_hash','status','expires_at','close_expired','live_url','sandbox_id','live_state'];
+export const SESSION_WORK_MAX_ATTEMPTS = 5;
+const sessionPatchFields = ['fork_repository','token_id','base_revision','last_update_hash','status','expires_at','close_expired','live_url','sandbox_id','live_state',
+  'start_revision','start_pending','start_retry_at','start_started_at','start_phases','start_background_phases','start_attempts','start_error','start_diagnostic',
+  'live_pending','live_retry_at','live_attempts','live_error','live_diagnostic','live_lease_token','live_lease_expires_at'];
+const nullableSessionFields = new Set(['expires_at','start_retry_at','start_diagnostic','live_retry_at','live_diagnostic','live_lease_token','live_lease_expires_at']);
 const blockingPublication = row => !['published','superseded'].includes(row.status) &&
   (row.status !== 'failed' || Object.hasOwn(row.checkpoints_json, 'sourceCommit') || row.checkpoints_json.staged === true);
 const busy = () => fail(409, 'This session is busy; retry when its current operation finishes');
@@ -126,16 +130,30 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
   const patchSession = (row,patch) => {
     if (Object.keys(patch).some(key => !sessionPatchFields.includes(key))) throw fail(400, 'Unsupported session checkpoint field');
     const next = { ...row, updated_at: timestamp() };
-    for (const field of sessionPatchFields) if (Object.hasOwn(patch,field) && (field === 'expires_at' || patch[field] != null)) next[field] = patch[field];
+    for (const field of sessionPatchFields) if (Object.hasOwn(patch,field) && (nullableSessionFields.has(field) || patch[field] != null)) next[field] = patch[field];
     if (next.status !== row.status && ['closing','closed','expired'].includes(next.status)) {
+      if(row.live_lease_token && Date.parse(row.live_lease_expires_at)>clock())throw fail(409,'Live preview is still provisioning; retry close shortly');
       for (const publication of sessionPublications(row.id)) {
         if (publication.status === 'failed' && !blockingPublication(publication)) put('publications',{ ...publication,status:'superseded',updated_at:timestamp() });
         else if (!['closing','published','superseded'].includes(publication.status)) throw fail(409, 'Finish the active publication before closing its session');
       }
+      next.start_pending=false;next.live_pending=false;next.live_lease_token=null;next.live_lease_expires_at=null;
     }
     return saveSession(next);
   };
   const validLease = (id,lease) => { const row = session(id); if (!lease || row.lease_token !== lease || !row.lease_expires_at || Date.parse(row.lease_expires_at) <= clock()) throw fail(409, 'Session lease expired; retry the operation'); return row; };
+  const sessionWork = () => {
+    if(meta('deletion_fence'))return [];
+    return list('sessions',"status IN ('starting','open')").flatMap(row=>{
+      if(row.expires_at && Date.parse(row.expires_at)<=clock())return [];
+      const phase=row.status==='starting' && row.start_pending?'fork':row.status==='open' && row.live_pending?'live':null;
+      if(!phase)return [];
+      const prefix=phase==='fork'?'start':'live';
+      if((row[`${prefix}_attempts`]||0)>=SESSION_WORK_MAX_ATTEMPTS)return [];
+      const retry=Date.parse(row[`${prefix}_retry_at`]||'')||clock(),lease=Date.parse(row[phase==='fork'?'lease_expires_at':'live_lease_expires_at']||'')||0;
+      return [{sessionId:row.id,phase,at:Math.max(retry,lease)}];
+    }).sort((a,b)=>a.at-b.at||a.sessionId.localeCompare(b.sessionId));
+  };
   const queuedBefore = publication => list('publications').some(row => row.queue_position < publication.queue_position && blockingPublication(row));
   const publicationQueueState = jobId => {
     const publication = list('publications',"json_extract(row_json,'$.execution_job_id')=?",[jobId])[0], job = get('jobs',jobId);
@@ -213,7 +231,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     }),
     // Runtime-reported state. Identical consecutive states for one session are
     // not repeated in the feed; a failed run also closes its Request once.
-    setLiveState: (id,state,{expectedStatus,request = null} = {}) => atomic(() => {
+    setLiveState: (id,state,{expectedStatus,request = null,force = false} = {}) => atomic(() => {
       const row = session(id);
       if (expectedStatus !== undefined && row.status !== expectedStatus) throw fail(409, 'Live session state changed');
       const saved = patchSession(row,{live_state:state});
@@ -221,7 +239,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       if (meta('deletion_fence')?.completed) return saved;
       const prior = scalar("SELECT json_extract(row_json,'$.details_json.state') AS state FROM events WHERE json_extract(row_json,'$.event_type')='live_state' AND json_extract(row_json,'$.session_id')=? ORDER BY seq DESC LIMIT 1",id)?.state;
       const context = {session_id:id,actor_principal_id:request?.agentPrincipalId || null,originating_request_id:request?.requestId || row.originating_request_id || null};
-      if (prior !== state) audit({...context,event_type:'live_state',details_json:{state,...(request ? {requestId:request.requestId} : {})}});
+      if (force || prior !== state) audit({...context,event_type:'live_state',details_json:{state,...(request ? {requestId:request.requestId} : {})}});
       if (request && state === 'failed' && !requestEvent('request_failed',request.requestId,id,"AND json_extract(row_json,'$.details_json.state')='failed'"))
         audit({...context,event_type:'request_failed',note:request.note || '',details_json:{requestId:request.requestId,state:'failed',error:'The Request failed or exceeded its time limit'}});
       return saved;
@@ -229,6 +247,8 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
     findFork: name => list('sessions',"json_extract(row_json,'$.fork_repository')=?",[name])[0] || null,
     sessionForRequest(id,requestId) { own(id); const result = list('sessions',"json_extract(row_json,'$.originating_request_id')=?",[requestId]); if (result.length > 1) throw fail(409, 'Request has more than one session'); return result[0] || null; },
     expired: now => list('sessions',"status='closing' OR (status IN ('starting','open') AND expires_at IS NOT NULL AND expires_at<=?)",[now],'expires_at,id','LIMIT 100'),
+    pendingSessionWork: ({limit = 2} = {}) => sessionWork().filter(work=>work.at<=clock()).slice(0,limit),
+    nextSessionWork: () => sessionWork()[0]?.at ?? null,
     async members(id) { return Promise.all(list('members','session_id=?',[id]).map(async row => ({...row,principal:await principalDisplay(row.principal_id)}))); },
     member: (id,principal) => list('members','session_id=? AND principal_id=?',[id,principal])[0] || null,
     async addMember(input,event = {}) {
@@ -469,7 +489,8 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       const due = store.expired(timestamp()).length || scalar('SELECT COUNT(*) AS n FROM outbox').n || meta('authority_pending');
       const expiry = scalar("SELECT MIN(expires_at) AS next FROM sessions WHERE status IN ('starting','open','closing') AND expires_at IS NOT NULL")?.next;
       const next = due ? clock()+5_000 : expiry ? Math.max(clock()+5_000,Date.parse(expiry)) : clock()+60_000;
-      await storage.setAlarm(extraAt == null ? next : Math.min(next,Math.max(clock()+1_000,extraAt)));
+      const workAt=store.nextSessionWork(),extra=[extraAt,workAt].filter(value=>value!=null);
+      await storage.setAlarm(extra.length ? Math.min(next,Math.max(clock()+1_000,Math.min(...extra))) : next);
     },
     async reconcileAuthority() {
       const pending = meta('authority_pending');
@@ -590,6 +611,7 @@ export function createSqliteCollaborationStore({ sourceId, storage, catalog, aut
       const principal=await catalog.principal(principalId(actor));
       if(principal?.status!=='active'||!principal.admin)throw fail(403,'An active administrator is required');
       if(list('publications').some(blockingPublication))throw fail(409,'Finish publications before deleting this Design System');
+      if(!prior&&list('sessions').some(row=>row.lease_token&&Date.parse(row.lease_expires_at)>clock()||row.live_lease_token&&Date.parse(row.live_lease_expires_at)>clock()))throw fail(409,'Wait for session preparation before deleting this Design System');
       atomic(()=>{
         if(confirmedOperation)put('lifecycle_operations',confirmedOperation);
         if(!prior){

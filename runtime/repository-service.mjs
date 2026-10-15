@@ -107,20 +107,23 @@ export class RepositorySandboxRuntime{
    // its service container alive until the RPC response stream drains/cancels.
    const reader=result.body?.getReader(),runtime=this;streaming=true;
    return new Response(new ReadableStream({
-    async pull(controller){try{const item=reader?await reader.read():{done:true};if(item.done){await runtime.close();controller.close();}else controller.enqueue(item.value);}catch(error){await runtime.close();controller.error(error);}},
-    async cancel(reason){try{await reader?.cancel(reason);}finally{await runtime.close();}}
+    async pull(controller){try{const item=reader?await reader.read():{done:true};if(item.done){await runtime.expire();controller.close();}else controller.enqueue(item.value);}catch(error){await runtime.expire();controller.error(error);}},
+    async cancel(reason){try{await reader?.cancel(reason);}finally{await runtime.expire();}}
    }),result);
   }catch(error){primary=requestDiagnostic(error,'operation','native-repository');throw primary;}finally{
    let cleanupError;
    try{await this.drainCleanup();}catch(error){cleanupError=error;}
    // Publications retain only credential-free Git objects between bounded RPCs.
-   if((!streaming||cleanupError)&&!['preparePublication','commitSource','stagePublished','stageSource','pushMain','priorPublished','pushPublished'].includes(input.method))try{await this.close();}catch(error){cleanupError??=requestDiagnostic(error,'container-cleanup','native-repository');}
+   // Persist teardown intent before replying; the alarm performs the slow
+   // destroy after this request has returned and any response has drained.
+   if((!streaming||cleanupError)&&!['preparePublication','commitSource','stagePublished','stageSource','pushMain','priorPublished','pushPublished'].includes(input.method))try{await this.expire();}catch(error){cleanupError??=requestDiagnostic(error,'container-cleanup','native-repository');}
    if(cleanupError){
     await finishCleanup(()=>{throw cleanupError;},primary,'capability-release');
     if(primaryResponse){const value=primaryPayload||{};return Response.json({...value,error:{...(typeof value.error==='object'?value.error:{message:'Repository operation failed'}),requestDiagnostic:safeRequestDiagnostic(primary.requestDiagnostic),cleanupDiagnostic:safeRequestDiagnostic(primary.cleanupDiagnostic)}},{status:primaryResponse.status});}
    }
   }
  }
+ async expire(){const expiresAt=Date.now();this.ctx.storage.kv.put('container-expires-at',expiresAt);await this.ctx.storage.setAlarm(expiresAt);}
  async close(){let failure;try{if(this.ctx.container?.running)await this.ctx.container.destroy();this.ctx.storage.kv.delete('container-expires-at');}catch(error){failure=error;}finally{if(this.cleanupRows().length||failure)await this.ctx.storage.setAlarm(Date.now()+30_000);else await this.ctx.storage.deleteAlarm();}if(failure)throw failure;return{closed:true};}
  alarm(){const work=this.serial.then(async()=>{
   let primary;try{await this.drainCleanup();}catch(error){primary=error;throw error;}finally{
