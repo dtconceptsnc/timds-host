@@ -4707,6 +4707,32 @@
           "status"
         ]
       },
+      "PublicationDiagnostic": {
+        "type": "object",
+        "description": "Host-generated identifiers only: which native operation failed, the stage label inside it, the JavaScript error class and a coarse fault category.",
+        "properties": {
+          "operation": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "errorClass": {
+            "type": "string"
+          },
+          "fault": {
+            "type": "string"
+          },
+          "statusCode": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "operation",
+          "stage",
+          "errorClass"
+        ]
+      },
       "Publication": {
         "type": "object",
         "properties": {
@@ -4822,6 +4848,28 @@
             "anyOf": [
               {
                 "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diagnostic": {
+            "description": "Host-generated diagnostic of the most recent failed attempt: the native operation, the stage label it failed in, the error class and a coarse fault category. Null until a stage fails. Never carries provider output.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicationDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cleanupDiagnostic": {
+            "description": "Same shape as diagnostic, for a cleanup failure that followed the attempt's primary failure.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicationDiagnostic"
               },
               {
                 "type": "null"

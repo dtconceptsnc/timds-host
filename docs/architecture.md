@@ -627,6 +627,15 @@ these checks; it would surface as a different stamp on the next publication.
   the tree comparison and push are unchanged. The release-bucket copy runs
   through the bounded four-way `transferFiles` instead of one object at a
   time; every object still verifies before and after its write.
+- **Failure diagnostic.** A failed stage stores the allowlisted diagnostic of
+  its error (`operation`, the container or host `stage` label, `errorClass`,
+  `fault`, optional `statusCode`) and any cleanup diagnostic on the checkpoint.
+  The publication view returns them as `diagnostic` and `cleanupDiagnostic`,
+  null until a stage fails, so a reader can tell a git fetch timeout from a
+  failed toolkit check without the dashboard. `error` stays the host-authored
+  message. The Workflow retries the stage; a later success does not clear the
+  diagnostic, so a published row can still show the retried attempt's failure,
+  and the next failure replaces it.
 
 Configure explicit bounded transient retries/backoff and timeouts per step.
 Treat deterministic validation, grant denial, CAS and named check failures as

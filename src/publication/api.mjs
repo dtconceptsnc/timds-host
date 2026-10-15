@@ -1,10 +1,12 @@
 // v1 publication response/preflight surface, independent of HTTP framework.
-import {requestDiagnostic,finishCleanup} from '../requests/diagnostics.mjs';
+import {requestDiagnostic,safeRequestDiagnostic,finishCleanup} from '../requests/diagnostics.mjs';
 import {publishedResult} from './urls.mjs';
 import {timdsSubmissionView} from '../domain/sessions.mjs';
 const fail=(statusCode,message)=>Object.assign(new Error(message),{statusCode});
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-export const submissionPublicationView=row=>({id:row.id,sourceId:row.source_id,submissionId:row.submission_id,executionJobId:row.execution_job_id,status:row.status,stage:row.stage,error:row.error_message,result:row.result_json,createdAt:row.created_at,completedAt:row.completed_at,queuePosition:row.queue_position,conflictRate:row.conflict_rate,autoRebaseSuccess:row.auto_rebase_success,submitToPublishMs:row.submit_to_publish_ms});
+export const submissionPublicationView=row=>({id:row.id,sourceId:row.source_id,submissionId:row.submission_id,executionJobId:row.execution_job_id,status:row.status,stage:row.stage,error:row.error_message,result:row.result_json,createdAt:row.created_at,completedAt:row.completed_at,queuePosition:row.queue_position,conflictRate:row.conflict_rate,autoRebaseSuccess:row.auto_rebase_success,submitToPublishMs:row.submit_to_publish_ms,
+ // The allowlisted diagnostic of the last failed attempt (operation, stage label, error class, fault); never a provider message.
+ diagnostic:safeRequestDiagnostic(row.checkpoints_json?.requestDiagnostic),cleanupDiagnostic:safeRequestDiagnostic(row.checkpoints_json?.cleanupDiagnostic)});
 export function createPublicationApi({store,repository,metadata,build,authorization,publication,sourceId,publicOrigin,authorizePublish=authorization?.authorizePublish,service=publication,now=()=>new Date().toISOString()}){
  const view=(row,source)=>({...submissionPublicationView(row),result:publishedResult(row.result_json,publicOrigin,source)});
  const committedReplay=(row,actor)=>row&&row.actor_principal_id===(actor?.principalId||actor?.id||actor?.userId)&&(['closing','published'].includes(row.status)||Boolean(row.checkpoints_json?.pointerEventId));
