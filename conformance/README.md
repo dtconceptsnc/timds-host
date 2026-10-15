@@ -16,6 +16,14 @@ feed, and public CSS use the same validating transport because toolkit 0.1.464
 does not expose client methods for those operations. Other HTTP operations call
 `createHostProvider` from `@dtconcepts/timds/hosted`.
 
+The harness preserves the inherited contract's mandatory response headers,
+including cache, CORS and noindex policy. A new header can explicitly declare
+`required: false`; it is checked when present and may be absent. Session and
+draft starts use this additive rule for `Server-Timing`, so an older v1 host
+without timing telemetry still conforms. The current host emits a nonempty
+timing header. Local contract tests cover both start routes, missing and present
+telemetry, rejected empty values, and continued mandatory cache-header checks.
+
 The [designer MCP surface](../docs/api/designer-mcp.md) is exercised through a
 separate MCP transport against `/api/timds/mcp` using the same fixture and
 credentials. Its contribution receipts are checked alongside the HTTP flow;

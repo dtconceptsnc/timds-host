@@ -420,7 +420,9 @@ starting response. Designer Requests use an internal synchronous start option
 because dispatch needs the fork and live runner immediately; the option is
 not a caller-controlled API field.
 
-The start response includes `Server-Timing` phases `reserve`, `fork`, `live`,
+The current host includes `Server-Timing` on start responses; the v1 contract
+keeps this telemetry header optional for older compatible hosts. Its phases
+are `reserve`, `fork`, `live`,
 `claim` and `stream`, in milliseconds. Deferred fork and live work are zero in
 the response header; `stream` measures tree preparation before the headers are
 sent, not the elapsed time to deliver the streamed body. Session diagnostics

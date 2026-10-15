@@ -173,9 +173,11 @@
                 }
               },
               "Server-Timing": {
-                "description": "Start phase durations in milliseconds: reserve, fork, live, claim and stream. Deferred phases are zero in this response. stream measures preparation before headers, not the elapsed time to send the full response body; diagnostics reports completed background fork/live phases separately.",
+                "required": false,
+                "description": "Optional start phase durations in milliseconds: reserve, fork, live, claim and stream. The current host emits this header; older compatible v1 hosts may omit it. Deferred phases are zero in this response. stream measures preparation before headers, not the elapsed time to send the full response body; diagnostics reports completed background fork/live phases separately.",
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -1288,9 +1290,11 @@
                 }
               },
               "Server-Timing": {
-                "description": "Start phase durations in milliseconds: reserve, fork, live, claim and stream. Deferred phases are zero in this response. stream measures preparation before headers, not the elapsed time to send the full response body; diagnostics reports completed background fork/live phases separately.",
+                "required": false,
+                "description": "Optional start phase durations in milliseconds: reserve, fork, live, claim and stream. The current host emits this header; older compatible v1 hosts may omit it. Deferred phases are zero in this response. stream measures preparation before headers, not the elapsed time to send the full response body; diagnostics reports completed background fork/live phases separately.",
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },

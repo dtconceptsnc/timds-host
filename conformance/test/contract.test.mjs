@@ -24,6 +24,25 @@ test('Ajv validates nested OpenAPI refs, formats, conflicts, API versions and fo
   await assert.rejects(validate(url, {}, json({ message: 'not found' }, 404)), /required property/);
 });
 
+test('start telemetry is optional while present headers and mandatory cache policy are validated', async () => {
+  const validate = createContractValidator();
+  const timing = 'reserve;dur=3, fork;dur=0, live;dur=0, claim;dur=1, stream;dur=8';
+  for (const [path, operation, kind] of [
+    ['/api/timds/sessions', 'startSession', 'session'],
+    [`/api/timds/design-systems/${sourceId}/drafts`, 'createDraft', 'draft'],
+  ]) {
+    const url = `https://host.example${path}`, init = { method: 'POST' };
+    const response = () => json({ ...result(), session: { ...session, status: 'starting', kind, liveUrl: '', ...(kind === 'draft' ? { name: 'timing-check', expiresAt: null } : {}) }, files: [] });
+    assert.equal(await validate(url, init, response()), operation, 'older v1 hosts may omit telemetry');
+    const timed = response(); timed.headers.set('Server-Timing', timing);
+    assert.equal(await validate(url, init, timed), operation);
+    const empty = response(); empty.headers.set('Server-Timing', '');
+    await assert.rejects(validate(url, init, empty), /Server-Timing/, 'a present optional header still satisfies its schema');
+    const uncached = response(); uncached.headers.delete('Cache-Control');
+    await assert.rejects(validate(url, init, uncached), /Cache-Control/, 'mandatory inherited headers remain enforced');
+  }
+});
+
 test('deletion blockers validate bounded recovery actions without provider metadata', async () => {
   const validate = createContractValidator();
   const url = `https://host.example/api/timds/admin/systems/${sourceId}/deletion`;

@@ -21,7 +21,12 @@ export function createContractValidator(spec = contract) {
     responses: Object.fromEntries(Object.entries(operation.responses).map(([status, response]) => {
       response = resolve(response);
       return [status, { ...response, validators: Object.fromEntries(Object.entries(response.content || {}).map(([type, item]) => [type, compile(item.schema)])),
-        headerValidators: Object.fromEntries(Object.entries(response.headers || {}).map(([name, header]) => [name, compile(resolve(header).schema)])) }];
+        // Preserve the inherited contract's mandatory headers unless an
+        // additive header explicitly opts out with required: false.
+        headerValidators: Object.fromEntries(Object.entries(response.headers || {}).map(([name, header]) => {
+          header = resolve(header);
+          return [name, { required: header.required !== false, validate: compile(header.schema) }];
+        })) }];
     })),
   })));
   const describe = errors => errors.map(error => `${error.instancePath || '/'} ${error.message}`).join('; ');
@@ -33,8 +38,9 @@ export function createContractValidator(spec = contract) {
     const label = `${operation.operationId} HTTP ${response.status}`;
     const definition = operation.responses[response.status] || operation.responses[`${Math.floor(response.status / 100)}XX`];
     if (!definition) throw new Error(`${label}: undocumented response status`);
-    for (const [name, validateHeader] of Object.entries(definition.headerValidators)) {
+    for (const [name, { required, validate: validateHeader }] of Object.entries(definition.headerValidators)) {
       const value = response.headers.get(name);
+      if (value === null && !required) continue;
       if (!validateHeader(value)) throw new Error(`${label}: ${name} ${describe(validateHeader.errors)}`);
     }
     if (method === 'HEAD') {
