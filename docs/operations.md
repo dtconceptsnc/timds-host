@@ -565,14 +565,20 @@ the allowlist in `src/log.mjs` and this table.
 
 Read the lines in the dashboard (Workers & Pages, the Worker, Logs) or with
 the pinned CLI, which takes the Workers Observability telemetry query body
-as JSON and prints the request without sending it under `--dry-run`:
+as JSON and prints the request without sending it under `--dry-run`. The
+body needs a `queryId` (any label), a `view`, a millisecond `timeframe` and
+the `cloudflare-workers` dataset; `$metadata.service` is the Worker name:
 
 ```bash
-npx cf o11y telemetry query --body '{"view":"events","limit":50,"timeframe":{"from":1760400000000,"to":1760486400000},"parameters":{"datasets":["cloudflare-workers"],"filters":[{"key":"$metadata.service","operation":"eq","type":"string","value":"timds-example"},{"key":"event","operation":"eq","type":"string","value":"publication_stage"}]}}'
+npx cf o11y telemetry query --body '{"queryId":"timds-logs","view":"events","limit":50,"timeframe":{"from":1760400000000,"to":1760486400000},"parameters":{"datasets":["cloudflare-workers"],"filters":[{"key":"$metadata.service","operation":"eq","type":"string","value":"timds-example"},{"key":"event","operation":"eq","type":"string","value":"publication_stage"}]}}'
 ```
 
-`npx cf o11y telemetry keys` and `values` list the indexed keys and their
-values for the same window. If a longer window is ever needed, the
+Every invocation is one `cf-worker-event` record with its request, response
+status, entrypoint, Durable Object class, outcome and CPU time; the `console`
+lines above are separate records with `level` and `message`, so a quiet host
+shows invocations only. `npx cf o11y telemetry keys --body '{"timeframe":{...}}'`
+lists the indexed keys and `values --body '{"timeframe":{...},"key":"$metadata.service","type":"string"}'`
+their values for a window. If a longer window is ever needed, the
 `observability.logs.destinations` setting and `cf o11y destinations` export
 to an OpenTelemetry destination; nothing is configured for that today, and a
 Tail Worker or Logpush is not part of this host.
