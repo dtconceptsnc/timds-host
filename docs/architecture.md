@@ -381,6 +381,13 @@ stored digest, file count and byte total and returns without reading container
 blobs. Otherwise the transfer checks each unique blob's size and SHA-256
 metadata in R2 and reads only missing blobs from the container. Conditional
 writes and collision checks preserve immutability across concurrent transfers.
+Uploads hash and count bytes in transit, withholding the final byte until the
+SHA-256 and length match the manifest. A final fixed-length stream preserves
+R2's upload length, and R2's checksum option independently checks the received
+bytes. Empty uploads validate their expected digest before writing. Failed or
+superseded uploads cancel and drain the transfer before cleanup; they never
+delete a shared key that a concurrent successful upload may own. No manifest
+is recorded for a failed transfer.
 Readers accept both this layout and older operation-scoped snapshot prefixes.
 Build trees marked `artifact: true` keep their existing operation-scoped layout,
 including the paths used by MCP checks. Existing prefixes are not migrated or
@@ -505,6 +512,10 @@ Concurrent stage durations and enclosing totals must not be summed.
 
 Every measured stage emits `session_start_step`, with operation `session-start`
 or `session-start-job`, stage, duration, outcome and source/session UUIDs.
+Requested session and named-draft reads use operation `session-snapshot` for
+their `tree-index` and `tree-artifacts` stages, including while still starting.
+Start replays retain `session-start`; operation labels describe the request,
+independent of its client.
 `tree-index` measures a revision-index lookup with outcome `ok` and numeric
 `hit` (1 or 0); `tree-artifacts` measures pinned direct tree preparation.
 `repository-files` includes numeric `blobsRead` and `blobsFound` counts of

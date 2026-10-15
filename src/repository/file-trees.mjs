@@ -30,6 +30,35 @@ function immutableObject(object,size,digest){if(!object||object.size!==size||obj
 async function putOnce(bucket,key,body,size,options={}){
  const written=await bucket.put(key,body,{...options,onlyIf:{etagDoesNotMatch:'*'}});
  if(!written){if(typeof body?.cancel==='function'&&!body.locked)await body.cancel();immutableObject(await bucket.head(key),size,options.customMetadata.sha256);}
+ return written;
+}
+async function putTreeFile(bucket,key,response,file){
+ // A zero-length upload may complete without pulling its body at all.
+ if(file.size===0&&file.sha256!==createHash('sha256').digest('hex')){await response.body?.cancel();throw fail('Snapshot file identity changed');}
+ const digest=createHash('sha256');let bytes=0,tail;
+ const verify=new TransformStream({
+  transform(chunk,controller){
+   bytes+=chunk.byteLength;if(bytes>file.size)throw fail('Snapshot byte count changed');digest.update(chunk);
+   if(!chunk.byteLength)return;
+   if(tail)controller.enqueue(tail);
+   if(chunk.byteLength>1)controller.enqueue(chunk.subarray(0,chunk.byteLength-1));
+   tail=chunk.slice(-1);
+  },
+  flush(controller){
+   if(bytes!==file.size)throw fail('Snapshot byte count changed');
+   if(digest.digest('hex')!==file.sha256)throw fail('Snapshot file identity changed');
+   if(tail)controller.enqueue(tail);
+  },
+ });
+ // Hold the final byte until verification, then expose a known-length stream
+ // to R2. Keep its checksum guard too; a failed upload never owns a shared key.
+ const transfer=typeof FixedLengthStream==='function'?new FixedLengthStream(file.size):new TransformStream(),abort=new AbortController();
+ const input=response.body||new Response(new Uint8Array()).body;
+ const completion=input.pipeThrough(verify).pipeTo(transfer.writable,{signal:abort.signal}).then(()=>({}),error=>({error}));
+ try{
+  const written=await putOnce(bucket,key,transfer.readable,file.size,{sha256:file.sha256,customMetadata:{sha256:file.sha256},httpMetadata:{contentType:'application/octet-stream'}});
+  if(written){const result=await completion;if(result.error)throw result.error;}
+ }finally{abort.abort();if(!transfer.readable.locked)await transfer.readable.cancel().catch(()=>{});await completion;}
 }
 /** Bound streamed transfers and drain in-flight work before caller cleanup. */
 export async function transferFiles(items, task,{concurrency=4}={}) {
@@ -55,8 +84,7 @@ export async function persistContainerTree(bucket,{sourceId,operationId,role,man
   stats.blobsRead++;
   const response=await readFile(index);
   if(!response.ok)throw fail('Snapshot file unavailable');
-  let bytes=0;const transfer=typeof FixedLengthStream==='function'?new FixedLengthStream(file.size):new TransformStream({transform(chunk,controller){bytes+=chunk.byteLength;if(bytes>file.size)throw fail('Snapshot byte count changed');controller.enqueue(chunk);},flush(){if(bytes!==file.size)throw fail('Snapshot byte count changed');}});const stream=response.body?.pipeThrough(transfer);
-  await putOnce(bucket,key,stream||new Uint8Array(),file.size,{sha256:file.sha256,customMetadata:{sha256:file.sha256},httpMetadata:{contentType:'application/octet-stream'}});
+  await putTreeFile(bucket,key,response,file);
  },{concurrency:8});
  await putOnce(bucket,ref.ref,bytes,bytes.byteLength,{sha256:digest,customMetadata:{sha256:digest},httpMetadata:{contentType:'application/json'}});
  return ref;

@@ -70,7 +70,8 @@ binary content and no symlinks, beyond the 200-entry direct-read budget but
 within the unchanged source file/byte limits. Run the sequence from CLI,
 authenticated MCP and Studio against the same pinned revision. Separate
 request logs (`session-start`) from the alarm's fork logs (`session-start-job`)
-and record body completion, not only response headers.
+and snapshot lookup logs (`session-snapshot`). Record body completion, not
+only response headers.
 
 1. Start a previously unindexed revision. Require the blocking container path
    to return the full tree and record it for both origin and fork at the
@@ -82,7 +83,9 @@ and record body completion, not only response headers.
    an origin advancing later does not change the replay's pinned revision.
 3. On an open session with unchanged fork head, call MCP `list_session_files`,
    then `read_session_file`, then `timds pull`. Require one fork-head lookup
-   and an indexed tree without a repository container. Repeat for a named
+   and an indexed tree without a repository container. Require these lookups
+   to use operation `session-snapshot` while start replays use `session-start`.
+   Repeat for a named
    draft snapshot. Change the head and require a fallback followed by a new
    immutable index entry; revoked access must refuse both paths.
 4. Inspect the second start's background fork. Require no `repository-files`

@@ -300,7 +300,7 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
         session = await store.updateSession(session.id, { live_pending: true, live_retry_at: startedAt, live_attempts: 0, live_error: '', live_diagnostic: null, live_host_pending: true, live_host_retry_at: startedAt, live_host_attempts: 0, live_host_error: '', live_host_diagnostic: null });
       }
       if (synchronous) { const liveBegan = performance.now(); await finishStart(actor, session.id); phases.live = Math.round(performance.now() - liveBegan); }
-      const streamBegan = performance.now(), result = await snapshot(actor, session.id);
+      const streamBegan = performance.now(), result = await snapshot(actor, session.id, { timingOperation: 'session-start' });
       phases.stream = Math.round(performance.now() - streamBegan);
       await owned(session.id, actor);
       if (store.updateSession) await store.updateSession(session.id, { start_started_at: startedAt, start_phases: phases });
@@ -349,19 +349,19 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     // Large trees and designer Requests keep the blocking fork path. Ordinary
     // API starts still leave live host/subscription provisioning to the alarm.
     const result = await finishStart(actor, session.id, { live: synchronous });
-    if (!result.files) return { ...await snapshot(actor, session.id), _startTiming: result._startTiming };
+    if (!result.files) return { ...await snapshot(actor, session.id, { timingOperation: 'session-start' }), _startTiming: result._startTiming };
     return result;
   }
 
   // Immutable reads do not acquire the fork lease or join its writer queue.
   // Both ordinary and named-draft reads reauthorize after remote head lookup.
-  async function indexedSnapshot(read) {
+  async function indexedSnapshot(read, { timingOperation = 'session-snapshot' } = {}) {
     const {source,session}=await read();
     if(!repository.startTree)return null;
     const starting=session.status==='starting';
     if(starting?!session.start_revision:session.status!=='open')return null;
     const revision=starting?session.start_revision:session.base_revision;
-    const tree=await repository.startTree(source,{sessionId:session.id,...(starting?{fromRevision:revision}:{indexOnly:true,expectedRevision:revision})});
+    const tree=await repository.startTree(source,{sessionId:session.id,timingOperation,...(starting?{fromRevision:revision}:{indexOnly:true,expectedRevision:revision})});
     const current=await read();
     if(!tree.files)return null;
     if(tree.baseRevision!==revision)throw fail(409,'Session snapshot revision changed');
@@ -373,14 +373,14 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     if(current.session.id!==session.id||latest.source_id!==source.id||latest.base_revision!==revision||starting&&latest.start_revision!==revision||!starting&&(latest.status!=='open'||latest.fork_repository!==session.fork_repository))return null;
     return output(latest,current.source,{files:tree.files,conflicts:[]});
   }
-  async function pinnedSnapshot(actor, id) {
-    return indexedSnapshot(()=>owned(id,actor));
+  async function pinnedSnapshot(actor, id, options) {
+    return indexedSnapshot(()=>owned(id,actor),options);
   }
   async function pinnedDraftSnapshot(actor, id, name) {
     return indexedSnapshot(async()=>{const {source,draft}=await draftFor(actor,id,name);return {source,session:draft};});
   }
-  async function snapshot(actor, id) {
-    const pinned=await pinnedSnapshot(actor,id);if(pinned)return pinned;
+  async function snapshot(actor, id, options) {
+    const pinned=await pinnedSnapshot(actor,id,options);if(pinned)return pinned;
     const { source } = await owned(id, actor);
     return leased(id, async (session, checkpoint) => {
       if (session.status !== 'open') throw fail(409, 'Session is still starting; retry start with the same idempotency key');

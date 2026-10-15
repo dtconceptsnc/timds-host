@@ -145,7 +145,8 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
     return {source,args,previewOrigin:origin,repositories};
   }
   const api={control};
-  api.startTree=async(source,{sessionId,fromRepository,fromRevision,indexOnly=false,expectedRevision}={})=>{
+  api.startTree=async(source,{sessionId,fromRepository,fromRevision,indexOnly=false,expectedRevision,timingOperation='session-start'}={})=>{
+    timingOperation=timingOperation==='session-snapshot'?'session-snapshot':'session-start';
     const row=await store.get(sessionId),current=await store.getSource(source.id);
     if(!row||row.source_id!==source.id||!current?.artifacts_namespace||!current.artifacts_repository)throw fail(404,'Hosted source not found');
     if(['closing','closed','expired'].includes(row.status)||['deleting','deleted'].includes(current.lifecycle_status))throw fail(410,'Session closed');
@@ -167,12 +168,12 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
     const began=performance.now();let indexed=null,outcome='ok';
     try{if(!indexOnly||baseRevision===row.base_revision&&baseRevision===expectedRevision)indexed=await store.treeSnapshot(repository,baseRevision);}
     catch(error){outcome='error';throw error;}
-    finally{logEvent({event:'session_start_step',operation:'session-start',stage:'tree-index',durationMs:performance.now()-began,outcome,hit:indexed?1:0,sourceId:source.id,sessionId});}
+    finally{logEvent({event:'session_start_step',operation:timingOperation,stage:'tree-index',durationMs:performance.now()-began,outcome,hit:indexed?1:0,sourceId:source.id,sessionId});}
     if(indexed)return {baseRevision,files:indexed};
     if(indexOnly)return {baseRevision,files:null};
-    return readArtifactsTree({sourceId:source.id,sessionId,namespace,repository,baseRevision,root});
+    return readArtifactsTree({sourceId:source.id,sessionId,namespace,repository,baseRevision,root,timingOperation});
   };
-  async function readArtifactsTree({sourceId,sessionId,namespace,repository,baseRevision,root}) {
+  async function readArtifactsTree({sourceId,sessionId,namespace,repository,baseRevision,root,timingOperation}) {
     const began=performance.now();let outcome='ok';
     try{
       if(!root||!/^[a-f0-9]{40}$/.test(root))throw fail(409,'Session start revision is unavailable');
@@ -199,7 +200,7 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
       files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
       return {baseRevision,files:{kind:ARTIFACTS_TREE_KIND,namespace,repository,revision:baseRevision,files}};
     }catch(error){outcome='error';throw error;}
-    finally{logEvent({event:'session_start_step',operation:'session-start',stage:'tree-artifacts',durationMs:performance.now()-began,outcome,sourceId,sessionId});}
+    finally{logEvent({event:'session_start_step',operation:timingOperation,stage:'tree-artifacts',durationMs:performance.now()-began,outcome,sourceId,sessionId});}
   }
   api.tokenFiles=async(source,session)=>{
     const result=await call(source,'snapshot',[session]);
