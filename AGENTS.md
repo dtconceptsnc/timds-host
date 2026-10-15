@@ -113,8 +113,14 @@ conformance package or deployed acceptance.
   one-line guards such as `if(!row)throw fail(404,'...')`. Do not reformat
   code you are not changing.
 - **Construction.** Modules export factories such as `createApi({...})` that
-  take their collaborators as arguments. Tests inject real SQLite adapters from
-  `test/sqlite-adapters.mjs` rather than mocks. Keep that shape.
+  take their collaborators as arguments. Tests inject small adapters over
+  `node:sqlite` (see `test/catalog.test.mjs`) rather than mocks. Keep that shape.
+- **Testing.** High-level smoke testing only; no unit tests. A new `test/`
+  file loads real modules through their factories and walks one end-to-end
+  path (a request in, a response or stored row out). Never test a function,
+  helper or branch in isolation, and never add a mocking or assertion library.
+  Behaviour beyond the smoke suite is proven by the conformance package or by
+  acceptance on a deployed host. `test/README.md` repeats this at the suite.
 - **Errors.** Fail closed. Throw `fail(statusCode, message)` from
   `src/store/errors.mjs`; messages are host-authored and safe to return, never
   provider bodies, model output or credentials.
