@@ -107,6 +107,9 @@ python3 scripts/deploy-host.py lock
 python3 scripts/deploy-host.py deploy
 ```
 
+`deploy` deploys the API host and then the public companion. To redeploy the
+companion on its own:
+
 ```bash
 python3 scripts/deploy-host.py public
 ```

@@ -157,7 +157,11 @@ keeps created resource ids in `.env.deploy-state.json`. Nothing
 installation-specific is tracked; see [verification](verification.md). Every
 Cloudflare API call runs under the cf CLI's own sign-in (`cf auth login`; no
 wrangler sign-in is needed), and `cf deploy` receives the runtime secrets
-through a fifo.
+through a fifo. `deploy` deploys the API host and then the public companion
+from the same checkout, so a change to either Worker's configuration reaches
+both; `public` repeats the companion alone. Both logs under
+`TIMDS_DEPLOY_DIR` begin with the checkout's commit and whether it carried
+uncommitted changes, and the helper prints the same in its result.
 
 ```sh
 python3 scripts/deploy-host.py deploy
@@ -214,8 +218,9 @@ npm --prefix public-worker run deploy
 
 The companion is `${TIMDS_WORKER_NAME}-public`. It has only the `PublicRoots`
 service binding and receives no API/OAuth/provider secrets. For redeployment,
-repeat the API command with the preserved environment and current secret file;
-deploy the companion when its own code/configuration changes.
+repeat the API command with the preserved environment and current secret file
+and deploy the companion when its own code/configuration changes. The helper's
+`deploy` action does both in that order.
 
 ### Public-facing domains and client handoff
 

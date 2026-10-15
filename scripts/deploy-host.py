@@ -4,6 +4,9 @@ Usage, from any checkout or worktree of this repository:
 
     python3 scripts/deploy-host.py import-secrets|resources|catalog|lock|deploy|public
 
+`deploy` deploys the API host and then the public companion from the same
+checkout, so a change to either configuration reaches both; `public` repeats
+the companion alone. Each log starts with the checkout's commit.
 Nothing installation-specific lives in this file. The checkout's private,
 gitignored, owner-only `.env` holds both the nonsecret installation record
 (account, Worker name, origins, Access audience, designer principal, Artifacts
@@ -52,6 +55,15 @@ def environment():
  e.update({k:CONFIG[k] for k in INSTALLATION if CONFIG.get(k) is not None})
  e.update({'TIMDS_AGENT_PUSH_QUEUE_ID':CONFIG.get('TIMDS_AGENT_PUSH_QUEUE_ID') or s.get('queueId','')})
  return e
+def checkout():
+ # What is being deployed: the checkout's commit, and whether it carries uncommitted changes.
+ try:
+  head=subprocess.run(['git','-C',str(ROOT),'rev-parse','HEAD'],capture_output=True,text=True,check=True).stdout.strip()
+  dirty=bool(subprocess.run(['git','-C',str(ROOT),'status','--porcelain','--untracked-files=no'],capture_output=True,text=True,check=True).stdout.strip())
+  return {'commit':head,'dirty':dirty}
+ except (OSError,subprocess.CalledProcessError):return {'commit':None,'dirty':None}
+def public_deploy():
+ result=cf(['deploy'],parse=False,cwd=ROOT/'public-worker');(WORK/'public-deploy.log').write_text(json.dumps(checkout())+'\n'+result);print(json.dumps({'publicDeploy':True,**checkout(),'urls':re.findall(r'https://[^\s\x1b]+workers.dev',result)}))
 def cf(args,parse=True,extra=None,stdin=None,pass_fds=(),cwd=ROOT):
  e=environment();e.update(extra or {});r=subprocess.run([str(ROOT/'node_modules/.bin/cf'),*args],env=e,cwd=cwd,capture_output=True,text=True,input=stdin,pass_fds=pass_fds)
  if r.returncode:
@@ -102,12 +114,16 @@ if __name__=='__main__':
   try:
    env=environment();proc=subprocess.Popen([str(ROOT/'node_modules/.bin/cf'),'deploy','--secrets-file',str(pipe)],env=env,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
    with (WORK/'deploy.log').open('w') as log:
+    log.write(json.dumps(checkout())+'\n')
     for line in proc.stdout:
      for secret in [*values.values(),*credentials()]:
       if secret:line=line.replace(secret,'[REDACTED]')
      log.write(line);log.flush()
-   code=proc.wait();print(json.dumps({'deployExit':code,'log':str(WORK/'deploy.log')}))
+   code=proc.wait();print(json.dumps({'deployExit':code,**checkout(),'log':str(WORK/'deploy.log')}))
    if code:raise SystemExit(code)
   finally:pipe.unlink(missing_ok=True)
+  # The companion carries its own configuration and service binding to this
+  # host; a host deploy alone leaves it on its previous build.
+  public_deploy()
  elif action=='public':
-  result=cf(['deploy'],parse=False,cwd=ROOT/'public-worker');(WORK/'public-deploy.log').write_text(result);print(json.dumps({'publicDeploy':True,'urls':re.findall(r'https://[^\s\x1b]+workers.dev',result)}))
+  public_deploy()
