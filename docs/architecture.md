@@ -609,6 +609,15 @@ these checks; it would surface as a different stamp on the next publication.
   `publication_stage` feed rows. The container size for all three runs is
   `TIMDS_BUILD_INSTANCE_TYPE` (default `standard-2`), see
   [`operations.md`](operations.md).
+- **Failure diagnostic.** A failed stage stores the allowlisted diagnostic of
+  its error (`operation`, the container or host `stage` label, `errorClass`,
+  `fault`, optional `statusCode`) and any cleanup diagnostic on the checkpoint.
+  The publication view returns them as `diagnostic` and `cleanupDiagnostic`,
+  null until a stage fails, so a reader can tell a git fetch timeout from a
+  failed toolkit check without the dashboard. `error` stays the host-authored
+  message. The Workflow retries the stage; a later success does not clear the
+  diagnostic, so a published row can still show the retried attempt's failure,
+  and the next failure replaces it.
 
 Configure explicit bounded transient retries/backoff and timeouts per step.
 Treat deterministic validation, grant denial, CAS and named check failures as
