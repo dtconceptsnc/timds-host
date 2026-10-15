@@ -48,6 +48,7 @@ work in the repository and which checks apply to a change.
 | [design-system-creation.md](design-system-creation.md) | You create a native Design System in Studio, resume provisioning or change the built-in starter API. |
 | [operations-designer-batch.md](operations-designer-batch.md) | You run concurrent designer Requests against a disposable system with `scripts/run-designer-batch.mjs`. |
 | [publication-queue-recovery.md](publication-queue-recovery.md) | A publication is waiting or interrupted and you need the queue and recovery rules. |
+| [session-start-performance.md](session-start-performance.md) | You measure start, first reads, eager live wake and bounded repository retention on an explicitly authorized disposable source. |
 | [submission-recovery.md](submission-recovery.md) | A submission was interrupted and you need to resume its reservation. |
 | [workers-subdomain-rename.md](workers-subdomain-rename.md) | The account's Workers subdomain changed and origins must be redeployed. |
 

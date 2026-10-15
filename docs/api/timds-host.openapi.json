@@ -146,7 +146,7 @@
       "post": {
         "operationId": "startSession",
         "summary": "Start or recover a hosted editing session",
-        "description": "Reserves a 24-hour session and returns the complete source tree at its pinned baseRevision. The reply may have status starting and an empty liveUrl while the fork and live preview finish in the background. Reusing an idempotency key while starting returns the same session and pinned tree; a changed origin fails. Snapshot, update and submit wait up to 20 seconds for the fork before returning a starting 409. Source access is rechecked.",
+        "description": "Reserves a 24-hour session and returns the complete source tree at its pinned baseRevision. The reply may have status starting and an empty liveUrl while the fork and live preview finish in the background. Reusing an idempotency key while starting returns the same session and pinned tree; a changed origin fails. Snapshot reads the pinned tree while starting when it fits the direct Artifacts budget. Update, submit and snapshot container fallbacks wait up to 45 seconds for the fork before returning a starting 409. Source access is rechecked.",
         "tags": [
           "Sessions"
         ],
@@ -321,7 +321,7 @@
             "$ref": "#/components/responses/HostError"
           }
         },
-        "description": "A starting session waits up to 20 seconds for its fork before returning the existing starting 409. Authorization and the session lease are checked again before reading the fork."
+        "description": "A starting session returns the tree at its pinned start revision directly from Artifacts, with the same 200 combined tree-read/file-entry budget as start. Larger trees and symlinks fall back to the container after waiting up to 45 seconds for the fork. Source access is rechecked before returning the pinned reference; authorization and the session lease are checked before fork reads."
       }
     },
     "/api/timds/sessions/{sessionId}/status": {
@@ -500,7 +500,7 @@
       "post": {
         "operationId": "submitSession",
         "summary": "Freeze a submission and preview",
-        "description": "Up to 4,000 changed/deleted paths and 10 MiB decoded changes (16 MiB JSON transport). A 200 result may contain stale=true or conflicts and no submission; the fork is not mutated by a stale write. Pull/reapply and retry against the returned session.baseRevision. Conflict choices are bound to mainRevision. Child submissions integrate into their draft; they do not publish main. A starting session waits up to 20 seconds for its fork before returning the existing starting 409; authorization and the session lease are checked again before writing.",
+        "description": "Up to 4,000 changed/deleted paths and 10 MiB decoded changes (16 MiB JSON transport). A 200 result may contain stale=true or conflicts and no submission; the fork is not mutated by a stale write. Pull/reapply and retry against the returned session.baseRevision. Conflict choices are bound to mainRevision. Child submissions integrate into their draft; they do not publish main. A starting session waits up to 45 seconds for its fork before returning the existing starting 409; authorization and the session lease are checked again before writing.",
         "tags": [
           "Sessions"
         ],
@@ -568,7 +568,7 @@
       "post": {
         "operationId": "updateSession",
         "summary": "Reconcile an editing session with its target",
-        "description": "Up to 4,000 changed/deleted paths and 10 MiB decoded changes (16 MiB JSON transport). A 200 result may contain stale=true or conflicts and no submission; the fork is not mutated by a stale write. Pull/reapply and retry against the returned session.baseRevision. Conflict choices are bound to mainRevision. Child submissions integrate into their draft; they do not publish main. A starting session waits up to 20 seconds for its fork before returning the existing starting 409; authorization and the session lease are checked again before writing.",
+        "description": "Up to 4,000 changed/deleted paths and 10 MiB decoded changes (16 MiB JSON transport). A 200 result may contain stale=true or conflicts and no submission; the fork is not mutated by a stale write. Pull/reapply and retry against the returned session.baseRevision. Conflict choices are bound to mainRevision. Child submissions integrate into their draft; they do not publish main. A starting session waits up to 45 seconds for its fork before returning the existing starting 409; authorization and the session lease are checked again before writing.",
         "tags": [
           "Sessions"
         ],
@@ -1353,7 +1353,7 @@
       "get": {
         "operationId": "snapshotDraft",
         "summary": "Read a draft snapshot for source-authorized integration",
-        "description": "A starting draft waits up to 20 seconds for its fork before returning the existing starting 409. Waiting leaves the coordinator queue free; source authorization and the operation lease are checked before reading.",
+        "description": "A starting draft waits up to 45 seconds for its fork before returning the existing starting 409. Waiting leaves the coordinator queue free; source authorization and the operation lease are checked before reading.",
         "tags": [
           "Drafts"
         ],
@@ -5117,20 +5117,37 @@
           },
           "startRecovery": {
             "type": "object",
-            "description": "Durable progress of background fork and live provisioning, including at most five automatic attempts and host-authored failure information. An explicit start retry renews the failed or exhausted preparation budget when its lease is no longer active.",
+            "description": "Durable progress of independent fork, host and fork-dependent live provisioning, each with at most five automatic attempts. An explicit start retry renews failed or exhausted preparation when its lease is inactive. Wake issuance is recorded before subscription completion.",
             "properties": {
               "fork": {
                 "$ref": "#/components/schemas/SessionStartRecoveryPhase"
               },
               "live": {
                 "$ref": "#/components/schemas/SessionStartRecoveryPhase"
+              },
+              "host": {
+                "$ref": "#/components/schemas/SessionStartRecoveryPhase"
+              },
+              "wakeIssued": {
+                "type": "boolean"
+              },
+              "wakeIssuedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "additionalProperties": false
           },
           "startBackgroundPhases": {
             "type": "object",
-            "description": "Milliseconds spent in the latest completed background fork and live provisioning attempts, separate from the response startPhases.",
+            "description": "Milliseconds in the latest observed fork, host and live attempts and their stages. Stages: repository-prepare, repository-boot, repository-git, repository-complete, repository-files, live-configure, live-worker-get (named script settings with ownership tags), live-worker-put, live-subdomain, live-subdomain-lookup, live-subscription and live-wake (resume plus up to 30 seconds confirming actual wake start, concurrent with subscription). Skipped stages are absent; previous observations can remain after retries. Independent stages overlap and totals must not be summed. Workers clocks can under-report CPU-only work.",
             "properties": {
               "fork": {
                 "type": "integer",
@@ -5139,9 +5156,99 @@
               "live": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "host": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "repository-prepare": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "repository-boot": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "repository-git": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "repository-complete": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "repository-files": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "live-configure": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "live-worker-get": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "live-worker-put": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "live-subdomain": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "live-subdomain-lookup": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "live-subscription": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "live-wake": {
+                "type": "integer",
+                "minimum": 0
               }
             },
             "additionalProperties": false
+          },
+          "containerUsage": {
+            "type": "object",
+            "description": "Persisted live runner usage estimates, including the current awake window. Unexpected platform stops are estimated using the bounded idle deadline and counted by interruptedWindowCount. These are host observations, not billing records.",
+            "properties": {
+              "wakeCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "awakeMs": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "idleSleepCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "interruptedWindowCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "awakeMinutes": {
+                "type": "number",
+                "minimum": 0
+              },
+              "awakeSince": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": true
           }
         },
         "additionalProperties": true

@@ -56,6 +56,8 @@ export TIMDS_DESIGNER_MODEL='gpt-6-sol'
 export TIMDS_STUDIO_FRAME_ORIGINS='https://*.<workers-subdomain>.workers.dev'
 export TIMDS_LIVE_INSTANCE_TYPE='standard-3' # optional live container size
 export TIMDS_BUILD_INSTANCE_TYPE='standard-2' # optional publication container size
+export TIMDS_REPOSITORY_INSTANCE_TYPE='standard-1' # optional trusted Git container size
+export TIMDS_REPOSITORY_RETENTION_SECONDS='0' # opt-in idle reuse, at most 300 seconds
 ```
 
 `TIMDS_LIVE_INSTANCE_TYPE` sizes each live session container: `standard-1`
@@ -72,6 +74,19 @@ the metadata (release-metadata and stamp) runs. The controlled build is CPU
 bound. A published result carries `timings` with the milliseconds each
 container phase took and whether the dependency cache hit, so compare them
 before and after changing the size. Unknown values fall back to `standard-2`.
+
+`TIMDS_REPOSITORY_INSTANCE_TYPE` sizes trusted Git containers with the same
+values, default `standard-1`. `TIMDS_REPOSITORY_RETENTION_SECONDS` keeps a
+successful ordinary operation's daemon available for the next operation on the
+same source. It defaults to `0` (immediate alarm expiry); positive values are
+rounded down and capped at 300 seconds, and invalid or negative values disable
+reuse. Operations serialize through capability revocation and outbound-policy
+removal before the next operation starts. Failed operations expire immediately;
+publication checkouts keep their separate operation-bound lifetime. Compare
+`repository-prepare`, `repository-boot` and `repository-git` timings on a start
+and its following update before enabling retention or changing instance size.
+The retained idle window consumes container time; defaults remain unchanged
+until deployed measurements justify the cost.
 
 The Worker name must match `[a-z0-9][a-z0-9-]{0,48}`. Both origins are exact
 origins without a path. Use the full HTTPS Access team URL. Before Access exists,
@@ -166,6 +181,37 @@ uncommitted changes, and the helper prints the same in its result.
 ```sh
 python3 scripts/deploy-host.py deploy
 ```
+
+### Measure the installed CLI
+
+After obtaining authorization to run a session against a disposable source,
+use [`scripts/profile-session-start.mjs`](../scripts/profile-session-start.mjs)
+as an opt-in Node preload for the installed toolkit entry point. It preserves
+the CLI's normal authentication and records no arguments, URLs, headers,
+credentials or response content. Keep ordinary CLI output and operational
+receipts in private operator storage outside this public checkout.
+
+```sh
+# Resolve these paths to your host checkout and installed toolkit package.
+export TIMDS_PROFILE_PRELOAD='/absolute/path/to/timds-host/scripts/profile-session-start.mjs'
+export TIMDS_CLI_ENTRY='/absolute/path/to/node_modules/@dtconcepts/timds/bin/timds.mjs'
+node --import "$TIMDS_PROFILE_PRELOAD" "$TIMDS_CLI_ENTRY" start '<disposable-system-id>' --root '/absolute/private/disposable-session'
+node --import "$TIMDS_PROFILE_PRELOAD" "$TIMDS_CLI_ENTRY" pull --root '/absolute/private/disposable-session'
+```
+
+JSON lines marked `timdsClientTiming: 1` go to stderr alongside ordinary CLI
+diagnostics. `request-dispatched` measures Node process startup through CLI
+preflight and authentication until each matching session request leaves;
+`response-headers` and `response-body` measure from dispatch to headers and to
+the consumed JSON body. `processElapsedMs` is time since Node startup and
+`atUnixMs` permits comparing the start body and a following pull body across
+processes. If both calls occur in one process, `first-read-after-start` records
+that gap directly. `client-exit` includes local materialization and cleanup.
+The preload observes global `fetch` and response convenience methods; it does
+not measure shell/npm launcher time, raw body-stream consumers, or completion
+of an editor's subsequent local file read. It neither changes the toolkit
+package nor makes additional requests. A rejected request still emits its
+timing and status without its error payload.
 
 ## Runtime secrets and deployment
 
@@ -535,6 +581,17 @@ rows in the source event feed give the same wake its `waking`, `starting` and
 `ready` timestamps. See [`architecture.md`](architecture.md) "Warm drafts and
 wake" for what each phase covers.
 
+Start diagnostics also expose `startStartedAt`, request `startPhases`, measured
+`startBackgroundPhases`, and `startRecovery` for independent fork, host and
+fork-dependent live jobs. `wakeIssued`/`wakeIssuedAt` record the host's eager
+resume. `containerUsage` persists `wakeCount`, `awakeMs`, `awakeMinutes`,
+`idleSleepCount`, `awakeSince` and `interruptedWindowCount`. The current awake
+window is included. Unexpected platform stops estimate its end using the last
+observation plus the configured idle timeout; these are approximate host
+intervals, not billable container minutes. No diagnostic read starts a runner.
+Use [session-start-performance.md](session-start-performance.md) for the
+cross-client acceptance and performance experiment sequence.
+
 ### Logs and observability
 
 Both `cloudflare.config.ts` files enable Workers Logs (`observability.logs`),
@@ -563,6 +620,7 @@ the allowlist in `src/log.mjs` and this table.
 
 | `event` | Written when |
 | --- | --- |
+| `session_start_step` | A start stage finishes, with `operation` (`session-start` or `session-start-job`), `stage`, `durationMs`, `outcome`, `sourceId` and `sessionId`. `response-files` records body close, error or cancellation and never appears in `Server-Timing`. Retries and independent jobs can emit the same stage again. |
 | `request_failed` | `errorResponse` returns a 5xx. The client sees the generic message; the line carries `errorClass`, `statusCode` and the diagnostic. |
 | `publication_stage` | A publication stage attempt finishes: `outcome` `ok`, `failed` (terminal) or `error` (the Workflow retries), with `stage`, `attempt`, `durationMs`, `sourceId` and `publicationId`. `attempt` comes from the Workflow step context: 1 for the first execution of that step, 2 for its first retry, and so on. Queue waits do not increment it. |
 | `release_reuse` | The release stage could not load the prior release receipt and stages every artifact file (`outcome` `skipped`). |
@@ -577,6 +635,19 @@ the `cloudflare-workers` dataset; `$metadata.service` is the Worker name:
 ```bash
 npx cf o11y telemetry query --body '{"queryId":"timds-logs","view":"events","limit":50,"timeframe":{"from":1760400000000,"to":1760486400000},"parameters":{"datasets":["cloudflare-workers"],"filters":[{"key":"$metadata.service","operation":"eq","type":"string","value":"timds-example"},{"key":"event","operation":"eq","type":"string","value":"publication_stage"}]}}'
 ```
+
+To inspect one session, substitute its UUID and a relevant time range in this
+query. The all-zero UUID is only an example; keep real queries and results in
+private operator storage. Filter `stage` as well when comparing attempts.
+
+```bash
+npx cf o11y telemetry query --body '{"queryId":"timds-session-start","view":"events","limit":100,"timeframe":{"from":1792022400000,"to":1792108800000},"parameters":{"datasets":["cloudflare-workers"],"filters":[{"key":"event","operation":"eq","type":"string","value":"session_start_step"},{"key":"sessionId","operation":"eq","type":"string","value":"00000000-0000-0000-0000-000000000000"}]}}'
+```
+
+Conditional stages are absent when skipped; diagnostics keep the latest
+observed value of each stage across retries. Concurrent stage durations and
+parent totals overlap. Workers clocks advance across I/O, so CPU-only work
+inside a stage may be under-reported.
 
 Every invocation is one `cf-worker-event` record with its request, response
 status, entrypoint, Durable Object class, outcome and CPU time; the `console`

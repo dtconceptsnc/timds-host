@@ -24,6 +24,28 @@ without timing telemetry still conforms. The current host emits a nonempty
 timing header. Local contract tests cover both start routes, missing and present
 telemetry, rejected empty values, and continued mandatory cache-header checks.
 
+The live run records `sessionStarts` timing evidence for the pinned HTTP
+provider and remote MCP client: invocation to network dispatch, invocation to
+complete start receipt, and start receipt to the first file read completing.
+These numbers measure the harness client, including its response validation;
+they do not measure a `timds` CLI process launch, its filesystem preflight, or
+an MCP application's tool scheduling. Those need separate client-side capture.
+MCP lists and reads an authored file immediately after start, then HTTP pulls
+the same pinned revision and bytes without polling for `open`. The HTTP draft
+child starts likewise pull immediately and preserve the pinned draft revision.
+Each main start used for publication sends an HTTP or MCP submit as its very
+next network request, with no intervening pull or readiness wait; both the
+delay before submit and its duration are retained.
+
+When diagnostics advertises `startRecovery.wakeIssued`, the initial session is
+polled until its eager live wake is ready and background preparation has
+finished, before any frame is opened or viewer keepalive is sent. Its numeric
+background stages, wake phases and container-use counters are retained in the
+evidence. Missing additive telemetry on an older v1 host is recorded as
+`telemetry-unavailable`; it is not reported as observed eager-wake acceptance.
+The live test does not enforce the issue's estimated latency targets. Operators
+compare the recorded durations before and after each deployed change.
+
 The [designer MCP surface](../docs/api/designer-mcp.md) is exercised through a
 separate MCP transport against `/api/timds/mcp` using the same fixture and
 credentials. Its contribution receipts are checked alongside the HTTP flow;
@@ -121,7 +143,8 @@ ordinary approved lifecycle after examining the results.
 
 ## What the live run proves
 
-1. Explicit source access and publisher grant; start idempotency and pull.
+1. Explicit source access and publisher grant; start idempotency, immediate
+   HTTP/MCP file-read parity and, when advertised, eager wake without a viewer.
 2. Nonexpiring named drafts, draft listing/snapshot, a real second-principal
    invitation/join, advisory claim overlaps, stale-revision rejection, and
    stale-hash rejection even when the base revision is current.
@@ -195,8 +218,9 @@ recover a `failed` or errored `closing` receipt, while still requiring final
 Observed failure states, stages and timestamps remain in redacted evidence;
 the harness does not trigger retries or retain free-text host errors.
 Redacted JSON evidence in ignored `artifacts/<run UUID>.json`
-contains operation/status counts, publication IDs/versions, phase names, and
-cleanup outcomes. It never records credentials, HTTP bodies or source files.
+contains operation/status counts, session-start durations and numeric runtime
+diagnostics, publication IDs/versions, phase names, and cleanup outcomes. It
+never records credentials, HTTP bodies or source files.
 Phase names in the evidence indicate phases entered; only `passed: true`
 indicates full acceptance.
 

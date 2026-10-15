@@ -1,6 +1,6 @@
 import { sessionIdPattern } from '../../runtime/policy.mjs';
 import { safeRequestDiagnostic } from '../requests/diagnostics.mjs';
-const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
+import { fail } from '../store/errors.mjs';
 // One keepalive window; the Studio client re-sends `viewing` every five minutes.
 export const WATCH_MS = 30*60_000;
 
@@ -23,6 +23,52 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
   async function configure(session) {
     if(session.source_id!==sourceId)throw fail(409,'Live source identity mismatch');
     return native(session.id).configure(session.id,{sourceId,expiresAt:session.expires_at});
+  }
+  // Host preparation needs no fork and can overlap repository.start. Keep its
+  // URL private until the coordinator checkpoints both independent jobs.
+  async function ensureHost(session,source,{authorize = async()=>{},signal,step = (_stage,run)=>run()} = {}) {
+    if(!configured)return {live_host_url:'',sandbox_id:'',live_state:'unavailable'};
+    if(source.id!==sourceId || session.source_id!==sourceId)throw fail(409,'Live source identity mismatch');
+    const check=async()=>{signal?.throwIfAborted();await authorize();signal?.throwIfAborted();};
+    await check();const status=await step('live-configure',()=>configure(session));
+    await check();const url=await hosts.ensure(session,source,{signal,authorize:check,step});
+    return {live_host_url:url,sandbox_id:session.id,live_state:status.state || 'sleeping'};
+  }
+  // Fork completion need not wait for the Worker. Confirm the alarm actually
+  // began its wake while subscription provisioning runs, without awaiting ready.
+  async function ensureFork(session,source,{authorize = async()=>{},signal,step = (_stage,run)=>run(),wakeIssued = async()=>{}} = {}) {
+    if(!configured)return {sandbox_id:'',live_state:'unavailable'};
+    if(source.id!==sourceId || session.source_id!==sourceId)throw fail(409,'Live source identity mismatch');
+    const check=async()=>{signal?.throwIfAborted();await authorize();signal?.throwIfAborted();await owned(session.id);};
+    // Either job can reach configure first; it must be idempotent and preserve
+    // an already requested wake when the other job arrives later.
+    await check();await step('live-configure',()=>configure(session));
+    let issuedAt=session.live_wake_issued_at;
+    const wake=async()=>{
+      const prior=issuedAt?await native(session.id).status():null;
+      if(prior?.wakeStartedAt)return prior;
+      return step('live-wake',async()=>{
+        await check();await mark(session.id);let status=await native(session.id).resume(session.id);
+        if(!issuedAt){issuedAt=new Date(clock()).toISOString();await check();await wakeIssued(issuedAt);}
+        const receiptSignal=signal?AbortSignal.any([signal,AbortSignal.timeout(30_000)]):AbortSignal.timeout(30_000);
+        while(!status?.wakeStartedAt){
+          await check();
+          if(['closing','closed'].includes(status?.state))throw fail(410,'Live session closed before wake');
+          if(receiptSignal.aborted)throw fail(503,'Live session wake did not begin');
+          await new Promise(resolve=>setTimeout(resolve,250));
+          let abort;
+          try{status=await Promise.race([native(session.id).status(),new Promise((_,reject)=>{abort=()=>reject(fail(503,'Live session wake did not begin'));receiptSignal.addEventListener('abort',abort,{once:true});if(receiptSignal.aborted)abort();})]);}
+          finally{if(abort)receiptSignal.removeEventListener('abort',abort);}
+        }
+        return status;
+      });
+    };
+    // Keep both branches inside the provisioning lease even when one fails;
+    // a late subscription response must not outlive a failed job's authority.
+    const completed=await Promise.allSettled([wake(),(async()=>{await check();return subscriptions.ensure(session,source,{signal,authorize:check,step});})()]);
+    const failed=completed.find(result=>result.status==='rejected');if(failed)throw failed.reason;
+    await check();const status=await native(session.id).status();
+    return {sandbox_id:session.id,live_state:status.state==='sleeping'?'waking':status.state || 'waking',live_wake_issued_at:issuedAt};
   }
   async function remove(session,source) {
     if(session.source_id!==sourceId || source.id!==sourceId)throw fail(409,'Live source identity mismatch');
@@ -49,7 +95,7 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
       const {session}=await owned(id,{open:false,fork:false});
       const recovery=prefix=>({pending:Boolean(session[`${prefix}_pending`]),attempts:session[`${prefix}_attempts`]||0,nextAttemptAt:session[`${prefix}_retry_at`]||null,error:session[`${prefix}_error`]||'',diagnostic:safeRequestDiagnostic(session[`${prefix}_diagnostic`])});
       const runtime=configured?await native(id).diagnostics():{state:'unavailable'};
-      return {...runtime,startStartedAt:session.start_started_at||null,startPhases:session.start_phases||{},startBackgroundPhases:session.start_background_phases||{},startRecovery:{fork:recovery('start'),live:recovery('live')}};
+      return {...runtime,startStartedAt:session.start_started_at||null,startPhases:session.start_phases||{},startBackgroundPhases:session.start_background_phases||{},startRecovery:{fork:recovery('start'),host:recovery('live_host'),live:recovery('live'),wakeIssued:Boolean(session.live_wake_issued_at),wakeIssuedAt:session.live_wake_issued_at||null}};
     },
     waking:id=>mark(id,'waking'),
     // A viewer that waits for a wake which then never starts sees `sleeping` again.
@@ -69,14 +115,12 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
       if(status?.state==='sleeping' && (opened?status.reported!=='none':status.reported==='sleeping')){await mark(id,'waking');await native(id).resume(id);return {...status,waking:true};}
       return status;
     },
-    async ensure(session,source,{authorize = async()=>{},signal} = {}) {
-      if(!configured)return {live_url:'',sandbox_id:'',live_state:'unavailable'};
-      if(source.id!==sourceId || session.source_id!==sourceId)throw fail(409,'Live source identity mismatch');
-      const check=async()=>{signal?.throwIfAborted();await authorize();};
-      await check();await subscriptions.ensure(session,source,{signal,authorize:check});
-      await check();const status=await configure(session);
-      await check();const url=await hosts.ensure(session,source,{signal,authorize:check});
-      return {live_url:url,sandbox_id:session.id,live_state:status.state || 'sleeping'};
+    ensureHost,
+    ensureFork,
+    async ensure(session,source,options = {}) {
+      const host=await ensureHost(session,source,options);
+      const fork=await ensureFork({...session,...host},source,options);
+      return {...host,...fork,live_url:host.live_host_url};
     },
     async credentials({sessionId}) {
       const {session,source}=await owned(sessionId);
@@ -99,7 +143,7 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
     },
     async close(session,source) {
       await remove(session,source);
-      await store.updateSession(session.id,{live_state:'closed',live_url:'',sandbox_id:'',live_pending:false,live_lease_token:null,live_lease_expires_at:null});
+      await store.updateSession(session.id,{live_state:'closed',live_url:'',live_host_url:'',sandbox_id:'',live_pending:false,live_lease_token:null,live_lease_expires_at:null,live_host_pending:false,live_host_lease_token:null,live_host_lease_expires_at:null});
     },
     // A close can finish while deferred provisioning is in flight. Repeat its
     // deterministic remote cleanup without changing the terminal session row.

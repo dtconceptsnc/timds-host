@@ -15,7 +15,7 @@ const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const QUEUE_WAIT_LIMIT=720;
 export function publicationStoreProxy(coordinator){return new Proxy({}, {get:(_target,name)=>(...args)=>coordinator.publicationStore(name,args)});}
 export function publicationServices(ctx,env,coordinator,lease){
- const store=publicationStoreProxy(coordinator),repository=createRepositoryAdapter({store,getSandbox:id=>ctx.exports.RepositorySandbox.getByName(id),snapshotBucket:env.SNAPSHOTS});
+ const store=publicationStoreProxy(coordinator),repository=createRepositoryAdapter({store,getSandbox:id=>ctx.exports.RepositorySandbox.getByName(id),snapshotBucket:env.SNAPSHOTS,env});
  // The current pointer's immutable release receipt, so the published-branch
  // push can reuse unchanged blobs. Reuse is an optimisation: a pointer on a
  // legacy artifact layout or an unreadable receipt means no reuse, not failure.

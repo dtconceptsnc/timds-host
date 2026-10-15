@@ -33,13 +33,24 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   // Fail, rather than skip or silently select a real system, when unconfigured.
   const config = readConfiguration();
   const runId = randomUUID(), short = runId.slice(0, 8), resources = createRunResources(config);
-  const evidence = { suiteVersion: 1, toolkitVersion: '0.1.464', host: config.url, sourceId: config.sourceId, runId, startedAt: new Date().toISOString(), passed: false, operations: {}, publications: [], publicationRetries: [], checks: [], cleanup: [] };
+  const evidence = { suiteVersion: 1, toolkitVersion: '0.1.464', host: config.url, sourceId: config.sourceId, runId, startedAt: new Date().toISOString(), passed: false, operations: {}, sessionStarts: [], publications: [], publicationRetries: [], checks: [], cleanup: [] };
   const onResponse = ({ operationId, status }) => { const key = `${operationId}:${status}`; evidence.operations[key] = (evidence.operations[key] || 0) + 1; };
-  const client = createConformanceClient({ url: config.url, token: config.token, onResponse, onCreatedSession: resources.onCreatedSession, onPublicationAttempt: resources.onPublicationAttempt, onAcceptedPublication: resources.onAcceptedPublication });
+  const pendingStarts = new Map();
+  const onDispatch = client => ({ operationId }) => { const pending = pendingStarts.get(client); if (pending && ['startSession', 'mcp:start_session'].includes(operationId)) pending.evidence.invocationToDispatchMs = performance.now() - pending.invokedAt; };
+  const client = createConformanceClient({ url: config.url, token: config.token, onDispatch: onDispatch('http-provider'), onResponse, onCreatedSession: resources.onCreatedSession, onPublicationAttempt: resources.onPublicationAttempt, onAcceptedPublication: resources.onAcceptedPublication });
   const member = createConformanceClient({ url: config.url, token: config.memberToken, onResponse });
-  const mcp = createMcpConformanceClient({ url: config.url, token: config.token, timeoutMs: config.timeoutMs, onResponse, onCreatedSession: resources.onCreatedSession, onPublicationAttempt: resources.onPublicationAttempt, onAcceptedPublication: resources.onAcceptedPublication });
+  const mcp = createMcpConformanceClient({ url: config.url, token: config.token, timeoutMs: config.timeoutMs, onDispatch: onDispatch('mcp'), onResponse, onCreatedSession: resources.onCreatedSession, onPublicationAttempt: resources.onPublicationAttempt, onAcceptedPublication: resources.onAcceptedPublication });
   const memberMcp = createMcpConformanceClient({ url: config.url, token: config.memberToken, timeoutMs: config.timeoutMs, onResponse });
   const tracked = resources.trackedSession;
+  const measuredStart = async (client, start) => {
+    const invokedAt = performance.now(), timing = { client };
+    evidence.sessionStarts.push(timing); pendingStarts.set(client, { invokedAt, evidence: timing });
+    try {
+      const result = tracked(await start()), returnedAt = performance.now();
+      Object.assign(timing, { sessionId: result.session.id, invocationToResponseMs: returnedAt - invokedAt, returnedStatus: result.session.status });
+      return { result, timing, returnedAt, readCompleted: () => { timing.responseToFirstFileReadMs = performance.now() - returnedAt; } };
+    } finally { pendingStarts.delete(client); }
+  };
   const phase = name => { t.diagnostic(name); evidence.checks.push(name); };
   const waitFor = async (name, read, accepted, failed) => {
     const deadline = Date.now() + config.timeoutMs;
@@ -109,9 +120,20 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   assert.equal((await mcp.call('get_active_work', { systemId: config.systemId })).sourceId, config.sourceId);
   assert.equal((await mcp.call('get_events', { systemId: config.systemId, after: 0, limit: 1 })).latestSeq, feedStart);
   const input = { systemId: config.systemId, idempotencyKey: `conformance:${runId}:start`, note: `Conformance ${short}: inspect disposable fixture` };
-  const started = tracked(await mcp.call('start_session', input));
+  const mcpStart = await measuredStart('mcp', () => mcp.call('start_session', input)), started = mcpStart.result;
   assert.equal(started.files, undefined, 'MCP session receipts do not dump source files');
+  // Read immediately: neither the MCP agent nor the HTTP pull client polls
+  // open, opens a frame, or sends a viewer keepalive before these requests.
+  const filePage = await mcp.call('list_session_files', { sessionId: started.session.id, limit: 1 });
+  assert.equal(filePage.files.length, 1, 'fixture has an authored file');
+  const firstFile = await mcp.call('read_session_file', { sessionId: started.session.id, path: filePage.files[0].path });
+  mcpStart.readCompleted();
+  assert.equal(filePage.session.baseRevision, started.session.baseRevision, 'immediate MCP listing keeps the start revision');
+  assert.equal(firstFile.session.baseRevision, started.session.baseRevision, 'immediate MCP file read keeps the start revision');
   const initial = await client.pull(started.session.id);
+  assert.equal(initial.session.baseRevision, started.session.baseRevision, 'immediate HTTP pull agrees with the MCP start revision');
+  const firstFileBytes = Buffer.from(initial.files.find(file => file.path === firstFile.file.path).content, 'base64');
+  assert.deepEqual(Buffer.from(firstFile.file.content, firstFile.file.encoding === 'base64' ? 'base64' : 'utf8'), firstFileBytes.subarray(0, firstFile.file.length), 'MCP and HTTP return the same pinned authored bytes');
   assert.match(jsonFile(initial, 'timds.json').name, /^TimDS conformance\b/i, 'fixture manifest name must begin "TimDS conformance"; refuse production-source changes');
   assert.equal(jsonFile(initial, 'timds.json').systemId, config.systemId);
   assert.equal(jsonFile(initial, '.timds/contract-layout.json').schemaVersion, 1, 'fixture requires grouped token contracts');
@@ -119,13 +141,20 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   assert.equal((await mcp.call('start_session', input)).session.id, initial.session.id, 'MCP retries reuse the same session as the CLI HTTP client');
   assert.equal((await mcp.call('get_session', { sessionId: initial.session.id })).session.baseRevision, initial.session.baseRevision);
   assert.equal((await client.pull(initial.session.id)).session.baseRevision, initial.session.baseRevision);
-  const filePage = await mcp.call('list_session_files', { sessionId: initial.session.id, limit: 1 });
   assert.equal(filePage.returned, 1); assert.equal(filePage.files.length, 1);
   assert.equal(filePage.files[0].content, undefined, 'file directory contains metadata without file content');
   assert.ok(filePage.nextAfter, 'fixture source has more than one file');
   const nextPage = await mcp.call('list_session_files', { sessionId: initial.session.id, after: filePage.nextAfter, limit: 1 });
   assert.ok(nextPage.files[0].path > filePage.files[0].path, 'file pagination advances through stable source paths');
   await assert.rejects(mcp.call('read_session_file', { sessionId: initial.session.id, path: '../timds.json' }), error => error.status === 400, 'MCP source reads reject traversal');
+  const initialDiagnostics = await client.diagnostics(initial.session.id).catch(error => { if (error.status === 404) return null; throw error; });
+  // Eager wake is additive: old v1 hosts may omit the new recovery field.
+  // The diagnostic read itself must never start a container.
+  if (typeof initialDiagnostics?.startRecovery?.wakeIssued === 'boolean') {
+    const eager = await waitFor('eager live wake without a viewer', () => client.diagnostics(initial.session.id), value => value.startRecovery?.wakeIssued && value.wakeStartedAt && value.state === 'ready' && !['fork', 'host', 'live'].some(phase => value.startRecovery?.[phase]?.pending), value => value.state === 'failed' || ['fork', 'host', 'live'].some(phase => value.startRecovery?.[phase]?.pending && value.startRecovery[phase].attempts >= 5 && !value.startRecovery[phase].nextAttemptAt));
+    const durations = value => Object.fromEntries(Object.entries(value || {}).filter(([, ms]) => typeof ms === 'number' && Number.isFinite(ms) && ms >= 0));
+    mcpStart.timing.eagerWake = { observed: true, startBackgroundPhases: durations(eager.startBackgroundPhases), wakePhases: durations(eager.wakePhases), containerUsage: durations(eager.containerUsage) };
+  } else mcpStart.timing.eagerWake = { observed: false, reason: 'telemetry-unavailable' };
   phase('MCP authored workspace policy and media catalogue');
   assert.ok((await mcp.call('get_editing_guide')).guide.includes('run_check'));
   const workspace = await mcp.call('describe_workspace', { sessionId: initial.session.id });
@@ -240,7 +269,12 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   assert.deepEqual(jsonFile(await client.pull(draft.session.id), tokenPath), ownerChange);
 
   phase('Different-key merge, same-key conflict and revision-bound resolution');
-  const openChild = suffix => client.start({ systemId: config.systemId, draft: draftName, idempotencyKey: `conformance:${runId}:${suffix}`, note: `Conformance ${short}: ${suffix}` }).then(tracked);
+  const openChild = async suffix => {
+    const start = await measuredStart('http-provider', () => client.start({ systemId: config.systemId, draft: draftName, idempotencyKey: `conformance:${runId}:${suffix}`, note: `Conformance ${short}: ${suffix}` }));
+    const pulled = await client.pull(start.result.session.id); start.readCompleted();
+    assert.equal(pulled.session.baseRevision, start.result.session.baseRevision, 'immediate HTTP pull keeps the pinned draft-origin revision');
+    return start.result;
+  };
   const a = await openChild('draft-a'), b = await openChild('draft-b'), c = await openChild('draft-c');
   const upstreamTokens = { ...ownerChange, primary: { value: '#121212' } };
   const integrated = clean(await client.submit(a.session.id, change(a, [encoded(tokenPath, upstreamTokens)], `Conformance ${short}: integrate upstream primary`)));
@@ -294,18 +328,24 @@ test('TimDS v1 complete disposable-host conformance', { timeout: 3_600_000 }, as
   assert.equal((await client.previewTokens(config.sourceId, draft.session.id, 'HEAD')).status, 404);
 
   phase('FIFO publication of two submissions, immutable versions and rollback');
-  const first = tracked(await client.start({ systemId: config.systemId, idempotencyKey: `conformance:${runId}:publish-a`, note: `Conformance ${short}: first publication` }));
-  const second = tracked(await client.start({ systemId: config.systemId, idempotencyKey: `conformance:${runId}:publish-b`, note: `Conformance ${short}: second publication` }));
-  const submitted = [];
-  for (const [index, snapshot] of [first, second].entries()) {
+  const submitted = [], publicationSessions = [];
+  for (const index of [0, 1]) {
+    const start = await measuredStart('http-provider', () => client.start({ systemId: config.systemId, idempotencyKey: `conformance:${runId}:publish-${index}`, note: `Conformance ${short}: publication ${index + 1}` })), snapshot = start.result;
+    publicationSessions.push(snapshot);
     const note = `Conformance ${short}: FIFO publication ${index + 1}`;
     const body = change(snapshot, [encoded(`docs/conformance-${short}-${index}.md`, `${note}\n`)], note);
+    const submitStartedAt = performance.now();
+    start.timing.responseToSubmitMs = submitStartedAt - start.returnedAt;
+    // Submit is the very next network request after this start; a pull or
+    // diagnostic poll must not consume the cold fork's wait before this proof.
     const result = clean(index === 0 ? await mcp.call('submit_session', { sessionId: snapshot.session.id, ...body }) : await client.submit(snapshot.session.id, body));
+    start.timing.immediateSubmitMs = performance.now() - submitStartedAt;
     resources.trackSubmission(result.submission, snapshot.session.id);
     assert.equal((await client.submit(snapshot.session.id, body)).submission.id, result.submission.id, 'retry must reuse the frozen submission');
     if (index === 0) assert.equal((await mcp.call('submit_session', { sessionId: snapshot.session.id, ...body })).submission.id, result.submission.id, 'MCP submit retries preserve the frozen submission');
     submitted.push(result.submission);
   }
+  const [first, second] = publicationSessions;
   await Promise.all(submitted.map(submission => waitFor(`submission Preview ${submission.id}`, () => readPreview(submission.previewUrl), result => result.ready, result => [401, 403].includes(result.status))));
   const preflight = await mcp.call('preflight_submission', { submissionId: submitted[0].id });
   assert.equal(preflight.preflight.submissionId, submitted[0].id); assert.equal(preflight.preflight.currency, 'clean');

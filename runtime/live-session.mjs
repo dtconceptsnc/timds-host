@@ -36,10 +36,29 @@ export class LiveSessionRuntime {
   idleTimeout(){return this.record()?.idleTimeoutMs||idleMs;}
   run(){return this.ctx.storage.kv.get('task');}
   save(patch){const value={...this.record(),...patch};this.ctx.storage.kv.put('live',value);return value;}
+  // Persist intervals, not a timer: a DO may hibernate while its container runs.
+  // Platform stops have no durable stop timestamp. Bound their estimated end
+  // by the idle deadline, and expose those intervals separately from exact ones.
+  usage(now=Date.now(),{idle=false}={}){
+    const live=this.record(),running=this.ctx.container?.running;
+    let usage=live?.containerUsage||{wakeCount:0,awakeMs:0,idleSleepCount:0,interruptedWindowCount:0,awakeSince:null,lastObservedAt:null};
+    if(usage.awakeSince!==null&&!running){const stoppedAt=Math.min(now,(usage.lastObservedAt??usage.awakeSince)+this.idleTimeout());usage={...usage,awakeMs:usage.awakeMs+Math.max(0,stoppedAt-usage.awakeSince),awakeSince:null,lastObservedAt:null,idleSleepCount:usage.idleSleepCount+(idle?1:0),interruptedWindowCount:usage.interruptedWindowCount+1};}
+    // An already-running container upgraded from an older runtime has no
+    // baseline. Start observing it now without claiming a new wake occurred.
+    if(running)usage={...usage,awakeSince:usage.awakeSince??now,lastObservedAt:now};
+    if(live)this.save({containerUsage:usage});return usage;
+  }
+  beginUsage(now){const usage=this.record()?.containerUsage||this.usage(now);this.save({containerUsage:{...usage,wakeCount:usage.wakeCount+1,awakeSince:now,lastObservedAt:now}});}
+  usageDiagnostics(){const now=Date.now(),usage=this.usage(now),awakeMs=usage.awakeMs+(usage.awakeSince===null?0:Math.max(0,now-usage.awakeSince));return{wakeCount:usage.wakeCount,awakeMs,awakeMinutes:awakeMs/60_000,idleSleepCount:usage.idleSleepCount,interruptedWindowCount:usage.interruptedWindowCount,awakeSince:usage.awakeSince===null?null:new Date(usage.awakeSince).toISOString()};}
+  async stopContainer({idle=false}={}){
+    const usage=this.usage(Date.now(),{idle});if(!this.ctx.container?.running)return;
+    await this.ctx.container.destroy();const now=Date.now();
+    this.save({containerUsage:{...usage,awakeMs:usage.awakeMs+Math.max(0,now-usage.awakeSince),awakeSince:null,lastObservedAt:null,idleSleepCount:usage.idleSleepCount+(idle?1:0)}});
+  }
   async schedule(at){const expires=Date.parse(this.record()?.expiresAt);await this.ctx.storage.setAlarm(Number.isFinite(expires)?Math.min(at,expires):at);}
   // While the dev server is still starting, the alarm polls it each second so a
   // wake reports `ready` even when no frame or Request is probing it.
-  async touch(){const now=Date.now(),starting=this.record()?.state==='starting'&&this.ctx.container?.running;this.save({lastActivityAt:now});if(!active(this.run()))await this.schedule(starting?now+1000:now+this.idleTimeout());}
+  async touch(){const now=Date.now(),starting=this.record()?.state==='starting'&&this.ctx.container?.running;this.usage(now);this.save({lastActivityAt:now});if(!active(this.run()))await this.schedule(starting?now+1000:now+this.idleTimeout());}
   // Coordinator keepalive while a feed socket views this session. Storage and
   // alarms only: it never starts a container (resume() requests that).
   async watch({watched,until}={}){
@@ -65,8 +84,16 @@ export class LiveSessionRuntime {
     try{await this.portal(this.env,'live-state',{sessionId:live.id,state,...(requestId?{requestId}:{})});}catch{}
   }
   assertOpen(){const live=this.record();if(!live || ['closed','closing'].includes(live.state) || (live.expiresAt && Date.parse(live.expiresAt)<=Date.now()))throw Object.assign(new Error('Live session is closed'),{status:410});return live;}
-  status(){const live=this.record(),run=this.run();return{state:['closed','closing'].includes(live?.state)?live.state:!this.ctx.container?.running?'sleeping':live?.state||'none',runner:run?{requestId:run.requestId,state:run.state,...(run.submissionId?{submissionId:run.submissionId}:{}),...(run.error?{error:run.error}:{}),...(run.diagnostics?{diagnostics:safeTaskDiagnostics(run.diagnostics)}:{}),...(run.conflicts?{conflicts:run.conflicts}:{})}:null};}
-  async configure(id,{expiresAt=null,idleTimeoutMs,interruptCleanupOnce}={}){if(!sessionIdPattern.test(id))throw new Error('Invalid session');if(['closed','closing'].includes(this.record()?.state))throw Object.assign(new Error('Closed'),{status:410});if(expiresAt!==null&&!Number.isFinite(Date.parse(expiresAt)))throw new Error('Invalid expiry');if(idleTimeoutMs!==undefined&&(!Number.isInteger(idleTimeoutMs)||idleTimeoutMs<60_000||idleTimeoutMs>idleMs))throw new Error('Idle timeout must be between one and ten minutes');if(interruptCleanupOnce!==undefined&&typeof interruptCleanupOnce!=='boolean')throw new Error('Invalid cleanup interruption');if(interruptCleanupOnce&&(!expiresAt||!this.ctx.container?.running))throw new Error('Cleanup interruption requires a running finite session');this.save({id,expiresAt,...(idleTimeoutMs===undefined?{}:{idleTimeoutMs}),...(interruptCleanupOnce===undefined?{}:{interruptCleanupOnce}),state:this.record()?.state||'sleeping'});if(this.ctx.container?.running)await this.ctx.container.setInactivityTimeout(this.idleTimeout());if(active(this.run())||this.ctx.container?.running||expiresAt)await this.schedule(active(this.run())?Date.now()+1000:this.ctx.container?.running?Date.now()+this.idleTimeout():Date.parse(expiresAt));else await this.ctx.storage.deleteAlarm();return this.status();}
+  status(){const live=this.record(),run=this.run();return{state:['closed','closing'].includes(live?.state)?live.state:!this.ctx.container?.running?'sleeping':live?.state||'none',...(live?.wakeStartedAt?{wakeStartedAt:new Date(live.wakeStartedAt).toISOString()}:{}),runner:run?{requestId:run.requestId,state:run.state,...(run.submissionId?{submissionId:run.submissionId}:{}),...(run.error?{error:run.error}:{}),...(run.diagnostics?{diagnostics:safeTaskDiagnostics(run.diagnostics)}:{}),...(run.conflicts?{conflicts:run.conflicts}:{})}:null};}
+  async configure(id,{expiresAt=null,idleTimeoutMs,interruptCleanupOnce}={}){
+    if(!sessionIdPattern.test(id))throw new Error('Invalid session');if(['closed','closing'].includes(this.record()?.state))throw Object.assign(new Error('Closed'),{status:410});if(expiresAt!==null&&!Number.isFinite(Date.parse(expiresAt)))throw new Error('Invalid expiry');if(idleTimeoutMs!==undefined&&(!Number.isInteger(idleTimeoutMs)||idleTimeoutMs<60_000||idleTimeoutMs>idleMs))throw new Error('Idle timeout must be between one and ten minutes');if(interruptCleanupOnce!==undefined&&typeof interruptCleanupOnce!=='boolean')throw new Error('Invalid cleanup interruption');if(interruptCleanupOnce&&(!expiresAt||!this.ctx.container?.running))throw new Error('Cleanup interruption requires a running finite session');
+    this.save({id,expiresAt,...(idleTimeoutMs===undefined?{}:{idleTimeoutMs}),...(interruptCleanupOnce===undefined?{}:{interruptCleanupOnce}),state:this.record()?.state||'sleeping'});this.usage();if(this.ctx.container?.running)await this.ctx.container.setInactivityTimeout(this.idleTimeout());
+    // Host provisioning and fork completion can configure concurrently. Never
+    // postpone resume's immediate alarm or the existing readiness/task poll.
+    const priorAlarm=await this.ctx.storage.getAlarm(),live=this.record(),running=this.ctx.container?.running,now=Date.now();
+    const next=live.wakeRequested?now:active(this.run())||running&&live.state==='starting'?now+1000:running?now+this.idleTimeout():expiresAt?Date.parse(expiresAt):null;
+    if(next!==null)await this.schedule(priorAlarm===null?next:Math.min(priorAlarm,next));else await this.ctx.storage.deleteAlarm();return this.status();
+  }
   async command(args,cwd='/workspace'){
     const result=await(await this.ctx.container.exec(args,{cwd,env:trust})).output();
     if(result.exitCode!==0){
@@ -93,12 +120,12 @@ export class LiveSessionRuntime {
     throw new Error('Live supervisor did not become ready');
   }
   async wake(){
-    this.assertOpen();const container=this.ctx.container;if(!container)throw new Error('Missing live container');
+    this.assertOpen();const container=this.ctx.container;if(!container)throw new Error('Missing live container');this.usage();
     if(container.running){if(this.record().pendingPush&&!active(this.run()))await this.sync();await this.ensureServer();return;}
     try {
     const wakeStartedAt=Date.now(),instance=this.instanceType();let since=wakeStartedAt;
     this.save({startupError:null,restoredRevision:null,syncedRevision:null,dependencyCache:null,wakeStartedAt,wakePhases:{},instance});await this.report('starting');const credential=await this.credential();this.phase('credential',since);
-    since=Date.now();container.start({image:container.images.agent,instance,enableInternet:false});await container.setInactivityTimeout(this.idleTimeout());
+    since=Date.now();container.start({image:container.images.agent,instance,enableInternet:false});this.beginUsage(since);await container.setInactivityTimeout(this.idleTimeout());
     // The backup host must be registered before the catch-all intercept takes every later hostname.
     const backup=this.dependencyBackup();if(backup)await backup.intercept();
     await this.intercept(credential);
@@ -116,7 +143,7 @@ export class LiveSessionRuntime {
     since=Date.now();await this.command(['mkdir','-p','/workspace/task']);
     await this.ensureServer();this.phase('server',since);
     await this.touch();
-    }catch(error){this.save({startupError:startupDiagnostic(error)});if(container.running)await container.destroy();await this.report('failed');throw error;}
+    }catch(error){this.save({startupError:startupDiagnostic(error)});await this.stopContainer();await this.report('failed');throw error;}
   }
   dependencyBackup(){return this.DirectoryBackup&&this.ctx.exports?.DirectoryBackupGateway&&this.env?.SNAPSHOTS?new this.DirectoryBackup(this.ctx.container,this.ctx.exports.DirectoryBackupGateway,{binding:'SNAPSHOTS',prefix:'dependency-cache/objects/'}):null;}
   // Live dependency cache: the lockfile-keyed R2 archive the publication build
@@ -195,7 +222,7 @@ export class LiveSessionRuntime {
       const probe={mode:input.fetchProbe,ok:output.exitCode===0,elapsedMs:Date.now()-started,exitCode:Number.isInteger(output.exitCode)?output.exitCode:null,...(output.exitCode===0?{}:{reason:commandFailureReason(output.stderr),packDetails:packFailureDetails(output.stderr)})};
       this.save({fetchProbe:probe});await this.touch();return this.diagnostics();
     });
-    const result={...this.status(),...(this.record()?.restoredRevision?{restoredRevision:this.record().restoredRevision}:{}),...(this.record()?.startupError?{startupError:this.record().startupError}:{}),...(this.record()?.commandFailure?{commandFailure:this.record().commandFailure}:{}),...(this.record()?.dependencyCache?{dependencyCache:this.record().dependencyCache}:{}),...(this.record()?.instance?{instance:this.record().instance}:{}),...(this.record()?.wakeStartedAt?{wakeStartedAt:new Date(this.record().wakeStartedAt).toISOString()}:{}),...(this.record()?.wakePhases?{wakePhases:this.record().wakePhases}:{}),...(typeof this.record()?.originMatches==='boolean'?{originMatches:this.record().originMatches}:{})};if(!this.ctx.container?.running)return result;
+    const result={...this.status(),containerUsage:this.usageDiagnostics(),...(this.record()?.restoredRevision?{restoredRevision:this.record().restoredRevision}:{}),...(this.record()?.startupError?{startupError:this.record().startupError}:{}),...(this.record()?.commandFailure?{commandFailure:this.record().commandFailure}:{}),...(this.record()?.dependencyCache?{dependencyCache:this.record().dependencyCache}:{}),...(this.record()?.instance?{instance:this.record().instance}:{}),...(this.record()?.wakeStartedAt?{wakeStartedAt:new Date(this.record().wakeStartedAt).toISOString()}:{}),...(this.record()?.wakePhases?{wakePhases:this.record().wakePhases}:{}),...(typeof this.record()?.originMatches==='boolean'?{originMatches:this.record().originMatches}:{})};if(!this.ctx.container?.running)return result;
     if(this.record()?.fetchProbe)result.fetchProbe=this.record().fetchProbe;
     if(this.record()?.commandFailure?.reason==='pack'&&!active(this.run())){const checked=await(await this.ctx.container.exec(['git','fsck','--connectivity-only','--no-reflogs'],{cwd:'/workspace/repo',env:trust})).output();result.connectivityOk=checked.exitCode===0;}
     try{const file=await new this.Files(this.ctx.container).readFile('/workspace/task/live-dev-status.json');if(file.size>16*1024)return result;const value=JSON.parse(await file.text());
@@ -236,7 +263,7 @@ export class LiveSessionRuntime {
       if(now<deadline){await this.schedule(deadline);return;}
       // A watched session outlives the idle rule until its watch lapses.
       if(current?.watchedUntil>now&&this.ctx.container?.running){await this.schedule(Math.min(current.watchedUntil,now+this.idleTimeout()));return;}
-      if(this.ctx.container?.running)await this.ctx.container.destroy();await this.report('sleeping');if(current?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(current.expiresAt));return;
+      await this.stopContainer({idle:true});await this.report('sleeping');if(current?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(current.expiresAt));return;
     }
     let taskDiagnostics;
     try{
@@ -267,7 +294,7 @@ export class LiveSessionRuntime {
         if(response.status<500&&response.status!==429)throw new Error('Submission rejected');
       }
       await this.schedule(Date.now()+1000);
-    }catch{this.ctx.storage.kv.put('task',{...run,state:'failed',...(taskDiagnostics?{diagnostics:taskDiagnostics}:{}),error:'The Request failed or exceeded its time limit'});if(this.ctx.container?.running)await this.ctx.container.destroy();await this.report('failed',run.requestId);if(this.record()?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(this.record().expiresAt));}
+    }catch{this.ctx.storage.kv.put('task',{...run,state:'failed',...(taskDiagnostics?{diagnostics:taskDiagnostics}:{}),error:'The Request failed or exceeded its time limit'});await this.stopContainer();await this.report('failed',run.requestId);if(this.record()?.expiresAt)await this.ctx.storage.setAlarm(Date.parse(this.record().expiresAt));}
   });}
   async fetch(request){
     let phase='wake';
@@ -283,7 +310,7 @@ export class LiveSessionRuntime {
       this.save({interruptCleanupOnce:false,cleanupPending:true,state:'closing'});
       await this.ctx.storage.setAlarm(Date.now()+30_000);
     }
-    if(running)await this.ctx.container.destroy();
+    await this.stopContainer();
     if(interrupt&&running){console.info({stage:'cleanup',sessionId:this.record().id,intentionalInterruption:true});throw Object.assign(new Error('Intentional cleanup interruption after container destruction'),{statusCode:503});}
   }
   async beginClose(id=this.record()?.id){
@@ -293,5 +320,5 @@ export class LiveSessionRuntime {
     await this.ctx.storage.setAlarm(Date.now()+30_000);await this.destroyForCleanup();
     return{state:'closing'};
   }
-  async close(){await this.ctx.storage.deleteAlarm();if(this.ctx.container?.running)await this.ctx.container.destroy();this.ctx.storage.kv.delete('task');this.save({state:'closed',cleanupPending:false});return{state:'closed'};}
+  async close(){await this.ctx.storage.deleteAlarm();await this.stopContainer();this.ctx.storage.kv.delete('task');this.save({state:'closed',cleanupPending:false});return{state:'closed'};}
 }

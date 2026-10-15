@@ -46,7 +46,7 @@ export class SystemCoordinator extends DurableObject {
     this.preview=createPreviews({env});
     let requestService;
     this.engine=createCoordinator({sourceId,storage:ctx.storage,catalog:this.catalog,
-      repository:store=>this.repository=createRepositoryAdapter({artifacts:this.artifacts,store,getSandbox:id=>ctx.exports.RepositorySandbox.getByName(id),snapshotBucket:env.SNAPSHOTS,
+      repository:store=>this.repository=createRepositoryAdapter({artifacts:this.artifacts,store,getSandbox:id=>ctx.exports.RepositorySandbox.getByName(id),snapshotBucket:env.SNAPSHOTS,env,
         ensurePreview:source=>this.preview.ensure(source),previewUrl:(source,branch)=>this.preview.url(source,branch),deletePreview:(source,branch)=>this.preview.remove(source,branch)}),
       authorization:({store,catalog})=>{
         this.store=store;
@@ -66,7 +66,7 @@ export class SystemCoordinator extends DurableObject {
           return {detected:true,sessionId:session.id};
         }}),
       onSessionReserved:(session,source)=>requestService.live.schedule(session,source),
-      onSessionStarted:(session,source)=>requestService.live.ensure(session,source),
+      onSessionStarted:(session,source,options)=>requestService.live.ensure(session,source,options),
       cleanupAgentSession:(session,source)=>requestService.live.close(session,source),
       nextLifecycleAlarm:()=>this.store?.deletionFence()?this.deletion?.nextAlarm():this.media?.nextAlarm(),
     });

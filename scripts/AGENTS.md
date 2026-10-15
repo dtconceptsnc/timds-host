@@ -24,6 +24,11 @@ request for a specific target in the current conversation:
 - `access-plan.mjs`: produces reviewable Access configuration; writes nothing.
 - `run-designer-batch.mjs`: creates real Requests and can publish; incurs
   model charges. Disposable systems only (`../docs/operations-designer-batch.md`).
+- `profile-session-start.mjs`: opt-in Node `--import` timing preload for the
+  installed toolkit CLI. The preload sends no requests itself, but the profiled
+  `timds start` and `pull` commands act on a real source and local destination;
+  obtain explicit fixture authorization first. Timing output contains only
+  fixed labels, times, status and attempt counts. See `../docs/operations.md`.
 - `backfill-published-artifacts.mjs`: defaults to a read-only inventory;
   `--help` describes the write modes (`../docs/migration/artifact-backfill.md`).
 - `prepare-preview-source.mjs`: defaults to a plan; `--apply` installs pins

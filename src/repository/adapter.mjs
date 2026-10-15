@@ -1,16 +1,21 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {isFileTree,treeFiles,readTreeManifest,safeSessionTreePath,ARTIFACTS_TREE_KIND,ARTIFACTS_TREE_READ_LIMIT} from './file-trees.mjs';
 import {safeRequestDiagnostic} from '../requests/diagnostics.mjs';
+import {repositoryRetentionSeconds,reusableRepositoryMethods,repositoryPhases} from './settings.mjs';
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
 const methods = new Set(['provisionFiles','readSource','start','snapshot','stale','submit','update','mergeIntoDraft','history','close','merge','preparePublication','commitSource','pushMain','priorPublished','pushPublished','releaseCheckout','stagePublished','stageSource','removeSource']);
 /** Native binding adapter. The coordinator injects its local authoritative store. */
-export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBucket,ensurePreview=async()=>{},previewUrl=()=>'',deletePreview=async()=>{}}) {
+export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBucket,env,ensurePreview=async()=>{},previewUrl=()=>'',deletePreview=async()=>{}}) {
   async function call(source,method,args=[],operationId=randomUUID()) {
-    const response=await getSandbox(operationId).run(source.id,{operationId,method,source:{id:source.id,...(source.lifecycleOperationId?{lifecycleOperationId:source.lifecycleOperationId,lifecycleLease:source.lifecycleLease}:{})},args});
+    const sharedSource=Boolean(snapshotBucket&&repositoryRetentionSeconds(env)&&reusableRepositoryMethods.has(method)&&!source.lifecycleOperationId);
+    let timingOperation;
+    if(method==='start'){const {timingOperation:operation,...input}=args[0]||{};timingOperation=operation==='session-start-job'?'session-start-job':'session-start';args=[input,...args.slice(1)];}
+    const response=await getSandbox(sharedSource?`source:${source.id}`:operationId).run(source.id,{operationId,method,...(sharedSource?{sharedSource:true}:{}),...(timingOperation?{timingOperation}:{}),source:{id:source.id,...(source.lifecycleOperationId?{lifecycleOperationId:source.lifecycleOperationId,lifecycleLease:source.lifecycleLease}:{})},args});
     const data=await response.json().catch(()=>({}));
-    if(!response.ok||data.ok!==true)throw Object.assign(fail(response.status===200?502:response.status,data.error?.message||'Hosted repository operation failed'),data.error?.conflicts?{conflicts:data.error.conflicts,mainRevision:data.error.mainRevision}:{},safeRequestDiagnostic(data.error?.requestDiagnostic)?{requestDiagnostic:safeRequestDiagnostic(data.error.requestDiagnostic)}:{},safeRequestDiagnostic(data.error?.cleanupDiagnostic)?{cleanupDiagnostic:safeRequestDiagnostic(data.error.cleanupDiagnostic)}:{});
-    return data.result;
+    const phases=repositoryPhases(data.repositoryPhases);
+    if(!response.ok||data.ok!==true)throw Object.assign(fail(response.status===200?502:response.status,data.error?.message||'Hosted repository operation failed'),{repositoryPhases:phases},data.error?.conflicts?{conflicts:data.error.conflicts,mainRevision:data.error.mainRevision}:{},safeRequestDiagnostic(data.error?.requestDiagnostic)?{requestDiagnostic:safeRequestDiagnostic(data.error.requestDiagnostic)}:{},safeRequestDiagnostic(data.error?.cleanupDiagnostic)?{cleanupDiagnostic:safeRequestDiagnostic(data.error.cleanupDiagnostic)}:{});
+    return Object.keys(phases).length&&data.result&&typeof data.result==='object'&&!Array.isArray(data.result)?{...data.result,repositoryPhases:phases}:data.result;
   }
   async function revoke(namespace,repository) { let tokens;try{tokens=await artifacts.listTokens(namespace,repository);}catch(error){if(error.statusCode===404)return;throw error;}for(const token of tokens)await artifacts.revokeToken(namespace,token.id,repository); }
   async function control(input) {

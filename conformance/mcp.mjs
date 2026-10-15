@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 const protocolVersion = '2025-03-26';
 
 /** Exercise the remote MCP boundary without importing the host or its SDK. */
-export function createMcpConformanceClient({ url, token, publicRead = false, fetchImpl = fetch, timeoutMs = 120_000, onResponse = () => {}, onCreatedSession = () => {}, onPublicationAttempt = () => {}, onAcceptedPublication = () => {} }) {
+export function createMcpConformanceClient({ url, token, publicRead = false, fetchImpl = fetch, timeoutMs = 120_000, onDispatch = () => {}, onResponse = () => {}, onCreatedSession = () => {}, onPublicationAttempt = () => {}, onAcceptedPublication = () => {} }) {
   const origin = new URL(url).origin, endpoint = `${origin}${publicRead ? '/mcp' : '/api/timds/mcp'}`;
   let sequence = 0, negotiatedVersion = protocolVersion;
   const rpc = async (method, params, notification = false) => {
     const id = notification ? undefined : ++sequence;
     const publishing = method === 'tools/call' && params.name === 'publish_submission';
     if (publishing) await onPublicationAttempt(params.arguments.submissionId);
+    onDispatch({ operationId: `mcp:${method === 'tools/call' ? params.name : method}` });
     const response = await fetchImpl(endpoint, {
       method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
       headers: { Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json', 'MCP-Protocol-Version': negotiatedVersion, ...(!publicRead && token ? { Authorization: `Bearer ${token}` } : {}) },

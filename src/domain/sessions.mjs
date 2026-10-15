@@ -2,6 +2,7 @@
 // Portal identity/router/Supabase defaults removed; store, repository and authorization are injected.
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { logEvent } from '../log.mjs';
 import { sessionFilePath, parseSessionResolution } from './paths.mjs';
 
 export const TIMDS_HOST_API_VERSION = 1;
@@ -179,7 +180,9 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
   }
   // A wait never holds the operation lease or the coordinator mutation queue:
   // the alarm needs both to finish the fork. The actual write rechecks authority.
-  async function waitUntilOpen(read, { timeoutMs = 20_000 } = {}) {
+  // The recorded cold fork is about 25 s; leave bounded headroom for its
+  // authority checks and queueing before returning the existing retryable 409.
+  async function waitUntilOpen(read, { timeoutMs = 45_000 } = {}) {
     const deadline = performance.now() + timeoutMs;
     while (true) {
       const session = await read();
@@ -205,9 +208,10 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
         const draft = await store.get(currentSession.draft_session_id);
         if (!draft || draft.source_id !== source.id || draft.status !== 'open') throw fail(409, 'The session’s draft origin is no longer open');
       }
+      if (patch.start_background_phases) patch = { ...patch, start_background_phases: { ...currentSession.start_background_phases, ...patch.start_background_phases } };
       if (background && patch.start_phases) {
         const current = await store.get(id);
-        patch = { ...patch, start_background_phases: { ...current.start_background_phases, fork: patch.start_phases.fork } };
+        patch = { ...patch, start_background_phases: { ...current.start_background_phases, ...patch.start_background_phases, fork: patch.start_phases.fork } };
         delete patch.start_phases;
       }
       return store.checkpoint(id, lease, patch, null, audit);
@@ -218,19 +222,37 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
         const originDraft = row.draft_session_id ? await store.get(row.draft_session_id) : null;
         if (row.draft_session_id && (!originDraft || originDraft.source_id !== source.id || originDraft.status !== 'open')) throw fail(409, 'The session’s draft origin is no longer open');
         const began = performance.now();
-        const result = await repository.start(source, { sessionId: row.id, fromRepository: originDraft?.fork_repository || source.artifacts_repository, fromRevision: row.start_revision || row.origin_revision });
+        const result = await repository.start(source, { sessionId: row.id, fromRepository: originDraft?.fork_repository || source.artifacts_repository, fromRevision: row.start_revision || row.origin_revision, timingOperation: background ? 'session-start-job' : 'session-start' });
         if (row.start_revision && result.baseRevision !== row.start_revision) throw fail(409, 'Session fork does not match its reserved revision');
         files = result.files;
-        row = await save({ fork_repository: result.forkRepository, token_id: result.tokenId || '', base_revision: result.baseRevision, start_revision: row.start_revision || result.baseRevision, expires_at: row.kind === 'draft' ? null : result.expiresAt || row.expires_at, status: 'open', start_pending: false, start_retry_at: null, start_error: '', start_diagnostic: null, live_pending: true, live_retry_at: new Date(now()).toISOString(), start_phases: { ...row.start_phases, fork: Math.round(performance.now() - began) } });
+        row = await save({ fork_repository: result.forkRepository, token_id: result.tokenId || '', base_revision: result.baseRevision, start_revision: row.start_revision || result.baseRevision, expires_at: row.kind === 'draft' ? null : result.expiresAt || row.expires_at, status: 'open', start_pending: false, start_retry_at: null, start_error: '', start_diagnostic: null, live_pending: true, live_retry_at: new Date(now()).toISOString(), start_background_phases: result.repositoryPhases || {}, start_phases: { ...row.start_phases, fork: Math.round(performance.now() - began) } });
       }
       if (live && onSessionStarted && (row.live_pending || !row.live_url)) {
-        if (row.live_lease_token && Date.parse(row.live_lease_expires_at) > now()) throw fail(409, 'This session is busy; retry when its current operation finishes');
+        if (['live','live_host'].some(prefix => row[`${prefix}_lease_token`] && Date.parse(row[`${prefix}_lease_expires_at`]) > now())) throw fail(409, 'This session is busy; retry when its current operation finishes');
         const began = performance.now();
         if (onSessionReserved) await onSessionReserved(row, source);
-        const patch = await onSessionStarted(row, source);
-        row = await save({ ...patch, live_pending: false, live_retry_at: null, live_error: '', live_diagnostic: null, start_phases: { ...row.start_phases, live: Math.round(performance.now() - began) } }, event(actor, 'live_state', { session_id: id, details_json: { state: patch.live_state || 'sleeping' } }));
+        const step=async(stage,task)=>{
+          const started=performance.now();let outcome='ok';
+          try{return await task();}catch(error){outcome='error';throw error;}
+          finally{
+            const durationMs=Math.round(performance.now()-started);
+            logEvent({event:'session_start_step',operation:background?'session-start-job':'session-start',stage,durationMs,outcome,sourceId:source.id,sessionId:id});
+            try{await save({start_background_phases:{[stage]:durationMs}});}
+            catch(error){
+              // Timing persistence must not replace the stage's original failure.
+              if(outcome==='ok')throw error;
+            }
+          }
+        };
+        const patch = await onSessionStarted(row, source, {step,authorize:()=>save({}),wakeIssued:at=>save({live_wake_issued_at:at})});
+        row = await save({ ...patch, live_host_pending: false, live_host_retry_at: null, live_host_error: '', live_host_diagnostic: null, live_pending: false, live_retry_at: null, live_error: '', live_diagnostic: null, start_phases: { ...row.start_phases, live: Math.round(performance.now() - began) } }, event(actor, 'live_state', { session_id: id, details_json: { state: patch.live_state || 'sleeping' } }));
       }
       return output(row, source, { ...(files ? { files, conflicts: [] } : {}), _startTiming: row.start_phases });
+    } catch (error) {
+      try {
+        if (error?.repositoryPhases) await save({ start_background_phases: error.repositoryPhases });
+      } catch { /* Preserve the repository failure if its timing checkpoint fails. */ }
+      throw error;
     } finally { await runMutation(() => store.release(id, lease)); }
   }
   async function start(actor, input, { synchronous = false } = {}) {
@@ -262,9 +284,9 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     if (session.status !== 'starting') {
       // Recover an old open receipt whose synchronous live provisioning failed,
       // and let an explicit retry renew an exhausted automatic live attempt.
-      if (session.status === 'open' && !session.live_url && !(session.live_lease_token && Date.parse(session.live_lease_expires_at) > now())) {
+      if (session.status === 'open' && !session.live_url && !['live','live_host'].some(prefix => session[`${prefix}_lease_token`] && Date.parse(session[`${prefix}_lease_expires_at`]) > now())) {
         await owned(session.id, actor);
-        session = await store.updateSession(session.id, { live_pending: true, live_retry_at: startedAt, live_attempts: 0, live_error: '', live_diagnostic: null });
+        session = await store.updateSession(session.id, { live_pending: true, live_retry_at: startedAt, live_attempts: 0, live_error: '', live_diagnostic: null, live_host_pending: true, live_host_retry_at: startedAt, live_host_attempts: 0, live_host_error: '', live_host_diagnostic: null });
       }
       if (synchronous) { const liveBegan = performance.now(); await finishStart(actor, session.id); phases.live = Math.round(performance.now() - liveBegan); }
       const streamBegan = performance.now(), result = await snapshot(actor, session.id);
@@ -282,12 +304,13 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     // A replay can read the immutable origin while the alarm holds the fork
     // lease. It neither starts a second fork nor changes that lease's receipt.
     if (session.start_revision && repository.startTree && !synchronous) {
-      const tree = await repository.startTree(source, { sessionId: session.id, fromRepository: await origin(session), fromRevision: session.start_revision });
+      const tree = await startTree(source, { sessionId: session.id, fromRepository: await origin(session), fromRevision: session.start_revision });
       if (tree.files) {
         phases.stream = Math.round(performance.now() - began) - phases.reserve;
         // Only telemetry changes on replay; the fork lease and pinned origin stay intact.
         await owned(session.id, actor);
         if (store.updateSession) session = await store.updateSession(session.id, { start_started_at: startedAt, start_phases: phases,
+          ...(!(session.live_host_lease_token && Date.parse(session.live_host_lease_expires_at) > now()) && session.live_host_pending ? { live_host_retry_at: startedAt, live_host_attempts: 0, live_host_error: '', live_host_diagnostic: null } : {}),
           ...(!(session.lease_token && Date.parse(session.lease_expires_at) > now()) ? { start_pending: true, start_retry_at: startedAt, start_attempts: 0, start_error: '', start_diagnostic: null } : {}) });
         return output(session, source, { files: tree.files, conflicts: [], _startTiming: phases });
       }
@@ -298,14 +321,14 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     } else {
       await leased(session.id, async (row, checkpoint) => {
         const fromRepository = await origin(row), streamBegan = performance.now();
-        const tree = repository.startTree ? await repository.startTree(source, { sessionId: row.id, fromRepository, fromRevision: row.origin_revision }) : null;
+        const tree = repository.startTree ? await startTree(source, { sessionId: row.id, fromRepository, fromRevision: row.origin_revision }) : null;
         phases.stream = Math.round(performance.now() - streamBegan);
         files = tree?.files;
         const claimBegan = performance.now();
         if (input.on?.length || input.patterns?.length) await claim(actor, row.id, { patterns: input.on || input.patterns, note: input.note || '' });
         phases.claim = Math.round(performance.now() - claimBegan);
         await owned(row.id, actor);
-        session = await checkpoint({ ...(tree ? { start_revision: tree.baseRevision, base_revision: tree.baseRevision } : {}), start_pending: true, live_pending: true, start_retry_at: new Date(now()).toISOString(), start_started_at: startedAt, start_phases: phases });
+        session = await checkpoint({ ...(tree ? { start_revision: tree.baseRevision, base_revision: tree.baseRevision } : {}), start_pending: true, live_pending: true, live_host_pending: true, live_host_retry_at: new Date(now()).toISOString(), start_retry_at: new Date(now()).toISOString(), start_started_at: startedAt, start_phases: phases });
       });
     }
     if (files && !synchronous) return output(session, source, { files, conflicts: [], _startTiming: phases });
@@ -316,7 +339,24 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     return result;
   }
 
+  async function startTree(source, input) {
+    const began=performance.now();let outcome='ok';
+    try { return await repository.startTree(source,input); }
+    catch(error) { outcome='error';throw error; }
+    finally { logEvent({event:'session_start_step',operation:'session-start',stage:'tree-artifacts',durationMs:performance.now()-began,outcome,sourceId:source.id,sessionId:input.sessionId}); }
+  }
+  // Pinned reads do not acquire the fork lease or join its writer queue.
+  async function pinnedSnapshot(actor, id) {
+    const {source,session}=await owned(id,actor);
+    if(session.status!=='starting'||!session.start_revision||!repository.startTree)return null;
+    const tree=await startTree(source,{sessionId:id,fromRevision:session.start_revision});
+    if(!tree.files)return null;
+    if(tree.baseRevision!==session.start_revision)throw fail(409,'Session snapshot revision changed');
+    await owned(id,actor);
+    return output(session,source,{files:tree.files,conflicts:[]});
+  }
   async function snapshot(actor, id) {
+    const pinned=await pinnedSnapshot(actor,id);if(pinned)return pinned;
     const { source } = await owned(id, actor);
     return leased(id, async (session, checkpoint) => {
       if (session.status !== 'open') throw fail(409, 'Session is still starting; retry start with the same idempotency key');
@@ -415,7 +455,7 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     if (!publication || !['closing','failed'].includes(publication.status) || !publication.checkpoints_json?.pointerEventId || !session || publication.source_id !== session.source_id || !(await store.submissions(sessionId)).some(row => row.id === publication.submission_id && row.source_id === publication.source_id)) throw fail(409, 'Publication cleanup does not match this session');
     return close({ operator: true, system: true, userId: publication.actor_user_id, principalId: publication.actor_principal_id, requestId: publication.originating_request_id, tokenId: null }, sessionId, false, publicationId);
   }
-  return { activeWork, sourceEvents, join, claim, createDraft, listDrafts, draftSnapshot, closeDraft, previewTokens, start, finishStart, waitForOpen, waitForDraft, snapshot, submit, update, status, history, close, closeForPublication, cleanupExpired };
+  return { activeWork, sourceEvents, join, claim, createDraft, listDrafts, draftSnapshot, closeDraft, previewTokens, start, finishStart, pinnedSnapshot, waitForOpen, waitForDraft, snapshot, submit, update, status, history, close, closeForPublication, cleanupExpired };
 }
 
 // Serve only CSS values, never source text or executable rules from a fork.
