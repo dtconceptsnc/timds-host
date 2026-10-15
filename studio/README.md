@@ -423,7 +423,11 @@ styles, so the CSP is unchanged):
   The 20-second fallback card replaces the bar. While a session is `starting`
   or `waking` and has no live URL yet, the stage shows "Starting the session…"
   or "Waking the session…" instead of the empty fallback; refreshes keep that
-  placeholder in step with the session's state.
+  placeholder in step with the session's state. A newly created session may
+  return its source tree before its fork and live Worker exist. The host's
+  later `live_state` event refreshes active work and session status; when the
+  live URL arrives, Studio replaces the placeholder with the frame without
+  a page reload.
 - **Requests.** A Request this tab has sent but the host has not acknowledged
   yet shows a `sending` badge on its card, and "Sending" as the live step in
   the Studio stream. The feed indicator pulses while connecting or

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import {isFileTree,treeFiles,readTreeManifest} from './file-trees.mjs';
+import {isFileTree,treeFiles,readTreeManifest,safeSessionTreePath,ARTIFACTS_TREE_KIND,ARTIFACTS_TREE_READ_LIMIT} from './file-trees.mjs';
 import {safeRequestDiagnostic} from '../requests/diagnostics.mjs';
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
@@ -58,11 +58,14 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
     let fork, branches=[], result, origin='';
     if(input.method==='start') {
       const row=await session(args[0]?.sessionId), from=row.draft_session_id?await session(row.draft_session_id):null;
-      fork=row.fork_repository;args[0]={sessionId:row.id,fromRepository:from?.fork_repository||main,fromRevision:row.origin_revision||null};
+      if(from&&from.status!=='open')throw fail(409,'Draft repository is unavailable');
+      fork=row.fork_repository;args[0]={sessionId:row.id,fromRepository:from?.fork_repository||main,fromRevision:row.start_revision||row.origin_revision||null};
       if(input.phase==='prepare') {
         let actual=await artifacts.getRepository(ns,fork);const receipt=await store.sessionRepository(row.id);
         if(!actual){
           if(receipt)throw fail(409,'The recorded session fork was removed; it cannot be recreated with another identity');
+          if(from&&(await session(from.id)).status!=='open')throw fail(409,'Draft repository is unavailable');
+          await store.authorizeSessionStart?.(row.id);
           actual=await artifacts.forkRepository(ns,fork,{sourceRepository:args[0].fromRepository});
           if(typeof actual?.id!=='string'||!actual.id)throw fail(502,'Fork creation did not return a provider identity');
           // Preserve only the provider ID from the creation result. A lost
@@ -111,11 +114,48 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
     const repositories=[];
     try {for(const [repository,permission] of caps) {const repo=await artifacts.getRepository(ns,repository);if(!repo?.remote)throw fail(409,'Artifacts repository unavailable');
       if(repository.startsWith('session-')){const receipt=await store.sessionRepository(repository.slice(8));if(receipt&&(receipt.namespace!==ns||receipt.repository!==repository||receipt.repository_id!==String(repo.id)))throw fail(409,'Session fork identity changed');}
+      if(input.method==='start')await store.authorizeSessionStart?.(args[0].sessionId);
       const token=await artifacts.mintToken(ns,repository,{permission,ttlSeconds:300});repositories.push({namespace:ns,repository,repositoryId:String(repo.id),remote:repo.remote,permission,tokenId:token.id,token:token.token,expiresAt:token.expiresAt});}}
     catch(error){for(const repo of repositories)await artifacts.revokeToken(ns,repo.tokenId,repo.repository).catch(()=>{});throw error;}
     return {source,args,previewOrigin:origin,repositories};
   }
   const api={control};
+  api.startTree=async(source,{sessionId,fromRepository,fromRevision}={})=>{
+    const row=await store.get(sessionId),current=await store.getSource(source.id);
+    if(!row||row.source_id!==source.id||!current?.artifacts_namespace||!current.artifacts_repository)throw fail(404,'Hosted source not found');
+    if(['closing','closed','expired'].includes(row.status)||['deleting','deleted'].includes(current.lifecycle_status))throw fail(410,'Session closed');
+    const draft=row.draft_session_id?await store.get(row.draft_session_id):null;
+    if(row.draft_session_id&&(!draft||draft.source_id!==source.id||draft.fork_repository!==`session-${draft.id}`||draft.status!=='open'))throw fail(409,'Draft repository is unavailable');
+    const namespace=current.artifacts_namespace,repository=draft?.fork_repository||current.artifacts_repository,pinned=row.start_revision||row.origin_revision||null;
+    if(fromRepository&&fromRepository!==repository||fromRevision&&fromRevision!==pinned)throw fail(409,'Session start origin changed');
+    const actual=await artifacts.getRepository(namespace,repository),receipt=draft?await store.sessionRepository(draft.id):null,repositoryId=draft?receipt?.repository_id:current.artifacts_repository_id;
+    if(!actual||!repositoryId||String(actual.id)!==String(repositoryId)||draft&&(receipt.namespace!==namespace||receipt.repository!==repository))throw fail(409,'Session start repository identity changed');
+    const commit=pinned?await artifacts.readCommit(namespace,repository,pinned):(await artifacts.log(namespace,repository,{ref:'main',limit:1}))[0];
+    const baseRevision=commit?.hash,root=commit?.tree_hash||commit?.treeHash;
+    if(!/^[a-f0-9]{40}$/.test(baseRevision||'')||pinned&&baseRevision!==pinned||!root||!/^[a-f0-9]{40}$/.test(root))throw fail(409,'Session start revision is unavailable');
+    if(!artifacts.supportsTreeStreaming?.(namespace))return {baseRevision,files:null};
+    const files=[],directories=[{path:'',hash:root}],seen=new Set();let treeReads=0;
+    // A binding read includes acquiring/disposal of the repository handle.
+    // Budget trees together with blobs, leaving headroom for authority reads.
+    while(directories.length){
+      if(treeReads+directories.length+files.length>ARTIFACTS_TREE_READ_LIMIT)return {baseRevision,files:null};
+      const batch=directories.splice(0,4),trees=await Promise.all(batch.map(async directory=>({directory,entries:await artifacts.readTree(namespace,repository,directory.hash)})));treeReads+=batch.length;
+      for(const {directory,entries} of trees){
+        if(!Array.isArray(entries))throw fail(502,'Artifacts source tree is unavailable');
+        for(const entry of entries){
+          if(typeof entry.name!=='string'||entry.name.includes('/')||!/^[a-f0-9]{40}$/.test(entry.hash||''))throw fail(502,'Invalid Artifacts source tree');
+          const path=safeSessionTreePath(directory.path+entry.name);if(seen.has(path))throw fail(502,'Duplicate Artifacts source path');seen.add(path);
+          if(entry.type==='tree'&&['40000','040000'].includes(entry.mode))directories.push({path:path+'/',hash:entry.hash});
+          else if(entry.type==='symlink'&&entry.mode==='120000')return {baseRevision,files:null};
+          else if(entry.type==='blob'&&entry.mode==='100644'||entry.type==='exec'&&entry.mode==='100755')files.push({path,mode:entry.mode,oid:entry.hash});
+          else throw fail(409,'Gitless sessions require plain files and relative links; remove source submodules first');
+          if(treeReads+directories.length+files.length>ARTIFACTS_TREE_READ_LIMIT)return {baseRevision,files:null};
+        }
+      }
+    }
+    files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
+    return {baseRevision,files:{kind:ARTIFACTS_TREE_KIND,namespace,repository,revision:baseRevision,files}};
+  };
   api.tokenFiles=async(source,session)=>{
     const result=await call(source,'snapshot',[session]);
     if(!isFileTree(result.files))return result.files.filter(file=>/^tokens\/.+\.json$/.test(file.path)||file.path==='tokens.json');

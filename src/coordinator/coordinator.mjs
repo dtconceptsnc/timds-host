@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { createDesignSystemSessions } from '../domain/sessions.mjs';
-import { createSqliteCollaborationStore } from '../store/sqlite.mjs';
+import { createSqliteCollaborationStore, SESSION_WORK_MAX_ATTEMPTS } from '../store/sqlite.mjs';
 import { fail, principalId } from '../store/errors.mjs';
 import { readSourceView } from '../source-view.mjs';
-import { requestDiagnostic } from '../requests/diagnostics.mjs';
+import { requestDiagnostic, safeRequestDiagnostic } from '../requests/diagnostics.mjs';
 
 const domainOperations = new Set(['activeWork','sourceEvents','join','claim','createDraft','listDrafts','draftSnapshot','closeDraft','start','snapshot','submit','update','status','history','close']);
 // These domain methods read committed rows and current D1 authority only.
@@ -49,6 +49,13 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     sessionForRequest: store.sessionForRequest, requestReceipt: store.requestReceipt,
     appendEvent: store.appendEvent, eventForHead: store.eventForHead,
     authorizeProvision: input => provisionState(input),
+    authorizeSessionStart: async id => {
+      const row=store.get(id);
+      if(!row||row.source_id!==sourceId||row.status!=='starting'||!row.lease_token||!(Date.parse(row.lease_expires_at)>clock()))throw fail(409,'Session start lease is unavailable');
+      const authority=await backgroundActor(row),current=store.get(id);
+      if(current?.status!=='starting'||current.lease_token!==row.lease_token||!(Date.parse(current.lease_expires_at)>clock()))throw fail(409,'Session start lease changed');
+      return authority;
+    },
   });
   // A factory may capture this direct facade. It must not call a coordinator RPC
   // back into its own held serial queue while a repository operation is running.
@@ -71,6 +78,66 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     if(facts.organizationStatus!=='active')throw fail(409,'Organization is unavailable');
     return {operation,source};
   };
+  const backgroundActor = async row => {
+    if(store.deletionFence())throw fail(410,'This Design System is deleting or deleted');
+    const actor=await activeActor({principalId:row.owner_principal_id,userId:row.owner_user_id,tokenId:row.owner_token_id,requestId:row.originating_request_id});
+    const source=await store.getSource(sourceId);
+    await auth.authorizeSource(source,{...actor,sessionOwned:true},{starting:true});
+    if(!await store.eligible(source) || row.expires_at && Date.parse(row.expires_at)<=clock())throw fail(410,'Session is closed or expired');
+    return {actor,source};
+  };
+  // Forks and live provisioning leave the writer queue free. Durable attempt
+  // deadlines survive eviction; each checkpoint rechecks current authority.
+  const recoverSessionWork = async work => {
+    const prefix=work.phase==='fork'?'start':'live';
+    let claimed;
+    try {
+      const prepared=await serialized(async()=>{
+        if(!store.pendingSessionWork({limit:100}).some(item=>item.sessionId===work.sessionId&&item.phase===work.phase))return null;
+        const row=store.get(work.sessionId),attempts=(row[`${prefix}_attempts`]||0)+1,token=ids();
+        claimed={row,attempts,token};
+        store.updateSession(row.id,{[`${prefix}_attempts`]:attempts,[`${prefix}_retry_at`]:new Date(clock()+(prefix==='start'?900_000:300_000)).toISOString(),
+          ...(prefix==='live'?{live_lease_token:token,live_lease_expires_at:new Date(clock()+300_000).toISOString()}:{})});
+        return {row,...await backgroundActor(row)};
+      });
+      if(!prepared)return {sessionId:work.sessionId,phase:work.phase,status:'skipped'};
+      if(work.phase==='fork')await sessions.finishStart(prepared.actor,work.sessionId,{live:false,background:true,runMutation:serialized});
+      else {
+        const began=performance.now();
+        const liveRow=()=>{
+          const row=store.get(work.sessionId);
+          if(row?.status!=='open'||row.live_lease_token!==claimed.token||Date.parse(row.live_lease_expires_at)<=clock())throw fail(409,'Live provisioning lease changed');
+          return row;
+        };
+        const authorize=()=>serialized(async()=>{await backgroundActor(liveRow());liveRow();});
+        const patch=await requestService.live.ensure(prepared.row,prepared.source,{authorize,signal:AbortSignal.timeout(240_000)});
+        await serialized(async()=>{
+          await backgroundActor(liveRow());
+          const row=liveRow();
+          const state=row.live_state&&!['stopped','unavailable'].includes(row.live_state)?row.live_state:patch.live_state;
+          store.updateSession(row.id,{...patch,live_state:state,live_pending:false,live_retry_at:null,live_error:'',live_diagnostic:null,live_lease_token:null,live_lease_expires_at:null,start_background_phases:{...row.start_background_phases,live:Math.round(performance.now()-began)}});
+          // Even an unchanged sleeping state must repaint the newly arrived URL.
+          store.setLiveState(row.id,state,{expectedStatus:'open',force:true});
+          await store.flushOutbox(100,{requireDrained:false});
+        });
+      }
+      return {sessionId:work.sessionId,phase:work.phase,status:'completed'};
+    } catch(error) {
+      if(!claimed)throw error;
+      const diagnostic=safeRequestDiagnostic(requestDiagnostic(error instanceof Error?error:new Error('Session preparation failed'),'operation','native-repository').requestDiagnostic);
+      const terminal=await serialized(async()=>{
+        const row=store.get(work.sessionId);
+        if(!row||!['starting','open'].includes(row.status)||store.deletionFence())return true;
+        if(prefix==='start' && (row.status!=='starting'||row.start_attempts!==claimed.attempts) || prefix==='live' && row.live_lease_token!==claimed.token)return false;
+        store.updateSession(row.id,{[`${prefix}_error`]:prefix==='start'?'Session fork preparation failed':'Live preview provisioning failed',[`${prefix}_diagnostic`]:diagnostic,
+          [`${prefix}_retry_at`]:claimed.attempts<SESSION_WORK_MAX_ATTEMPTS?new Date(clock()+Math.min(60_000,5_000*2**(claimed.attempts-1))).toISOString():null,
+          ...(prefix==='live'?{live_lease_token:null,live_lease_expires_at:null}:{})});
+        return false;
+      });
+      if(terminal && prefix==='live')await requestService.live.remove(claimed.row,await store.getSource(sourceId));
+      return {sessionId:work.sessionId,phase:work.phase,status:'failed'};
+    }
+  };
   const engine = {
     invoke: ({operation,actor,args = []}) => {
       if(store.deletionFence())throw fail(409,'This Design System is deleting or deleted');
@@ -79,7 +146,7 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
       if (operation === 'liveDiagnostics') return activeActor(actor).then(async verified => {await sessions.status(verified,...args);if(!requestService?.live)throw fail(503,'The live session runner is not configured');return requestService.live.diagnostics(...args);});
       if (!domainOperations.has(operation)) throw fail(404, 'Unknown coordinator operation');
       if (metadataOperations.has(operation)) return activeActor(actor).then(verified => sessions[operation](verified,...args));
-      return serialized(async () => {
+      const invoke=()=>serialized(async () => {
         if(store.deletionFence())throw fail(409,'This Design System is deleting or deleted');
         const result = await sessions[operation](await activeActor(actor),...args);
         // A success response has durable locators/audit; lost projection is safe
@@ -87,6 +154,11 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
         await store.flushOutbox();
         return result;
       });
+      // Poll committed rows before joining the writer queue, otherwise the
+      // waiting caller would prevent its own background fork from checkpointing.
+      if(['snapshot','update','submit'].includes(operation))return activeActor(actor).then(verified=>sessions.waitForOpen(verified,args[0])).then(invoke);
+      if(operation==='draftSnapshot')return activeActor(actor).then(verified=>sessions.waitForDraft(verified,args[0],args[1])).then(invoke);
+      return invoke();
     },
     previewTokens: (...args) => serialized(() => sessions.previewTokens(...args)),
     currentSource: () => store.getSource(sourceId),
@@ -241,15 +313,23 @@ export function createCoordinator({ sourceId, storage, catalog, repository, auth
     }),
     // Called by DO alarm(), without a caller-supplied actor. Idempotent projection
     // and lease-fenced cleanup can resume after eviction and process restart.
-    alarm: () => serialized(async () => {
-      const projection = await store.flushOutbox(100,{requireDrained:false});
-      if(store.deletionFence())return {projection,expired:[],publications:0,deleting:true};
-      const expired = await sessions.cleanupExpired({limit:5});
-      const queued = store.pendingPublications();
-      if (publisher?.recover) for (const row of queued.sort((a,b) => a.queue_position-b.queue_position)) await publisher.recover(row);
-      await store.flushOutbox(100,{requireDrained:false});
-      return {projection,expired,publications:queued.length};
-    }),
+    alarm: async () => {
+      const result=await serialized(async () => {
+        const projection = await store.flushOutbox(100,{requireDrained:false});
+        if(store.deletionFence())return {projection,expired:[],publications:0,deleting:true};
+        const expired = await sessions.cleanupExpired({limit:5});
+        const queued = store.pendingPublications();
+        if (publisher?.recover) for (const row of queued.sort((a,b) => a.queue_position-b.queue_position)) await publisher.recover(row);
+        await store.flushOutbox(100,{requireDrained:false});
+        return {projection,expired,publications:queued.length};
+      });
+      const recovered=[];
+      if(!result.deleting)for(let index=0;index<2;index++){
+        const work=store.pendingSessionWork({limit:1})[0];if(!work)break;
+        recovered.push(await recoverSessionWork(work));
+      }
+      return {...result,recovered};
+    },
     repositoryContext,
     // Local capability for injected services, never exposed as an RPC method.
     runMutation: serialized,

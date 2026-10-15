@@ -17,6 +17,16 @@ the same authorized Request POST can retry a terminal job. `nextAlarm()` must
 participate in the coordinator's next-alarm calculation, including delayed
 retries and leased work that can outlive an isolate.
 
+Untargeted designer Requests use the session domain's internal synchronous
+start option. Normal API starts may return the pinned source tree while their
+fork and live preview are pending; a Request dispatch needs the fork and live
+runner before it can begin model work. The synchronous option keeps that
+dispatch ordering and the same idempotency key, authorization and session
+lease checks. It is not exposed as an API request field.
+Requests targeting a starting session first wait up to 20 seconds for its
+fork outside the coordinator mutation queue, then recheck the session before
+dispatch.
+
 Closing a session or draft cancels its bound queued, leased and running
 dispatch jobs, including the Request that created an untargeted session. The
 session closing hook calls the Request store directly inside the existing
@@ -114,13 +124,17 @@ sleeping session gets the same `waking` row and a `LiveSession.resume()`, which
 wakes from the session's own alarm. Neither path waits for the container in the
 coordinator's writer queue.
 
-Local validation uses real SQLite adapters for reservations, lease takeover,
-bounded retries and durable receipt recovery, with explicit native RPC tests:
+Local validation runs the repository's smoke checks:
 
 ```sh
-node --test test/requests/requests.test.mjs test/live/sessions.test.mjs
+npm run typecheck
+npm run build
+npm test
+npm run check:docs
+npm run check:boundary
 ```
 
-These tests do not establish deployed host conformance. The production portal
-baseline passed; the standalone host still requires `cf dev` and deployed
-execution of the complete conformance harness.
+These checks do not establish deployed Request behavior. A fresh designer
+Request, a Request targeting a newly started session, and the complete
+conformance harness still require acceptance on an explicitly authorized
+deployed host with a disposable source.

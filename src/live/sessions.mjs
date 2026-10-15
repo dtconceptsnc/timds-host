@@ -1,4 +1,5 @@
 import { sessionIdPattern } from '../../runtime/policy.mjs';
+import { safeRequestDiagnostic } from '../requests/diagnostics.mjs';
 const fail = (statusCode,message) => Object.assign(new Error(message),{statusCode});
 // One keepalive window; the Studio client re-sends `viewing` every five minutes.
 export const WATCH_MS = 30*60_000;
@@ -7,10 +8,10 @@ export const WATCH_MS = 30*60_000;
 export function createHostLiveSessions({sourceId, getLive, artifacts, store, hosts, subscriptions, clock = () => Date.now()}) {
   const configured=Boolean(getLive && artifacts && hosts && subscriptions);
   function native(id){if(!configured)throw fail(503,'The live session runner is not configured');if(!sessionIdPattern.test(id || ''))throw fail(404,'Live session not found');return getLive(id);}
-  async function owned(id,{open = true}={}) {
+  async function owned(id,{open = true,fork = true}={}) {
     const session=await store.get(id),source=session && await store.getSource(session.source_id);
     if(!session || session.source_id!==sourceId || !source || source.id!==sourceId)throw fail(404,'Live session not found');
-    if(session.fork_repository!==`session-${session.id}`)throw fail(409,'Live fork identity mismatch');
+    if(fork && session.fork_repository!==`session-${session.id}`)throw fail(409,'Live fork identity mismatch');
     if(open && (source.archived_at || source.lifecycle_status!=='ready' || store.eligible && !await store.eligible(source) || session.status!=='open' || session.expires_at && Date.parse(session.expires_at)<=clock()))throw fail(410,'Live session is closed or expired');
     return {session,source};
   }
@@ -22,6 +23,13 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
   async function configure(session) {
     if(session.source_id!==sourceId)throw fail(409,'Live source identity mismatch');
     return native(session.id).configure(session.id,{sourceId,expiresAt:session.expires_at});
+  }
+  async function remove(session,source) {
+    if(session.source_id!==sourceId || source.id!==sourceId)throw fail(409,'Live source identity mismatch');
+    const fork=`session-${session.id}`;
+    if(session.fork_repository && session.fork_repository!==fork)throw fail(409,'Live fork identity mismatch');
+    if(configured)await native(session.id).close(session.id);
+    if(configured || session.sandbox_id){await hosts.close(session,source);await subscriptions.close({...session,fork_repository:fork},source);}
   }
   return {
     configured,
@@ -37,7 +45,12 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
     // Runtime diagnostics for a session the caller may read: last wake phase
     // timings, dependency cache outcome, startup error and dev server state.
     // Never starts a container; a closed session still reports its last wake.
-    async diagnostics(id) {await owned(id,{open:false});return native(id).diagnostics();},
+    async diagnostics(id) {
+      const {session}=await owned(id,{open:false,fork:false});
+      const recovery=prefix=>({pending:Boolean(session[`${prefix}_pending`]),attempts:session[`${prefix}_attempts`]||0,nextAttemptAt:session[`${prefix}_retry_at`]||null,error:session[`${prefix}_error`]||'',diagnostic:safeRequestDiagnostic(session[`${prefix}_diagnostic`])});
+      const runtime=configured?await native(id).diagnostics():{state:'unavailable'};
+      return {...runtime,startStartedAt:session.start_started_at||null,startPhases:session.start_phases||{},startBackgroundPhases:session.start_background_phases||{},startRecovery:{fork:recovery('start'),live:recovery('live')}};
+    },
     waking:id=>mark(id,'waking'),
     // A viewer that waits for a wake which then never starts sees `sleeping` again.
     slept:id=>mark(id,'sleeping'),
@@ -56,11 +69,13 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
       if(status?.state==='sleeping' && (opened?status.reported!=='none':status.reported==='sleeping')){await mark(id,'waking');await native(id).resume(id);return {...status,waking:true};}
       return status;
     },
-    async ensure(session,source) {
+    async ensure(session,source,{authorize = async()=>{},signal} = {}) {
       if(!configured)return {live_url:'',sandbox_id:'',live_state:'unavailable'};
       if(source.id!==sourceId || session.source_id!==sourceId)throw fail(409,'Live source identity mismatch');
-      await subscriptions.ensure(session,source);
-      const status=await configure(session),url=await hosts.ensure(session,source);
+      const check=async()=>{signal?.throwIfAborted();await authorize();};
+      await check();await subscriptions.ensure(session,source,{signal,authorize:check});
+      await check();const status=await configure(session);
+      await check();const url=await hosts.ensure(session,source,{signal,authorize:check});
       return {live_url:url,sandbox_id:session.id,live_state:status.state || 'sleeping'};
     },
     async credentials({sessionId}) {
@@ -83,11 +98,12 @@ export function createHostLiveSessions({sourceId, getLive, artifacts, store, hos
       return native(session.id).pushed(/^[a-f0-9]{40}$/.test(revision || '')?{revision}:{});
     },
     async close(session,source) {
-      if(session.source_id!==sourceId || source.id!==sourceId)throw fail(409,'Live source identity mismatch');
-      if(configured)await native(session.id).close(session.id);
-      if(configured || session.sandbox_id){await hosts.close(session,source);await subscriptions.close(session,source);}
-      await store.updateSession(session.id,{live_state:'closed',live_url:'',sandbox_id:''});
+      await remove(session,source);
+      await store.updateSession(session.id,{live_state:'closed',live_url:'',sandbox_id:'',live_pending:false,live_lease_token:null,live_lease_expires_at:null});
     },
+    // A close can finish while deferred provisioning is in flight. Repeat its
+    // deterministic remote cleanup without changing the terminal session row.
+    remove,
   };
 }
 

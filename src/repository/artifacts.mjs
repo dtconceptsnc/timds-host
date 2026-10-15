@@ -38,7 +38,23 @@ function createBindingArtifactsAdapter(binding,namespace) {
     }
     return repositoryInfo(value,namespace);
   }
+  async function readFileStream(name,path,ref,{maxBytes=10*1024*1024}={}) {
+    segment(name,'repository name');
+    const handle=await binding.get(name);let reader,disposed=false;
+    const dispose=()=>{if(!disposed){disposed=true;handle[Symbol.dispose]();}};
+    try{
+      const blob=await handle.readFile({ref,path});
+      if(!blob)throw fail(404,'Artifacts file not found');
+      if(!Number.isSafeInteger(blob.size)||blob.size<0||blob.size>maxBytes)throw fail(413,'Design System source exceeds the session file limit');
+      reader=blob.stream().getReader();
+      return {size:blob.size,body:new ReadableStream({
+        async pull(controller){try{const item=await reader.read();if(item.done){dispose();controller.close();}else controller.enqueue(item.value);}catch(error){dispose();controller.error(error);}},
+        async cancel(reason){try{await reader.cancel(reason);}finally{dispose();}}
+      })};
+    }catch(error){dispose();throw error;}
+  }
   return {
+    supportsTreeStreaming:true,
     getNamespace:()=>operation('other',async()=>{await binding.list({limit:1});return {namespace,binding:true};},{allowMissing:true}),
     // Cloudflare creates a configured namespace upon its first repository.
     // This receipt promises that operation, not an already-created resource.
@@ -76,6 +92,7 @@ function createBindingArtifactsAdapter(binding,namespace) {
     readCommit:(_namespace,name,hash)=>operation('other',()=>repository(name,async handle=>commitInfo(await handle.readCommit(hash)))),
     readTree:(_namespace,name,hash)=>operation('other',()=>repository(name,handle=>handle.readTree(hash))),
     readFile:(_namespace,name,path,ref='main')=>operation('other',()=>repository(name,async handle=>{const blob=await handle.readFile({ref,path});if(!blob)throw fail(404,'Artifacts file not found');return Buffer.from(await blob.arrayBuffer());})),
+    readFileStream:(_namespace,name,path,ref,options)=>operation('other',()=>readFileStream(name,path,ref,options)),
   };
 }
 
@@ -94,7 +111,8 @@ export function createArtifactsAdapter({env={},fetchImpl=fetch,onRequest=()=>{}}
   const rest=env.TIMDS_ARTIFACTS_REST_FALLBACK==='true'?createRestArtifactsAdapter({env,fetchImpl,onRequest}):null;
   const select=namespace=>{segment(namespace,'namespace');const adapter=adapters.get(namespace)||(rest?.configured?rest:null);if(!adapter)throw fail(503,'Deploy an Artifacts binding for this namespace before provisioning or authoring');return adapter;};
   const result={configured:adapters.size>0||Boolean(rest?.configured),listNamespaces:async()=>rest?.configured?rest.listNamespaces():[...adapters.keys()].map(namespace=>({namespace,binding:true}))};
-  for(const method of ['getNamespace','createNamespace','listRepositories','getRepository','createRepository','forkRepository','deleteRepository','mintToken','revokeToken','listTokens','log','readCommit','readTree','readFile'])result[method]=(namespace,...args)=>select(namespace)[method](namespace,...args);
+  result.supportsTreeStreaming=namespace=>select(namespace).supportsTreeStreaming===true;
+  for(const method of ['getNamespace','createNamespace','listRepositories','getRepository','createRepository','forkRepository','deleteRepository','mintToken','revokeToken','listTokens','log','readCommit','readTree','readFile','readFileStream'])result[method]=(namespace,...args)=>{const adapter=select(namespace);if(typeof adapter[method]!=='function')throw fail(503,'Artifacts binding tree streaming is unavailable');return adapter[method](namespace,...args);};
   return result;
 }
 

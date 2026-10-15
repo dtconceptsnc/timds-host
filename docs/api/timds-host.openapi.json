@@ -146,7 +146,7 @@
       "post": {
         "operationId": "startSession",
         "summary": "Start or recover a hosted editing session",
-        "description": "Creates an isolated fork and a 24-hour session. Reusing an idempotency key for different origins fails. Source access is rechecked.",
+        "description": "Reserves a 24-hour session and returns the complete source tree at its pinned baseRevision. The reply may have status starting and an empty liveUrl while the fork and live preview finish in the background. Reusing an idempotency key while starting returns the same session and pinned tree; a changed origin fails. Snapshot, update and submit wait up to 20 seconds for the fork before returning a starting 409. Source access is rechecked.",
         "tags": [
           "Sessions"
         ],
@@ -170,6 +170,12 @@
                 "schema": {
                   "type": "string",
                   "const": "no-store"
+                }
+              },
+              "Server-Timing": {
+                "description": "Start phase durations in milliseconds: reserve, fork, live, claim and stream. Deferred phases are zero in this response. stream measures preparation before headers, not the elapsed time to send the full response body; diagnostics reports completed background fork/live phases separately.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -312,7 +318,8 @@
           "5XX": {
             "$ref": "#/components/responses/HostError"
           }
-        }
+        },
+        "description": "A starting session waits up to 20 seconds for its fork before returning the existing starting 409. Authorization and the session lease are checked again before reading the fork."
       }
     },
     "/api/timds/sessions/{sessionId}/status": {
@@ -375,8 +382,8 @@
     "/api/timds/sessions/{sessionId}/diagnostics": {
       "get": {
         "operationId": "getSessionLiveDiagnostics",
-        "summary": "Get live runtime diagnostics for a session: last wake phase timings, dependency cache outcome, startup error and dev server state",
-        "description": "Reads the LiveSession record for a session the caller may read. It never starts a container; a sleeping or closed session still reports its last wake. Timings are durations in milliseconds; no command output, source content or credentials are returned.",
+        "summary": "Get session start recovery and live runtime diagnostics",
+        "description": "Reads the durable session start and LiveSession records for a session the caller may read, including starting sessions whose fork does not yet exist. It never starts a container; a sleeping or closed session still reports its last wake. Timings are durations in milliseconds; no command output, source content or credentials are returned.",
         "tags": [
           "Sessions"
         ],
@@ -404,7 +411,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Current live runtime diagnostics.",
+            "description": "Current session start and live runtime diagnostics.",
             "headers": {
               "Cache-Control": {
                 "schema": {
@@ -491,7 +498,7 @@
       "post": {
         "operationId": "submitSession",
         "summary": "Freeze a submission and preview",
-        "description": "Up to 4,000 changed/deleted paths and 10 MiB decoded changes (16 MiB JSON transport). A 200 result may contain stale=true or conflicts and no submission; the fork is not mutated by a stale write. Pull/reapply and retry against the returned session.baseRevision. Conflict choices are bound to mainRevision. Child submissions integrate into their draft; they do not publish main.",
+        "description": "Up to 4,000 changed/deleted paths and 10 MiB decoded changes (16 MiB JSON transport). A 200 result may contain stale=true or conflicts and no submission; the fork is not mutated by a stale write. Pull/reapply and retry against the returned session.baseRevision. Conflict choices are bound to mainRevision. Child submissions integrate into their draft; they do not publish main. A starting session waits up to 20 seconds for its fork before returning the existing starting 409; authorization and the session lease are checked again before writing.",
         "tags": [
           "Sessions"
         ],
@@ -559,7 +566,7 @@
       "post": {
         "operationId": "updateSession",
         "summary": "Reconcile an editing session with its target",
-        "description": "Up to 4,000 changed/deleted paths and 10 MiB decoded changes (16 MiB JSON transport). A 200 result may contain stale=true or conflicts and no submission; the fork is not mutated by a stale write. Pull/reapply and retry against the returned session.baseRevision. Conflict choices are bound to mainRevision. Child submissions integrate into their draft; they do not publish main.",
+        "description": "Up to 4,000 changed/deleted paths and 10 MiB decoded changes (16 MiB JSON transport). A 200 result may contain stale=true or conflicts and no submission; the fork is not mutated by a stale write. Pull/reapply and retry against the returned session.baseRevision. Conflict choices are bound to mainRevision. Child submissions integrate into their draft; they do not publish main. A starting session waits up to 20 seconds for its fork before returning the existing starting 409; authorization and the session lease are checked again before writing.",
         "tags": [
           "Sessions"
         ],
@@ -1279,6 +1286,12 @@
                   "type": "string",
                   "const": "no-store"
                 }
+              },
+              "Server-Timing": {
+                "description": "Start phase durations in milliseconds: reserve, fork, live, claim and stream. Deferred phases are zero in this response. stream measures preparation before headers, not the elapsed time to send the full response body; diagnostics reports completed background fork/live phases separately.",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -1328,13 +1341,15 @@
               }
             }
           }
-        }
+        },
+        "description": "Creates a named draft with no automatic expiry. It uses the same two-phase start as a session: the reply may carry status starting, its pinned baseRevision and complete files while the fork and live preview are pending."
       }
     },
     "/api/timds/design-systems/{source}/drafts/{name}/snapshot": {
       "get": {
         "operationId": "snapshotDraft",
         "summary": "Read a draft snapshot for source-authorized integration",
+        "description": "A starting draft waits up to 20 seconds for its fork before returning the existing starting 409. Waiting leaves the coordinator queue free; source authorization and the operation lease are checked before reading.",
         "tags": [
           "Drafts"
         ],
@@ -4403,7 +4418,7 @@
           },
           "baseRevision": {
             "type": "string",
-            "description": "Full revision; empty only while starting."
+            "description": "Full immutable source revision. A successful start response includes the pinned revision even while status is starting; a reserved session may be empty until resolution completes."
           },
           "status": {
             "type": "string",
@@ -4460,7 +4475,7 @@
           },
           "liveUrl": {
             "type": "string",
-            "description": "Live preview URL, empty when unavailable."
+            "description": "Live preview URL, empty while provisioning is pending or unavailable. Read status or active-work after a live_state event to obtain the URL."
           },
           "sandboxId": {
             "type": "string"
@@ -4981,11 +4996,11 @@
       },
       "LiveDiagnostics": {
         "type": "object",
-        "description": "Live runtime diagnostics. Additional fields may be added.",
+        "description": "Session start recovery and live runtime diagnostics. Additional fields may be added.",
         "properties": {
           "state": {
             "type": "string",
-            "description": "Runtime state: none, sleeping, starting, ready, running, failed, closing or closed."
+            "description": "Runtime state: none, unavailable, sleeping, starting, ready, running, failed, closing or closed."
           },
           "runner": {
             "description": "The current or last Request run, or null."
@@ -5056,6 +5071,73 @@
           "dev": {
             "type": "object",
             "description": "Dev server supervisor status while the container runs."
+          },
+          "startStartedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the last recorded session start began, or null for a session without start telemetry."
+          },
+          "startPhases": {
+            "type": "object",
+            "description": "Milliseconds spent in the last start request. Deferred fork/live phases are zero. stream measures pre-header tree preparation, not full response-body transfer.",
+            "properties": {
+              "reserve": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fork": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "live": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "claim": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "stream": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "startRecovery": {
+            "type": "object",
+            "description": "Durable progress of background fork and live provisioning, including at most five automatic attempts and host-authored failure information. An explicit start retry renews the failed or exhausted preparation budget when its lease is no longer active.",
+            "properties": {
+              "fork": {
+                "$ref": "#/components/schemas/SessionStartRecoveryPhase"
+              },
+              "live": {
+                "$ref": "#/components/schemas/SessionStartRecoveryPhase"
+              }
+            },
+            "additionalProperties": false
+          },
+          "startBackgroundPhases": {
+            "type": "object",
+            "description": "Milliseconds spent in the latest completed background fork and live provisioning attempts, separate from the response startPhases.",
+            "properties": {
+              "fork": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "live": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": true
@@ -6586,6 +6668,53 @@
             }
           }
         }
+      },
+      "SessionStartRecoveryPhase": {
+        "type": "object",
+        "properties": {
+          "pending": {
+            "type": "boolean"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nextAttemptAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bounded host-authored failure message, never provider output."
+          },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sanitized host diagnostic for the most recent failed attempt, without credentials or source content."
+          }
+        },
+        "additionalProperties": false
       }
     },
     "responses": {

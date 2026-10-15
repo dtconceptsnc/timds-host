@@ -155,7 +155,21 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
   }
   async function createDraft(actor, id, input) { const source = await sourceFor(actor, id); return start(actor, { ...input, systemId: source.system_id, kind: 'draft' }); }
   async function listDrafts(actor, id) { const work = await activeWork(actor, id); return { apiVersion: TIMDS_HOST_API_VERSION, drafts: work.drafts }; }
-  async function draftSnapshot(actor, id, name) { const source = await sourceFor(actor, id); const draft = uuid.test(name) ? await store.get(name) : await store.draft(source.id, name); if (!draft || draft.source_id !== source.id || draft.kind !== 'draft') throw fail(404, 'Draft not found'); const result = await repository.snapshot(source, draft); return output({ ...draft, base_revision: result.baseRevision || draft.base_revision }, source, { files: result.files, conflicts: [] }); }
+  async function draftFor(actor, id, name) {
+    const source = await sourceFor(actor, id), draft = uuid.test(name) ? await store.get(name) : await store.draft(source.id, name);
+    if (!draft || draft.source_id !== source.id || draft.kind !== 'draft') throw fail(404, 'Draft not found');
+    if (!['starting','open'].includes(draft.status)) throw fail(410, 'Session is closed or expired; start a new session');
+    return { source, draft };
+  }
+  async function draftSnapshot(actor, id, name) {
+    const { source, draft } = await draftFor(actor, id, name);
+    return leased(draft.id, async (row, checkpoint) => {
+      if (row.status !== 'open') throw fail(409, 'Session is still starting; retry start with the same idempotency key');
+      const result = await repository.snapshot(source, row);
+      const saved = result.baseRevision && result.baseRevision !== row.base_revision ? await checkpoint({ base_revision: result.baseRevision, last_update_hash: '' }) : row;
+      return output(saved, source, { files: result.files, conflicts: [] });
+    });
+  }
   async function closeDraft(actor, id, name) { const source = await sourceFor(actor, id); const draft = uuid.test(name) ? await store.get(name) : await store.draft(source.id, name); if (!draft || draft.source_id !== source.id || draft.kind !== 'draft') throw fail(404, 'Draft not found'); return close(actor, draft.id); }
   async function previewTokens(id, name) {
     const source = uuid.test(id) ? await store.getSource(id) : await store.source(id); ready(source, {});
@@ -163,7 +177,64 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     if (!session || session.source_id !== source.id || session.status !== 'open' || session.expires_at && Date.parse(session.expires_at) <= now()) throw fail(404, 'Preview not found');
     return tokensCssFromSnapshot(repository.tokenFiles ? await repository.tokenFiles(source, session) : (await repository.snapshot(source, session)).files);
   }
-  async function start(actor, input) {
+  // A wait never holds the operation lease or the coordinator mutation queue:
+  // the alarm needs both to finish the fork. The actual write rechecks authority.
+  async function waitUntilOpen(read, { timeoutMs = 20_000 } = {}) {
+    const deadline = performance.now() + timeoutMs;
+    while (true) {
+      const session = await read();
+      if (session.status === 'open' && (!session.lease_token || Date.parse(session.lease_expires_at) <= now())) return;
+      if (performance.now() >= deadline) throw fail(409, 'Session is still starting; retry start with the same idempotency key');
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+  }
+  const waitForOpen = (actor, id, options) => waitUntilOpen(async () => (await owned(id, actor)).session, options);
+  const waitForDraft = (actor, id, name, options) => waitUntilOpen(async () => (await draftFor(actor, id, name)).draft, options);
+  // runMutation serializes only the short authority/lease/checkpoint steps.
+  // Background Git must leave the queue free for pinned start replays and reads.
+  async function finishStart(actor, id, { live = true, background = false, runMutation = task => task() } = {}) {
+    const lease = randomUUID();
+    let source, row;
+    await runMutation(async () => {
+      ({ source } = await owned(id, actor));
+      row = await store.claim(id, lease);
+    });
+    const save = (patch, audit) => runMutation(async () => {
+      const currentSession = (await owned(id, actor)).session;
+      if (patch.status === 'open' && currentSession.draft_session_id) {
+        const draft = await store.get(currentSession.draft_session_id);
+        if (!draft || draft.source_id !== source.id || draft.status !== 'open') throw fail(409, 'The session’s draft origin is no longer open');
+      }
+      if (background && patch.start_phases) {
+        const current = await store.get(id);
+        patch = { ...patch, start_background_phases: { ...current.start_background_phases, fork: patch.start_phases.fork } };
+        delete patch.start_phases;
+      }
+      return store.checkpoint(id, lease, patch, null, audit);
+    });
+    try {
+      let files;
+      if (row.status === 'starting') {
+        const originDraft = row.draft_session_id ? await store.get(row.draft_session_id) : null;
+        if (row.draft_session_id && (!originDraft || originDraft.source_id !== source.id || originDraft.status !== 'open')) throw fail(409, 'The session’s draft origin is no longer open');
+        const began = performance.now();
+        const result = await repository.start(source, { sessionId: row.id, fromRepository: originDraft?.fork_repository || source.artifacts_repository, fromRevision: row.start_revision || row.origin_revision });
+        if (row.start_revision && result.baseRevision !== row.start_revision) throw fail(409, 'Session fork does not match its reserved revision');
+        files = result.files;
+        row = await save({ fork_repository: result.forkRepository, token_id: result.tokenId || '', base_revision: result.baseRevision, start_revision: row.start_revision || result.baseRevision, expires_at: row.kind === 'draft' ? null : result.expiresAt || row.expires_at, status: 'open', start_pending: false, start_retry_at: null, start_error: '', start_diagnostic: null, live_pending: true, live_retry_at: new Date(now()).toISOString(), start_phases: { ...row.start_phases, fork: Math.round(performance.now() - began) } });
+      }
+      if (live && onSessionStarted && (row.live_pending || !row.live_url)) {
+        if (row.live_lease_token && Date.parse(row.live_lease_expires_at) > now()) throw fail(409, 'This session is busy; retry when its current operation finishes');
+        const began = performance.now();
+        if (onSessionReserved) await onSessionReserved(row, source);
+        const patch = await onSessionStarted(row, source);
+        row = await save({ ...patch, live_pending: false, live_retry_at: null, live_error: '', live_diagnostic: null, start_phases: { ...row.start_phases, live: Math.round(performance.now() - began) } }, event(actor, 'live_state', { session_id: id, details_json: { state: patch.live_state || 'sleeping' } }));
+      }
+      return output(row, source, { ...(files ? { files, conflicts: [] } : {}), _startTiming: row.start_phases });
+    } finally { await runMutation(() => store.release(id, lease)); }
+  }
+  async function start(actor, input, { synchronous = false } = {}) {
+    const startedAt = new Date(now()).toISOString(), began = performance.now(), phases = { reserve: 0, fork: 0, live: 0, claim: 0, stream: 0 };
     if (!input || typeof input.systemId !== 'string' || !input.systemId.trim() || input.systemId.length > 300) throw fail(400, 'systemId is required');
     const key = input.idempotencyKey;
     if (key !== undefined && (typeof key !== 'string' || !key.trim() || key.length > 200)) throw fail(400, 'idempotencyKey must be 1–200 characters');
@@ -186,25 +257,65 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     if (session && session.source_id !== source.id) throw fail(409, 'This idempotency key belongs to another Design System');
     if (session && ((session.kind || 'session') !== kind || (session.name || null) !== name || (session.draft_session_id || null) !== (draft?.id || null) || (session.origin_revision || null) !== fromRevision)) throw fail(409, 'This idempotency key belongs to different session origins');
     if (!session) session = await store.insert({ id: randomUUID(), source_id: source.id, owner_principal_id: actor.principalId, owner_user_id: actor.userId || null, owner_token_id: actor.tokenId || null, originating_request_id: actor.requestId || null, idempotency_key: key || null, status: 'starting', kind, name, draft_session_id: draft?.id || null, origin_revision: fromRevision, expires_at: kind === 'draft' ? null : new Date(now() + TIMDS_SESSION_TTL_MS).toISOString() });
-    if (onSessionReserved && ['starting','open'].includes(session.status)) await onSessionReserved(session, source);
     if (store.addMember) await store.addMember({ session_id: session.id, principal_id: actor.principalId, role: 'owner', invited_by: actor.principalId }, event(actor, 'member_joined', { originating_request_id: actor.requestId || session.originating_request_id || null }));
-    if (session.status !== 'starting') { if (onSessionStarted) await leased(session.id, async (row, checkpoint) => checkpoint(await onSessionStarted(row, source))); return snapshot(actor, session.id); }
-    return leased(session.id, async (row, checkpoint) => {
-      if (row.status !== 'starting') {
-        const result = await repository.snapshot(source, row);
-        let saved = result.baseRevision && result.baseRevision !== row.base_revision ? await checkpoint({ base_revision: result.baseRevision, last_update_hash: '' }) : row;
-        if (onSessionStarted) saved = await checkpoint(await onSessionStarted(saved, source));
-        return output(saved, source, { files: result.files, conflicts: [] });
+    phases.reserve = Math.round(performance.now() - began);
+    if (session.status !== 'starting') {
+      // Recover an old open receipt whose synchronous live provisioning failed,
+      // and let an explicit retry renew an exhausted automatic live attempt.
+      if (session.status === 'open' && !session.live_url && !(session.live_lease_token && Date.parse(session.live_lease_expires_at) > now())) {
+        await owned(session.id, actor);
+        session = await store.updateSession(session.id, { live_pending: true, live_retry_at: startedAt, live_attempts: 0, live_error: '', live_diagnostic: null });
       }
-      const originDraft = row.draft_session_id ? await store.get(row.draft_session_id) : null;
-      if (row.draft_session_id && (!originDraft || originDraft.source_id !== source.id || originDraft.status !== 'open')) throw fail(409, 'The session’s draft origin is no longer open');
-      const result = await repository.start(source, { sessionId: row.id, fromRepository: originDraft?.fork_repository || source.artifacts_repository, fromRevision: row.origin_revision });
-      let saved = await checkpoint({ fork_repository: result.forkRepository, token_id: result.tokenId || '', base_revision: result.baseRevision, expires_at: row.kind === 'draft' ? null : result.expiresAt || row.expires_at, status: 'open' });
-      if (onSessionStarted) saved = await checkpoint(await onSessionStarted(saved, source));
-      if (input.on?.length || input.patterns?.length) await claim(actor, saved.id, { patterns: input.on || input.patterns, note: input.note || '' });
-      return output(saved, source, { files: result.files, conflicts: [] });
-    });
+      if (synchronous) { const liveBegan = performance.now(); await finishStart(actor, session.id); phases.live = Math.round(performance.now() - liveBegan); }
+      const streamBegan = performance.now(), result = await snapshot(actor, session.id);
+      phases.stream = Math.round(performance.now() - streamBegan);
+      await owned(session.id, actor);
+      if (store.updateSession) await store.updateSession(session.id, { start_started_at: startedAt, start_phases: phases });
+      return { ...result, _startTiming: phases };
+    }
+    const origin = async row => {
+      const draft = row.draft_session_id ? await store.get(row.draft_session_id) : null;
+      if (row.draft_session_id && (!draft || draft.source_id !== source.id || draft.status !== 'open')) throw fail(409, 'The session’s draft origin is no longer open');
+      return draft?.fork_repository || source.artifacts_repository;
+    };
+    let files;
+    // A replay can read the immutable origin while the alarm holds the fork
+    // lease. It neither starts a second fork nor changes that lease's receipt.
+    if (session.start_revision && repository.startTree && !synchronous) {
+      const tree = await repository.startTree(source, { sessionId: session.id, fromRepository: await origin(session), fromRevision: session.start_revision });
+      if (tree.files) {
+        phases.stream = Math.round(performance.now() - began) - phases.reserve;
+        // Only telemetry changes on replay; the fork lease and pinned origin stay intact.
+        await owned(session.id, actor);
+        if (store.updateSession) session = await store.updateSession(session.id, { start_started_at: startedAt, start_phases: phases,
+          ...(!(session.lease_token && Date.parse(session.lease_expires_at) > now()) ? { start_pending: true, start_retry_at: startedAt, start_attempts: 0, start_error: '', start_diagnostic: null } : {}) });
+        return output(session, source, { files: tree.files, conflicts: [], _startTiming: phases });
+      }
+    }
+    if (session.start_revision) {
+      await owned(session.id, actor);
+      if (store.updateSession) session = await store.updateSession(session.id, { start_started_at: startedAt, start_phases: phases });
+    } else {
+      await leased(session.id, async (row, checkpoint) => {
+        const fromRepository = await origin(row), streamBegan = performance.now();
+        const tree = repository.startTree ? await repository.startTree(source, { sessionId: row.id, fromRepository, fromRevision: row.origin_revision }) : null;
+        phases.stream = Math.round(performance.now() - streamBegan);
+        files = tree?.files;
+        const claimBegan = performance.now();
+        if (input.on?.length || input.patterns?.length) await claim(actor, row.id, { patterns: input.on || input.patterns, note: input.note || '' });
+        phases.claim = Math.round(performance.now() - claimBegan);
+        await owned(row.id, actor);
+        session = await checkpoint({ ...(tree ? { start_revision: tree.baseRevision, base_revision: tree.baseRevision } : {}), start_pending: true, live_pending: true, start_retry_at: new Date(now()).toISOString(), start_started_at: startedAt, start_phases: phases });
+      });
+    }
+    if (files && !synchronous) return output(session, source, { files, conflicts: [], _startTiming: phases });
+    // Large trees and designer Requests keep the blocking fork path. Ordinary
+    // API starts still leave live host/subscription provisioning to the alarm.
+    const result = await finishStart(actor, session.id, { live: synchronous });
+    if (!result.files) return { ...await snapshot(actor, session.id), _startTiming: result._startTiming };
+    return result;
   }
+
   async function snapshot(actor, id) {
     const { source } = await owned(id, actor);
     return leased(id, async (session, checkpoint) => {
@@ -219,7 +330,7 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     const { source } = await owned(id, actor);
     const hash = createHash('sha256').update(JSON.stringify(changes)).digest('hex');
     return leased(id, async (session, checkpoint) => {
-      if (session.status !== 'open') throw fail(409, 'Session is not open');
+      if (session.status !== 'open') throw fail(409, session.status === 'starting' ? 'Session is still starting; retry start with the same idempotency key' : 'Session is not open');
       let submission = await store.submissionByHash(id, hash);
       if (submission && submission.status !== 'preparing') return output(session, source, { submission: timdsSubmissionView(submission) });
       if (!submission) {
@@ -249,7 +360,7 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     const hash = createHash('sha256').update(JSON.stringify(changes)).digest('hex');
     return leased(id, async (session, checkpoint) => {
       if (session.status === 'open' && session.last_update_hash === hash) return output(session, source, { files: (await repository.snapshot(source, session)).files, conflicts: [] });
-      if (session.status !== 'open') throw fail(409, 'Session is not open');
+      if (session.status !== 'open') throw fail(409, session.status === 'starting' ? 'Session is still starting; retry start with the same idempotency key' : 'Session is not open');
       if (changes.baseRevision !== session.base_revision || (changes.lastUpdateHash !== undefined && changes.lastUpdateHash !== (session.last_update_hash || ''))) return staleResult(actor, source, session, changes, checkpoint);
       const target = session.draft_session_id ? (await owned(session.draft_session_id, actor)).session : null;
       const result = await repository.update(source, session, changes, { targetRepository: target?.fork_repository || source.artifacts_repository });
@@ -304,7 +415,7 @@ export function createDesignSystemSessions({ repository, authorization, cleanupA
     if (!publication || !['closing','failed'].includes(publication.status) || !publication.checkpoints_json?.pointerEventId || !session || publication.source_id !== session.source_id || !(await store.submissions(sessionId)).some(row => row.id === publication.submission_id && row.source_id === publication.source_id)) throw fail(409, 'Publication cleanup does not match this session');
     return close({ operator: true, system: true, userId: publication.actor_user_id, principalId: publication.actor_principal_id, requestId: publication.originating_request_id, tokenId: null }, sessionId, false, publicationId);
   }
-  return { activeWork, sourceEvents, join, claim, createDraft, listDrafts, draftSnapshot, closeDraft, previewTokens, start, snapshot, submit, update, status, history, close, closeForPublication, cleanupExpired };
+  return { activeWork, sourceEvents, join, claim, createDraft, listDrafts, draftSnapshot, closeDraft, previewTokens, start, finishStart, waitForOpen, waitForDraft, snapshot, submit, update, status, history, close, closeForPublication, cleanupExpired };
 }
 
 // Serve only CSS values, never source text or executable rules from a fork.

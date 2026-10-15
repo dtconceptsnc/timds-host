@@ -19,7 +19,7 @@ function snapshotResult(result) {
 /** Mutation receipts retain revision/conflict facts without source trees or
  * internal object references. Read the current session before another edit. */
 export function compactSessionResult(result) {
-  const {files,baseFiles,rebasedChanges,...receipt}=result;
+  const {files,baseFiles,rebasedChanges,_startTiming,...receipt}=result;
   const omitted={...(files!==undefined?{filesOmitted:true}:{}),...(baseFiles!==undefined?{baseFilesOmitted:true}:{}),...(rebasedChanges!==undefined?{rebasedChangesOmitted:true}:{})};
   return {...receipt,...omitted,...(Object.keys(omitted).length?{rereadRequired:true}:{})};
 }

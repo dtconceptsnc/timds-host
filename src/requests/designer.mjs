@@ -45,12 +45,15 @@ export function createDesigner({designerPrincipalId, authorization, sessions, st
           if(!caller)throw fail(403,'A session owner must authorize the Request');
           // The requester's own Request binding attributes the designer's membership to it.
           await runMutation(()=>sessions.join({...caller,requestId:request.id},sessionId,{principalId:actor.principalId}));
+          await sessions.waitForOpen(actor,sessionId);
           started=await runMutation(()=>sessions.status(actor,sessionId));
           if(started.session.status!=='open' || started.session.expiresAt && Date.parse(started.session.expiresAt)<=Date.now())throw fail(410,'The target session is closed or expired');
-        }else started=await runMutation(()=>sessions.start(actor,{systemId:source.system_id,idempotencyKey:`designer:${request.id}`}));
+        }else started=await runMutation(()=>sessions.start(actor,{systemId:source.system_id,idempotencyKey:`designer:${request.id}`},{synchronous:true}));
         stage='session-identity';
         const session=await store.get(started.session.id);
         if(session.source_id!==source.id || (!sessionId && (session.owner_principal_id!==actor.principalId || session.originating_request_id!==request.id)))throw fail(409,'Designer session Request identity mismatch');
+        // A targeted session can be open before its deferred live host exists.
+        if(sessionId)await live.schedule(session,source);
         // One runner per session: a busy session is reported before this Request claims it.
         stage='runtime-status';
         const current=await live.runner(session.id);
