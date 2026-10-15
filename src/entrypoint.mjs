@@ -16,6 +16,7 @@ import { createContributionService } from './mcp/contributions.mjs';
 import { fail } from './store/errors.mjs';
 import { studioFetch } from './studio.mjs';
 import { claimLoginInvitations } from './invitations/service.mjs';
+import { logEvent, errorFields } from './log.mjs';
 
 const getCoordinator=(ctx,id)=>ctx.exports.SystemCoordinator.getByName(id);
 function publishedServices(env,ctx) {
@@ -119,7 +120,7 @@ export default {
           }
         }
         message.ack();
-      }catch {message.retry({delaySeconds:30});}
+      }catch(error) {logEvent({event:'queue_message_failed',outcome:'failed',queue:'events',attempt:message.attempts,...errorFields(error)});message.retry({delaySeconds:30});}
     }
   },
 };

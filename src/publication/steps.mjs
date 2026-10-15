@@ -14,7 +14,7 @@ export function createPublicationSteps({store,repository,artifacts,metadata,buil
  const authorize=(id)=>store.authorizePublication(id,lease);
  // Container phase durations from this attempt, keyed by operation. They live
  // in the checkpoint, not in the immutable artifact receipt a retry may reuse.
- const timed=(row,name,result)=>result?.phases?{timings:{...(row.checkpoints_json?.timings||{}),[name]:{phases:result.phases,...(result.dependencyCache?{dependencyCache:result.dependencyCache}:{}),...(result.reusedRelease?{reusedRelease:result.reusedRelease}:{})}}}:{};
+ const timed=(row,name,result)=>result?.phases?{timings:{...(row.checkpoints_json?.timings||{}),[name]:{phases:result.phases,...(result.dependencyCache?{dependencyCache:result.dependencyCache}:{}),...(result.reusedRelease?{reusedRelease:result.reusedRelease,reusedFiles:result.reusedFiles}:{})}}}:{};
  return {
   async preflight({publicationId}){const {row,source,submission}=await context(publicationId);if(!committed(row)){ready(source,submission);await authorize(publicationId);}return{publicationId,sourceId:source.id,submissionId:submission.id};},
   async merge({publicationId}){
@@ -70,8 +70,8 @@ export function createPublicationSteps({store,repository,artifacts,metadata,buil
     const version={id:publicationId,source_id:source.id,version_label:stamp.version,source_commit:stamp.sourceCommit,content_digest:stamp.contentDigest,artifact_ref:releaseRef,source_ref:snapshot.sourceFiles.ref,stamp,publication_id:publicationId,created_at:snapshot.releasePreparedAt,artifact:prepared};
     const staged=await phase('stage-version',()=>stageVersion({publicationId,lease,version}));row=await checkpoint(row,'release',{versionId:staged.versionId});
     await phase('push-main',()=>repository.pushMain(source,checkout.checkoutId));row=await checkpoint(row,'release',{mainPushed:true});
-    await phase('push-published',()=>repository.pushPublished(source,checkout.checkoutId,{files:artifact.files,stamp,previous}));
-    await checkpoint(row,'release',{artifactPushed:true,...timed(row,'release',{phases,...(previous?{reusedRelease:previous.version}:{})})});
+    const pushed=await phase('push-published',()=>repository.pushPublished(source,checkout.checkoutId,{files:artifact.files,stamp,previous}));
+    await checkpoint(row,'release',{artifactPushed:true,...timed(row,'release',{phases,...(pushed?.reusedFiles?{reusedRelease:previous.version,reusedFiles:pushed.reusedFiles}:{})})});
     return{publicationId,artifactRef,versionId:staged.versionId};
    }catch(error){primary=error;throw error;}finally{await finishCleanup(()=>repository.releaseCheckout(source,checkout.checkoutId),primary);}
   },

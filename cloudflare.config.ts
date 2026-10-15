@@ -12,10 +12,10 @@ const mediaLegacy=JSON.parse(process.env.TIMDS_MEDIA_LEGACY_BINDINGS||'{}') as R
 if(!mediaLegacy||Array.isArray(mediaLegacy)||typeof mediaLegacy!=='object'||new Set(Object.values(mediaLegacy)).size!==Object.keys(mediaLegacy).length)throw new Error('Use an explicit legacy R2 bucket to media binding map');
 for(const [bucket,binding]of Object.entries(mediaLegacy))if(!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket)||typeof binding!=='string'||!/^MEDIA_LEGACY_[A-Z0-9_]+$/.test(binding))throw new Error('Invalid legacy media bucket binding');
 const mediaBindings=Object.fromEntries(Object.entries(mediaLegacy).map(([bucket,binding])=>[binding,bindings.r2({name:bucket})]));
-const repository=defineContainer({name:`${name}-repository`,schedulingPolicy:'durable-object',images:{repository:{dockerfile:'./runtime/Repository.Dockerfile'}}});
-const live=defineContainer({name:`${name}-live`,schedulingPolicy:'durable-object',images:{agent:{dockerfile:'./runtime/Dockerfile'}}});
-const build=defineContainer({name:`${name}-build`,schedulingPolicy:'durable-object',images:{build:{dockerfile:'./runtime/Build.Dockerfile'}}});
-const dependencies=defineContainer({name:`${name}-dependencies`,schedulingPolicy:'durable-object',images:{build:{dockerfile:'./runtime/Build.Dockerfile'}}});
+const repository=defineContainer({name:`${name}-repository`,schedulingPolicy:'durable-object',observability:{logs:{enabled:true}},images:{repository:{dockerfile:'./runtime/Repository.Dockerfile'}}});
+const live=defineContainer({name:`${name}-live`,schedulingPolicy:'durable-object',observability:{logs:{enabled:true}},images:{agent:{dockerfile:'./runtime/Dockerfile'}}});
+const build=defineContainer({name:`${name}-build`,schedulingPolicy:'durable-object',observability:{logs:{enabled:true}},images:{build:{dockerfile:'./runtime/Build.Dockerfile'}}});
+const dependencies=defineContainer({name:`${name}-dependencies`,schedulingPolicy:'durable-object',observability:{logs:{enabled:true}},images:{build:{dockerfile:'./runtime/Build.Dockerfile'}}});
 const workflow=`${name}-publication`;
 export default defineConfig({
   worker: {
@@ -24,6 +24,9 @@ export default defineConfig({
     domains:process.env.TIMDS_STUDIO_ORIGIN?[new URL(process.env.TIMDS_STUDIO_ORIGIN).hostname]:[],
     compatibilityDate: '2026-10-12',
     compatibilityFlags: ['nodejs_compat', 'enable_ctx_exports', 'global_fetch_strictly_public'],
+    // Workers Logs for the Worker, its Durable Objects, Workflow and queue consumer.
+    // Query strings are redacted: the feed upgrade carries its ticket there.
+    observability:{enabled:true,redactQueryString:true,logs:{enabled:true,invocationLogs:true}},
     entrypoint,
     assets:{htmlHandling:'none',runWorkerFirst:true},
     exports:{

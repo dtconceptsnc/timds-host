@@ -3,7 +3,7 @@
 import {createServer} from 'node:http';
 import {createHash} from 'node:crypto';
 import {createSandboxRepositoryEngine} from './repository-engine.mjs';
-const allowed=new Set(['provisionFiles','readSource','start','snapshot','stale','submit','update','mergeIntoDraft','close','merge','preparePublication','commitSource','pushMain','pushPublished','releaseCheckout','stagePublished','stageSource']);
+const allowed=new Set(['provisionFiles','readSource','start','snapshot','stale','submit','update','mergeIntoDraft','close','merge','preparePublication','commitSource','pushMain','priorPublished','pushPublished','releaseCheckout','stagePublished','stageSource']);
 let configuration, checkout, release, staged=[], stagedSource=[];
 const responseTrees=new Map();
 export function describeResponseTrees(result = {}){
@@ -38,10 +38,11 @@ export async function dispatch(input){
   });
  }
  if(method==='releaseCheckout'){release?.();staged=[];return{released:true};}
- if(['commitSource','pushMain','pushPublished','stagePublished','stageSource'].includes(method)){
+ if(['commitSource','pushMain','priorPublished','pushPublished','stagePublished','stageSource'].includes(method)){
   if(!checkout)throw fail(409,'Publication checkout expired; prepare from its saved source checkpoint');
   if(method==='commitSource'){const input=args[0]?.useStaged?{...args[0],files:stagedSource}:args[0];const result=await checkout.commitSource(input);stagedSource=[];return{...result,files:await checkout.sourceFiles()};}
   if(method==='pushMain')return checkout.pushMain();
+  if(method==='priorPublished')return checkout.priorPublished(args[0]||{});
   if(['stagePublished','stageSource'].includes(method)){
    let target=method==='stageSource'?stagedSource:staged;
    if(args[0].reset)target=[];
@@ -49,7 +50,7 @@ export async function dispatch(input){
    const sourceStage=method==='stageSource';if(target.length>(sourceStage?4000:10000)||target.reduce((n,file)=>n+Buffer.byteLength(file.content,'base64'),0)>(sourceStage?50:100)*1024*1024)throw fail(413,'Publication staging is too large');
    if(sourceStage)stagedSource=target;else staged=target;return{files:target.length};
   }
-  return checkout.pushPublished({files:staged.map(file=>({...file,content:Buffer.from(file.content,'base64')})),stamp:args[0].stamp,reuse:Array.isArray(args[0].reuse)?args[0].reuse:[]});
+  return checkout.pushPublished({files:staged.map(file=>({...file,content:Buffer.from(file.content,'base64')})),stamp:args[0].stamp,reuse:Array.isArray(args[0].reuse)?args[0].reuse:[],priorStamp:args[0].priorStamp||null});
  }
  return engine[method](source,...args);
 }

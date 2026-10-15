@@ -54,13 +54,26 @@ async function tree(cwd, ref) {
 // The published branch's tree: paths are artifact paths, not session paths, so
 // this reads oids without the session path rules or the 4000-entry session cap.
 async function publishedTree(cwd, ref) {
-  const result = await git(cwd, ["ls-tree", "-r", "-z", ref], { maxOutputBytes: 4 * 1024 * 1024 });
+  // 10000 artifact entries of up to 500 path bytes plus their 53-byte prefix.
+  const result = await git(cwd, ["ls-tree", "-r", "-z", ref], { maxOutputBytes: 8 * 1024 * 1024 });
   const entries = new Map();
   for (const record of result.bytes.toString().split("\0").filter(Boolean)) {
     const tab = record.indexOf("\t"); const [mode, type, oid] = record.slice(0, tab).split(" ");
     if (type === "blob" && /^[a-f0-9]{40}$/.test(oid)) entries.set(record.slice(tab + 1), { mode, oid });
   }
   return entries;
+}
+
+// Whether the tip's `.timds-artifact.json` is the stamp of the release receipt
+// the Worker wants to reuse blobs from. The receipt names the files; the tip
+// supplies their blobs; only this equality ties the two together. Git hashes
+// the expected text, so nothing is read back from the tip.
+async function publishedStampMatches(cwd, ref, stamp) {
+  if (!stamp || typeof stamp !== "object") return false;
+  const expected = (await git(cwd, ["hash-object", "--stdin"], { input: Buffer.from(`${JSON.stringify(stamp, null, 2)}\n`) })).text;
+  const record = (await git(cwd, ["ls-tree", "-z", ref, "--", ".timds-artifact.json"])).bytes.toString().split("\0")[0] || "";
+  const [mode, type, oid] = record.slice(0, Math.max(record.indexOf("\t"), 0)).split(" ");
+  return mode === "100644" && type === "blob" && oid === expected;
 }
 
 // Git's batch protocol is binary-safe only when payloads are consumed by the
@@ -347,14 +360,25 @@ export function createSandboxRepositoryEngine({ artifacts, ensurePreview = async
             if (!resumed) await push(cwd, source, source.artifacts_repository, committedHead, "main", parentRevision);
             return { headCommit: committedHead };
           },
+          // Whether the published branch tip is the tree the given release
+          // stamp describes. The Worker asks before choosing reused files; a
+          // tip moved by a rollback or an interrupted flip reuses nothing.
+          async priorPublished({ stamp } = {}) {
+            const prior = await currentRef(cwd, source, source.artifacts_repository, "timds-published");
+            if (!prior) return { headCommit: "", reusable: false };
+            await fetchRef(cwd, source, source.artifacts_repository, "refs/heads/timds-published", "refs/published/main");
+            return { headCommit: prior, reusable: await publishedStampMatches(cwd, "refs/published/main", stamp) };
+          },
           // `reuse` names artifact paths whose bytes the Worker verified against
-          // the previous release receipt; their blobs come from the prior
-          // published tree, so only changed files were staged and get hashed.
-          async pushPublished({ files: artifactFiles, stamp, reuse = [] }) {
+          // the release receipt whose stamp is `priorStamp`; their blobs come
+          // from the prior published tree, so only changed files were staged
+          // and get hashed. The tip is checked against that stamp again here.
+          async pushPublished({ files: artifactFiles, stamp, reuse = [], priorStamp = null }) {
             if (!committedHead || stamp?.sourceCommit !== committedHead) throw fail(409, "Publication stamp does not match its source");
             const prior = await currentRef(cwd, source, source.artifacts_repository, "timds-published");
             if (prior) await fetchRef(cwd, source, source.artifacts_repository, "refs/heads/timds-published", "refs/published/main");
-            const priorTree = prior ? await publishedTree(cwd, "refs/published/main") : new Map();
+            if (reuse.length && !(prior && await publishedStampMatches(cwd, "refs/published/main", priorStamp))) throw fail(502, "Published branch changed before the release push; retry the release");
+            const priorTree = reuse.length ? await publishedTree(cwd, "refs/published/main") : new Map();
             await git(cwd, ["read-tree", "--empty"]);
             const seen = new Set(), index = []; let bytes = 0;
             // Artifact paths may include dist; secrets and Git internals may not.
@@ -364,17 +388,18 @@ export function createSandboxRepositoryEngine({ artifacts, ensurePreview = async
               place(path);
               const entry = priorTree.get(path);
               if (!entry || entry.mode !== "100644") throw fail(409, "Published tree lacks a reused artifact file");
-              index.push(`100644 ${entry.oid}\t${path}`);
+              index.push(`100644 ${entry.oid}\t${path}\0`);
             }
             for (const file of [...artifactFiles, { path: ".timds-artifact.json", content: Buffer.from(`${JSON.stringify(stamp, null, 2)}\n`) }]) {
               const path = file.path; place(path);
               const content = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content, file.encoding || "utf8");
               bytes += content.length; if (bytes > 100 * 1024 * 1024) throw fail(413, "Publication artifact is too large");
               const oid = (await git(cwd, ["hash-object", "-w", "--stdin"], { input: content })).text;
-              index.push(`100644 ${oid}\t${path}`);
+              index.push(`100644 ${oid}\t${path}\0`);
             }
-            // One index write for every entry instead of one process per file.
-            await git(cwd, ["update-index", "--index-info"], { input: index.join("\n") + "\n" });
+            // One NUL-terminated index write for every entry instead of one
+            // process per file; without -z a path starting with `"` is unquoted.
+            await git(cwd, ["update-index", "-z", "--index-info"], { input: index.join("") });
             const desired = (await git(cwd, ["write-tree"])).text;
             if (prior && (await git(cwd, ["rev-parse", `${prior}^{tree}`])).text === desired) return { headCommit: prior };
             const published = await commit(cwd, desired, [], `TimDS ${stamp.version} ${stamp.contentDigest}`, resume.commitDate || submission.created_at);

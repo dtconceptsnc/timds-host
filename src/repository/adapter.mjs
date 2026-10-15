@@ -138,13 +138,16 @@ export function createRepositoryAdapter({artifacts,store,getSandbox,snapshotBuck
   }
   // Artifact files whose path, size and sha256 match the previous release's
   // manifest are reused from the published branch's prior tree; only the rest
-  // cross into the container. An unchanged republish stages nothing.
+  // cross into the container. An unchanged republish stages nothing. The
+  // receipt chooses the files and the tip supplies their blobs, so reuse
+  // happens only when the container confirms the tip carries that receipt's
+  // stamp; after a rollback or an interrupted flip everything is staged.
   api.pushPublished=async(source,checkoutId,{files,stamp,previous})=>{
     let reuse=[];
-    if(isFileTree(files)&&previous?.files?.size){const manifest=await readTreeManifest(snapshotBucket,files);reuse=manifest.files.filter(file=>{const prior=previous.files.get(file.path);return Boolean(prior)&&prior.sha256===file.sha256&&prior.size===file.size;}).map(file=>file.path);}
+    if(isFileTree(files)&&previous?.files?.size&&previous.stamp&&(await call(source,'priorPublished',[{stamp:previous.stamp}],checkoutId)).reusable===true){const manifest=await readTreeManifest(snapshotBucket,files);reuse=manifest.files.filter(file=>{const prior=previous.files.get(file.path);return Boolean(prior)&&prior.sha256===file.sha256&&prior.size===file.size;}).map(file=>file.path);}
     const reused=new Set(reuse);
     await stageTree(source,checkoutId,files,'stagePublished',file=>!reused.has(file.path));
-    return call(source,'pushPublished',[{stamp,reuse}],checkoutId);
+    return {...await call(source,'pushPublished',[{stamp,reuse,...(reuse.length?{priorStamp:previous.stamp}:{})}],checkoutId),reusedFiles:reuse.length};
   };
   return api;
 }

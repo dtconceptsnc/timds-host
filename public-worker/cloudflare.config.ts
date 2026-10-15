@@ -13,7 +13,7 @@ const domains=local||/(^|\.)(workers\.dev|pages\.dev|r2\.dev)$/.test(publicUrl.h
 const legacyRoutes=legacyHostRoutes(process.env.TIMDS_LEGACY_PUBLIC_HOSTS || '{}');
 if(Object.hasOwn(legacyRoutes,publicUrl.hostname))throw new Error('The canonical public domain cannot also be a legacy source alias');
 const legacyHosts=JSON.stringify(legacyRoutes);
-export default defineConfig({worker:{name:`${host}-public`,domains,compatibilityDate:'2026-10-12',entrypoint,env:{
+export default defineConfig({worker:{name:`${host}-public`,domains,compatibilityDate:'2026-10-12',observability:{enabled:true,redactQueryString:true,logs:{enabled:true,invocationLogs:true}},entrypoint,env:{
   PUBLIC_ROOTS:bindings.worker({worker:host,exportName:'PublicRoots'}),
   PUBLIC_ORIGIN:bindings.text(publicUrl.origin),
   LEGACY_PUBLIC_HOSTS:bindings.text(legacyHosts),
