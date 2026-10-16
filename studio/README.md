@@ -217,14 +217,20 @@ are deduplicated by URL. A guidance directory links to up to 30 published pages;
 the design card also opens the rendered catalog when its URL is available.
 
 The implementation section explains how to explore the guide, install or use
-the bundle, and connect an AI tool to the public, read-only `/mcp` endpoint.
-The copyable `timds consumer init` command uses the pinned root toolkit version,
-system ID, explicit release and public base. It is offered only when the
-captured release has an immutable version base and a matching bundle at the
-artifact root. Custom nested bundles and imported same-label republications
-instead direct clients to the actual file manifest. The main guide follows the
-current release; an immutable release link appears only when the derived layer
-confirms that it represents the captured publication.
+the bundle, and give an AI tool the same context. It matches the developer
+guides under [`docs/consuming/`](../docs/consuming/README.md): the copyable
+command is `npx --yes @dtconcepts/timds@latest consumer init` with the system
+ID and the public base, no toolkit version and no `--version`, so `init` pins
+the release that is current when it runs. The `TOOLKIT` constant is not used
+here. The command is offered only when the captured release has an immutable
+version base and a matching bundle at the artifact root. Custom nested bundles
+and imported same-label republications instead direct clients to the actual
+file manifest. The AI step names no server and no tool names: it points at the
+published guide and the AI guide (`llms.txt`), which lead to the tokens, brand
+data and guidance pages, and the client handoff text repeats that pointer under
+**AI TOOLS**. The main guide follows the current release; an immutable release
+link appears only when the derived layer confirms that it represents the
+captured publication.
 
 The client first reads the existing source view to distinguish an unpublished
 system from a failed read, then calls `read_derived_layer` over the fixed
@@ -509,7 +515,9 @@ rail; below 960 px the three columns become one.
 No unit tests are added for Studio. On 2026-10-13 the published collection was
 checked with local synthetic browser fixtures at desktop and 390 px phone width,
 including JSON/SSE reads, search, copy, absent exports, custom bundles,
-unpublished systems, retry and switching systems during a pending read. These
+unpublished systems, retry and switching systems during a pending read. On
+2026-10-16 the Deliverables view and client handoff were checked the same way
+after the developer handoff moved to the CLI at `@latest`. These
 local checks do not establish deployed behavior. Browser acceptance must use
 the real deployed host and a disposable source; this file does not claim that
 acceptance has passed.
