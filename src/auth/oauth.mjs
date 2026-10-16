@@ -9,7 +9,7 @@ export const scopes = ['timds:read', 'timds:write', 'offline_access'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const securityHeaders = { 'Cache-Control':'no-store', 'Content-Security-Policy': "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer' };
 const consentKey = handle => `host-consent:${handle}`;
-function consentPolicy(validatedRedirectUri) {
+function consentPolicy(validatedRedirectUri, nonce) {
   const redirectOrigin = new URL(validatedRedirectUri).origin;
   // parseAuthRequest has checked the registered URI and allowed scheme. Keep
   // its origin literal: client metadata must not inject CSP syntax/wildcards.
@@ -17,14 +17,56 @@ function consentPolicy(validatedRedirectUri) {
   // Chromium also applies form-action to the POST's redirect. The consent form
   // still posts to this host; permit only this request's validated callback,
   // including its exact loopback port, for the subsequent OAuth redirect.
-  return `default-src 'none'; form-action 'self' ${redirectOrigin}; frame-ancestors 'none'; base-uri 'none'`;
+  return `default-src 'none'; style-src 'nonce-${nonce}'; form-action 'self' ${redirectOrigin}; frame-ancestors 'none'; base-uri 'none'`;
+}
+const permissions = {
+  'timds:read': ['Read Design Systems you can access', 'Sessions, submissions, releases and guidance that your existing grants already cover.'],
+  'timds:write': ['Edit and publish with your existing permissions', 'Start and edit sessions and submit them for review. Publishing still needs a publisher grant you already hold.'],
+  offline_access: ['Stay connected until you revoke access', 'The client renews its connection without asking you to sign in again.'],
+};
+// Studio's palette and type (studio/style.css), inlined because the consent
+// page is served from the API origin under a default-src 'none' policy.
+const consentStyle = `:root{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#252b23;background:#f4f3ed;font-size:15px;line-height:1.55;--ink:#252b23;--muted:#697061;--line:#dedfd4;--paper:#fffef9;--accent:#375638;--danger:#9c3a2e}
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:flex;justify-content:center}
+.consent{width:min(560px,100%);padding:clamp(28px,7vw,72px) 20px 56px}
+.wordmark{display:block;font-size:2rem;letter-spacing:-.09em;font-weight:780;line-height:1;margin-bottom:48px}.dot{color:#73934f}
+.eyebrow{text-transform:uppercase;letter-spacing:.13em;font-weight:650;font-size:.69rem;color:var(--muted);margin:0 0 12px}
+h1{font-size:clamp(1.9rem,4vw,2.6rem);font-weight:500;letter-spacing:-.055em;line-height:1.16;margin:0 0 12px;overflow-wrap:anywhere}
+.lede{color:var(--muted);margin:0 0 26px}.lede strong{color:var(--ink);font-weight:600}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:14px}
+h2{font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:650;margin:0 0 12px}
+.permissions{list-style:none;margin:0;padding:0}.permissions li{display:flex;flex-direction:column;gap:2px;padding:10px 0;border-top:1px solid var(--line)}.permissions li:first-child{border-top:0;padding-top:0}.permissions li:last-child{padding-bottom:0}
+.permissions strong{font-weight:600}.permissions span{font-size:.86rem;color:var(--muted)}
+.host{font-size:1.1rem;font-weight:600;margin:0 0 4px;overflow-wrap:anywhere}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;color:var(--muted);margin:0;overflow-wrap:anywhere}
+.note{font-size:.86rem;color:var(--muted);margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line)}.note.warn{color:var(--danger)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin:24px 0 18px}
+button{font:inherit;font-weight:600;min-height:44px;padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button:hover{background:#eeeee4;border-color:#a9b09e}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button.primary:hover{background:#29452c}
+:focus-visible{outline:3px solid #9eb285;outline-offset:3px}
+.footer{font-size:.8rem;color:var(--muted);margin:0}`;
+function consentPage({ principal, description, handle, nonce }) {
+  const permission = scope => { const [title, detail] = permissions[scope] || [scope, '']; return `<li><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></li>`; };
+  const readOnly = !description.scope.includes('timds:write');
+  const client = description.clientDomain ? `Verified client domain <strong>${escapeHtml(description.clientDomain)}</strong>.` : 'This client supplied its own name; TimDS has not verified it.';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>Connect to TimDS</title><style nonce="${nonce}">${consentStyle}</style></head><body><main class="consent">`
+    + `<span class="wordmark">timds<span class="dot">.</span></span><p class="eyebrow">Connect a client</p><h1>${escapeHtml(description.clientName)}</h1>`
+    + `<p class="lede">${client} You are signed in as <strong>${escapeHtml(principal.name)}</strong>.</p>`
+    + `<section class="panel"><h2>It will be able to</h2><ul class="permissions">${description.scope.map(permission).join('')}</ul>${readOnly ? '<p class="note">This client asked for read access only. Editing tools stay hidden until it connects again and asks for write access.</p>' : ''}</section>`
+    + `<section class="panel"><h2>Authorization is sent to</h2><p class="host">${escapeHtml(description.redirectHost)}</p><p class="mono">${escapeHtml(description.redirectUri)}</p>${description.redirectIsLoopback ? '<p class="note warn">This opens a local app. Any process on this computer could be listening at that address, whatever the client calls itself.</p>' : ''}</section>`
+    + `<form method="post" action="/authorize" class="actions"><input type="hidden" name="handle" value="${escapeHtml(handle)}"><button class="primary" name="decision" value="approve">Connect</button><button name="decision" value="deny">Cancel</button></form>`
+    + `<p class="footer">Your existing Design System permissions apply. Connecting never grants more than you already hold.</p></main></body></html>`;
 }
 
 export function createHostOAuth(env, { api, publicFetch, claimInvitations=async()=>{}, requestOrigin }) {
   const origin = oauthOrigin(env, requestOrigin), resource = `${origin}/api/timds`;
   const options = {
     apiRoute: '/api/timds', authorizeEndpoint: '/authorize', tokenEndpoint: '/token', clientRegistrationEndpoint: '/register',
-    scopesSupported: scopes, requiredScopes: ['timds:read'], clientIdMetadataDocumentEnabled: true,
+    // requiredScopes is what the MCP resource's 401 challenge and protected-resource
+    // metadata name, and MCP clients request exactly that: a client offered only
+    // timds:read could never reach the contribution tools. It is advertised, not
+    // enforced; apiHandler below still admits a token that holds only timds:read.
+    scopesSupported: scopes, requiredScopes: ['timds:read', 'timds:write'], clientIdMetadataDocumentEnabled: true,
     accessTokenTTL: 3600, refreshTokenTTL: 30 * 24 * 3600, clientRegistrationTTL: 30 * 24 * 3600,
     resourceMetadata: { resource, authorization_servers: [origin] },
     async tokenExchangeCallback(input) {
@@ -66,7 +108,8 @@ export function createHostOAuth(env, { api, publicFetch, claimInvitations=async(
         if (request.method === 'GET') {
           const authRequest = await helpers.parseAuthRequest(request);
           if (authRequest.codeChallengeMethod !== 'S256' || !authRequest.codeChallenge || authRequest.resource !== resource || !authRequest.scope.includes('timds:read') || authRequest.scope.some(scope => !scopes.includes(scope))) throw fail(400, 'Use PKCE S256 and the TimDS resource and scopes');
-          const policy = consentPolicy(authRequest.redirectUri);
+          const nonce = crypto.randomUUID().replaceAll('-', '');
+          const policy = consentPolicy(authRequest.redirectUri, nonce);
           const description = await helpers.describeConsent(authRequest);
           const transaction = await helpers.beginConsent(authRequest);
           await bindings.OAUTH_KV.put(consentKey(transaction.handle), principal.id, { expirationTtl: 600 });
@@ -77,7 +120,7 @@ export function createHostOAuth(env, { api, publicFetch, claimInvitations=async(
           // same-origin POST guard without sending a referrer to the callback.
           headers.set('Referrer-Policy','same-origin');
           headers.set('Content-Type','text/html; charset=utf-8');
-          const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connect to TimDS</title><main><h1>Connect to TimDS</h1><p>Signed in as ${escapeHtml(principal.name)}</p><h2>${escapeHtml(description.clientName)}</h2><p>${description.clientDomain ? `Client domain: ${escapeHtml(description.clientDomain)}` : 'The client supplied this name.'}</p><p>Send authorization to <strong>${escapeHtml(description.redirectHost)}</strong></p><p>${escapeHtml(description.redirectUri)}</p>${description.redirectIsLoopback ? '<p>This opens a local app. Any local process could be listening at this address.</p>' : ''}<ul>${description.scope.map(scope => `<li>${escapeHtml(scope === 'timds:read' ? 'Read Design Systems you can access' : scope === 'timds:write' ? 'Edit and publish with your existing permissions' : 'Stay connected until you revoke access')}</li>`).join('')}</ul><form method="post" action="/authorize"><input type="hidden" name="handle" value="${escapeHtml(transaction.handle)}"><button name="decision" value="approve">Connect</button> <button name="decision" value="deny">Cancel</button></form></main></html>`;
+          const html = consentPage({ principal, description, handle: transaction.handle, nonce });
           return new Response(html, { headers });
         }
         if (request.method !== 'POST') return new Response(null, { status:405, headers:{ Allow:'GET, POST', ...securityHeaders } });

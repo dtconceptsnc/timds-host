@@ -125,11 +125,15 @@ it contains. By hand, choose your client's remote HTTP MCP connection and enter:
 https://host.example.com/api/timds/mcp
 ```
 
-Complete the client's OAuth sign-in. Allow `timds:read` and `timds:write` for
-contribution; `offline_access` is optional if the client supports refresh.
-The client must support OAuth authorization code with PKCE S256 and the host's
-advertised client registration or a pre-registered client. Read-only consent
-omits mutation tools. Reconnect with write scope if you later need to edit.
+Complete the client's OAuth sign-in. The host's challenge asks for `timds:read`
+and `timds:write`, so a client with no scope setting of its own arrives at the
+consent page requesting both. The page lists each permission, where the
+authorization will be sent, and says so when the client asked for read access
+only. `offline_access` is optional if the client supports refresh. The client
+must support OAuth authorization code with PKCE S256 and the host's advertised
+client registration or a pre-registered client. Read-only consent omits
+mutation tools; a client that connected read-only has to disconnect and connect
+again to be asked for write access.
 
 For a connection on `https://host.example.com`, the OAuth values are:
 
