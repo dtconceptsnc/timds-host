@@ -30,8 +30,8 @@ imports them like its own. See [pin and sync](pin-and-sync.md).
    nothing else resolves.
 2. The system's stylesheet family for the surface you are building. A system
    typically documents a marketing family, an application or utility family,
-   and specialised families for print, decks or social canvases. `describe_system`
-   and the system's own guidance say which family belongs to which surface.
+   and specialised families for print, decks or social canvases. The system's
+   `llms.txt` and guidance say which family belongs to which surface.
 3. The product's skin stylesheet, which may only reference tokens and compose
    the system's classes. Product-specific layout lives here.
 
@@ -42,15 +42,15 @@ product stylesheet.
 
 - In product CSS write `var(--accent)`, never `#c2a15a`. The token's resolved
   literal is for places that cannot load CSS (see the table below).
-- Ask by role first: `resolve_role` answers "the accent colour" and "the
-  heading font" with the token that fills the role. Guessing from token names
-  is how a product drifts.
+- Ask by role first: the roles in `brand.json` answer "the accent colour" and
+  "the heading font" with the token that fills the role. Guessing from token
+  names in `tokens.json` is how a product drifts.
 - Do not redeclare a system token to change it. A different value is a
   system change, made in the system's repository.
 - Scheme and width behaviour comes with the system's stylesheets. Keep light
   and dark, desktop and phone, focus states and reduced motion working in the
   product; do not override them away.
-- Fonts: each font role in `get_brand` names its family and where it comes
+- Fonts: each font role in `brand.json` names its family and where it comes
   from. `files` are `@font-face` files the bundle carries; `stylesheets` is a
   font service the pages load; `specimen` is a page to obtain the family by
   hand; `system` means the device's fonts are intended.
@@ -61,10 +61,10 @@ product stylesheet.
 | --- | --- | --- |
 | A website or app on the system | The pinned bundle's token sheet plus the family for that surface, then the product's skin | Token names, `var(--…)` |
 | A single HTML artifact (landing page, report, email preview) | The `versioned` stylesheet URLs from `bundle.json`, or the token sheet inlined when the artifact must be self-contained | Token names |
-| HTML email | No external CSS. Inline resolved literals. | `get_tokens` `resolved`, `resolve_role` |
-| A print sheet or PDF | The system's print stylesheet if it publishes one, with `@page` sized from `list_formats` | Format numbers, roles, logo files by intended background |
+| HTML email | No external CSS. Inline resolved literals. | The resolved values in `tokens.json` and the role values in `brand.json` |
+| A print sheet or PDF | The system's print stylesheet if it publishes one, with `@page` sized from `formats.json` | Format numbers, roles, logo files by intended background |
 | A social or display canvas | Usually none; a canvas stylesheet when the system publishes one | Format pixels, roles, media URLs |
-| Figma, Canva, slides, video boards | None | Resolved literals and font families from `get_brand` |
+| Figma, Canva, slides, video boards | None | Resolved literals and font families from `brand.json` |
 
 [Produce assets](produce-assets.md) covers the rows that are not web pages.
 
@@ -77,5 +77,5 @@ product stylesheet.
   light and dark, with keyboard focus and contrast checked. A token check does
   not see the cascade.
 - A token, component or role the product needs and the system lacks is a gap.
-  Say so and file it with `report_gap` when the user agrees; do not add a
-  product-side literal to paper over it.
+  Say so and tell the system's owner; do not add a product-side literal to
+  paper over it.

@@ -10,14 +10,37 @@ Every example uses the synthetic system `timds-example/core` on a host whose
 public origin is `https://public.example.com`. Substitute your system id and
 the public origin your operator gives you.
 
+## The CLI
+
+Everything in these guides runs through the TimDS CLI, the npm package
+[`@dtconcepts/timds`](https://www.npmjs.com/package/@dtconcepts/timds). Run it
+at `@latest` so you always have the current toolkit and never maintain a
+version yourself:
+
+```sh
+npx --yes @dtconcepts/timds@latest consumer --help
+```
+
+Or install it once and call `timds` directly:
+
+```sh
+npm install --global @dtconcepts/timds@latest
+```
+
+Do not pin a toolkit version in these commands or in your notes. Inside a
+product repository, `timds consumer init` adds the toolkit to the product's
+own dependencies so `npm run timds -- consumer …` runs the same copy for
+every developer and CI job; refresh it with
+`npm install --save-dev @dtconcepts/timds@latest`.
+
 ## Where a published system lives
 
 | Address | What it is | Caching |
 | --- | --- | --- |
 | `https://public.example.com/systems/timds-example/core/` | The current release: browsable guide, derived documents, stamp | Five minutes, revalidated |
-| `https://public.example.com/systems/timds-example/core/v/2026.10.14-1/` | One release, immutable | One year |
+| `https://public.example.com/systems/timds-example/core/v/<label>/` | One release, immutable | One year |
 | `https://public.example.com/systems/timds-example/core/v/latest/…` | A tag for the current release; answers 307 to the immutable address | Five minutes, revalidated |
-| `https://public.example.com/mcp` | Anonymous read MCP over HTTP, `systemId` as a tool argument | none |
+| `https://public.example.com/mcp` | Anonymous read-only MCP over HTTP, `systemId` as a tool argument | none |
 
 A system id with more than two segments uses one URL-encoded segment instead,
 `/systems/a%2Fb%2Fc/`. Beside the root sits `.timds-artifact.json`, the stamp
@@ -26,33 +49,35 @@ derived document is.
 
 ## Three ways to consume
 
-1. **An agent reading through MCP.** The toolkit's read server gives an agent
-   the whole consumer tool set (brand roles, tokens, guidance, formats, designs,
-   media) from the published files. See [connect an agent](connect.md).
-2. **A product pinning a release.** `timds consumer init` pins a version and
+1. **An agent reading through MCP.** The CLI's read server gives an agent
+   the whole consumer tool set (brand roles, tokens, guidance, formats,
+   designs, media) from the published files, and the public origin answers
+   read-only MCP at `/mcp`. See [connect an agent](connect.md).
+2. **A product pinning a release.** `timds consumer init` pins a release and
    fetches the system's stylesheets and assets into the product at install
    time, verified by digest. See [pin and sync](pin-and-sync.md) and
    [implement styles](styles.md).
-3. **Plain files.** Anything that can fetch a URL can read `tokens.json`,
-   `brand.json`, `index.json`, `llms.txt`, `formats.json`, `designs.json`,
-   `changelog.json` and `bundle.json` under the root. The documents are
-   described in [published derived layer](../api/published-derived-layer.md).
+3. **Reading the published documents.** Anything that can fetch a URL reads `llms.txt`, `brand.json`, `tokens.json`,
+   `index.json`, `formats.json`, `designs.json`, `changelog.json` and
+   `bundle.json` under the root. See [connect an agent](connect.md); the
+   documents are described in
+   [published derived layer](../api/published-derived-layer.md).
 
 ## The version rule
 
 The current release is the default everywhere, and every read resolves it
-again. Pass a version only when someone asks for an earlier release, and say
-which version you used. A product built against a pinned version may trail
-the current release; that is a fact to report, not to hide.
+again. Read an earlier release only when someone asks for one, and say
+which version you used. A product built against a pinned release may trail
+the current one; that is a fact to report, not to hide.
 
 ## The guides
 
 | Guide | Read it when |
 | --- | --- |
-| [connect.md](connect.md) | You are connecting an agent to a system and need the tools, resources and first calls. |
+| [connect.md](connect.md) | You are connecting an agent to a system and need the MCP connection, the documents and the first reads. |
 | [styles.md](styles.md) | You are implementing a product's styles from the system, or deciding whether to include CSS at all. |
 | [pin-and-sync.md](pin-and-sync.md) | You are pinning a release in a repository and want install and CI to fetch it. |
 | [produce-assets.md](produce-assets.md) | You are producing something that is not a web page: an email, a deck, a social post, a print sheet, a video board. |
 | [designs-and-guidance.md](designs-and-guidance.md) | You are porting a website design or need the voice, compliance and media rules. |
 | [versions-and-releases.md](versions-and-releases.md) | You need to know what current, pinned, latest and a release label mean, and how rollback affects them. |
-| [what-a-system-publishes.md](what-a-system-publishes.md) | A tool says a document is not published and you need to tell "not yet" from "not supported". |
+| [what-a-system-publishes.md](what-a-system-publishes.md) | A document is missing from a release and you need to tell "not yet" from "not supported". |

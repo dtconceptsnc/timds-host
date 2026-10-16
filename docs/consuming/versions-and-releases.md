@@ -2,16 +2,16 @@
 
 ## Labels
 
-A release label is its UTC day and number that day: `2026.10.14-1`, then
-`2026.10.14-2`. Systems released before the scheme carry `MAJOR.MINOR.PATCH`
-labels, which sort below every dated one. Labels are assigned at publication;
-a consumer never invents one.
+A release label is its UTC day and a number for that day, `YYYY.MM.DD-N`,
+counting up within the day. Systems released before the scheme carry
+`MAJOR.MINOR.PATCH` labels, which sort below every dated one. Labels are
+assigned at publication; a consumer never invents one.
 
 ## Four words
 
 | Word | Means | Address |
 | --- | --- | --- |
-| A release | One immutable publication | `/systems/timds-example/core/v/2026.10.14-1/` |
+| A release | One immutable publication | `/systems/timds-example/core/v/<label>/` |
 | Current | The release the publisher points at today | `/systems/timds-example/core/` |
 | `latest` | A tag for the current release that answers with the immutable address | `/systems/timds-example/core/v/latest/…` → 307 |
 | Pinned | The release a product's `timds.consumer.json` names | In the product, not on the host |
@@ -39,12 +39,12 @@ from the current root can tear when a publication lands between two requests.
 ## Reading what changed
 
 - `changelog.json` under the root lists every release with its notes, newest
-  first; the `/changelog/` page shows the same. `describe_system` returns the
-  recent ones.
+  first; the `/changelog/` page shows the same.
 - `.timds-artifact.json` beside the root names the current version, source
   commit and content digest, the artifact entry and where each derived document
   sits. The same file under `/v/<label>/` is that release's stamp.
-- Each MCP result names the version it was read from. Report it.
+- Every document names the version it belongs to, through the stamp beside
+  it. Report that version with anything you build.
 
 ## Same label, different bytes
 
