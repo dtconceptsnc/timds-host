@@ -151,6 +151,26 @@ Completion of the provision receipt alone does not imply that the final access
 grant succeeded, so the original creation request is retried before opening it.
 An explicit Disconnect clears the tab's saved inputs; server receipts remain.
 
+**Access…** on each ready management row, and beside the selected system's
+Overview heading, opens that system's access dialog. It reads the host's
+publisher list and identity catalog (`GET /api/timds/admin/systems/:id/authority`
+and `/principals`, following every cursor) together with the system's own
+principal directory, and lists everyone who can read, write or publish plus the
+designer agent, marking publishers. **Set permissions** chooses an active
+identity that has already signed in to this host and sets read, write and
+publish exactly as checked (write implies read); unchecking all three removes
+that identity's access. Each change posts a durable authority operation
+(`POST /api/timds/admin/systems/:id/authority`). Studio saves the operation UUID
+and exact command in this tab's `sessionStorage`, scoped to the administrator,
+source and principal, before the request leaves, and reuses them unchanged
+while the same command is retried after a failure; a different command gets a
+new UUID, and success clears the saved entry. The receipt must name the same
+source and principal and carry a confirmed authority version, after which the
+list reloads. Studio never matches an email address or creates an identity;
+people who have not signed in are not offered, and reserved invitations stay
+with the administrator API. The host closes a changed identity's live sessions
+so they reconnect with their new permissions.
+
 **Rename organization…** on each management row changes only the organization's
 display name. The dialog explains that shared organizations change for every
 system using them, and rejects an unrelated concurrent rename. Organization IDs,

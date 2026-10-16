@@ -199,7 +199,7 @@ export function createApi({ getCoordinator, provision, mcp }) {
         if(!uuid.test(input.operationId||''))throw fail(400,'An operation UUID is required');
         const allowed=['principalId','read','write','publish'];
         if(!input.command||Object.keys(input.command).some(key=>!allowed.includes(key))||!uuid.test(input.command.principalId||'')||!['read','write','publish'].some(key=>key in input.command)||['read','write','publish'].some(key=>key in input.command&&typeof input.command[key]!=='boolean'))throw fail(400,'Use a principal and explicit read, write or publish permissions');
-        return respond(await call(row.id,'authority',[{operationId:input.operationId,command:input.command}]));
+        return respond({apiVersion:1,...await call(row.id,'authority',[{operationId:input.operationId,command:input.command}])});
       }
     }
     throw fail(404,'Route not found');

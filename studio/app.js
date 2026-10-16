@@ -194,7 +194,7 @@ function sessionCreation(){return node('div',{class:'session-creation'},node('se
 // ---- Views -----------------------------------------------------------------
 function renderMain(){const main=$('#main');if(!main)return;if(state.view==='systems'&&state.principal?.admin){main.replaceChildren(manageSystemsView());return;}if(!state.source){main.replaceChildren(pageHead('STUDIO','Your systems will appear here.','Ask your administrator for access to a Design System.'));return;}if(!state.work){main.replaceChildren(loadingBlock('Loading your workspace…','Sessions, Requests and releases are on their way.'));return;}
   if(state.view==='studio'){if(!state.session){main.replaceChildren(loadingBlock('Opening the session…','The stream and the live view appear in a moment.'));return;}renderStudio(main);return;}
-  if(state.view==='overview'){main.replaceChildren(pageHead('YOUR DESIGN SYSTEM',state.source.name,'From the first idea to everything your team needs to bring it to life.',state.principal?.admin?button('Delete Design System…',()=>deleteSelectedSystem(),'small danger'):null),deliveryView(),node('div',{class:'section-head'},title('h2','Keep creating.'),title('p','Three ways to make your next change.')),waysOverview(),node('div',{class:'grid'},panel('Drafts and sessions',workList()),node('div',{class:'stack'},panel('Recent Requests',requestList()),panel('Releases',releaseList(3)))));return;}
+  if(state.view==='overview'){main.replaceChildren(pageHead('YOUR DESIGN SYSTEM',state.source.name,'From the first idea to everything your team needs to bring it to life.',state.principal?.admin?node('div',{class:'actions head-actions'},button('Access…',()=>accessDialog(state.source),'small'),button('Delete Design System…',()=>deleteSelectedSystem(),'small danger')):null),deliveryView(),node('div',{class:'section-head'},title('h2','Keep creating.'),title('p','Three ways to make your next change.')),waysOverview(),node('div',{class:'grid'},panel('Drafts and sessions',workList()),node('div',{class:'stack'},panel('Recent Requests',requestList()),panel('Releases',releaseList(3)))));return;}
   if(state.view==='deliverables'){main.replaceChildren(pageHead(state.source.name,'Made to be used.','Explore the published system, find the right assets, and hand everything over to your team.'),deliveryView(true));return;}
   if(state.view==='sessions'){main.replaceChildren(pageHead(state.source.name,'Sessions and drafts.','Create a workspace here, then open Studio for Requests, live changes and review.'),sessionCreation(),workList(true));return;}
   if(state.view==='review'){main.replaceChildren(pageHead(state.source.name,'Ready for a closer look.','Open each Preview here, then publish or restore a release.'),node('section',{class:'panel'},reviewList()),panel('Releases',releaseList()));return;}
@@ -233,7 +233,7 @@ function manageSystemsView(){
   const head=pageHead('ADMINISTRATION','Design Systems','Create a system, review its lifecycle, or follow a deletion through cleanup.',button('Create Design System',()=>createSystemDialog(),'primary'));
   if(!state.management)return node('div',{},head,state.managementError?panel('The catalog could not load',title('p',state.managementError,{class:'error-text'}),button('Try again',()=>loadManagement(true))):loadingBlock('Loading Design Systems…'));
   const data=state.management,pending=pendingCreations().filter(record=>!data.systems.some(system=>system.id===record.input.sourceId&&['deleting','deleted'].includes(system.lifecycleStatus))),pendingIds=new Set(pending.map(row=>row.input.sourceId)),active=data.systems.filter(system=>system.lifecycleStatus!=='deleted'),deleted=data.systems.filter(system=>system.lifecycleStatus==='deleted');
-  const systemRow=system=>{const organization=data.organizations.find(row=>row.id===system.organizationId),deletionId=system.deletionOperationId||read(deletionKey(system.id))?.operationId,isDeleted=system.lifecycleStatus==='deleted';return node('article',{class:'panel system-management-row'},node('div',{class:'card-title'},node('div',{},title('h2',system.name),title('p',system.systemId,{class:'mono help break'})),badge(isDeleted?'deleted':system.archivedAt?'archived':system.lifecycleStatus)),title('p',organization?.name||'Design System organization',{class:'card-meta'}),node('div',{class:'actions'},system.lifecycleStatus==='ready'&&!system.archivedAt?button('Open system',()=>{location.hash=new URLSearchParams({source:system.id,view:'overview'}).toString();},'small'):null,!isDeleted&&organization?button('Rename organization…',()=>renameOrganizationDialog(organization),'small'):null,['provisioning','ready'].includes(system.lifecycleStatus)&&system.creationPending&&system.creationInput&&!pendingIds.has(system.id)?button(system.lifecycleStatus==='ready'?'Finish setup':'Resume creation',()=>createSystemDialog({input:system.creationInput}),'small'):null,system.lifecycleStatus==='provisioning'&&!system.creationInput?title('p','Provisioning is incomplete. Resume it from the original administrative workflow.',{class:'help'}):null,deletionId?button(isDeleted?'Deletion receipt':'Review deletion',()=>deleteSystemDialog(system,deletionId),'small'):['ready','provisioning'].includes(system.lifecycleStatus)?button('Delete…',()=>deleteSystemDialog(system),'small danger'):null));};
+  const systemRow=system=>{const organization=data.organizations.find(row=>row.id===system.organizationId),deletionId=system.deletionOperationId||read(deletionKey(system.id))?.operationId,isDeleted=system.lifecycleStatus==='deleted';return node('article',{class:'panel system-management-row'},node('div',{class:'card-title'},node('div',{},title('h2',system.name),title('p',system.systemId,{class:'mono help break'})),badge(isDeleted?'deleted':system.archivedAt?'archived':system.lifecycleStatus)),title('p',organization?.name||'Design System organization',{class:'card-meta'}),node('div',{class:'actions'},system.lifecycleStatus==='ready'&&!system.archivedAt?button('Open system',()=>{location.hash=new URLSearchParams({source:system.id,view:'overview'}).toString();},'small'):null,system.lifecycleStatus==='ready'&&!system.archivedAt?button('Access…',()=>accessDialog(system),'small'):null,!isDeleted&&organization?button('Rename organization…',()=>renameOrganizationDialog(organization),'small'):null,['provisioning','ready'].includes(system.lifecycleStatus)&&system.creationPending&&system.creationInput&&!pendingIds.has(system.id)?button(system.lifecycleStatus==='ready'?'Finish setup':'Resume creation',()=>createSystemDialog({input:system.creationInput}),'small'):null,system.lifecycleStatus==='provisioning'&&!system.creationInput?title('p','Provisioning is incomplete. Resume it from the original administrative workflow.',{class:'help'}):null,deletionId?button(isDeleted?'Deletion receipt':'Review deletion',()=>deleteSystemDialog(system,deletionId),'small'):['ready','provisioning'].includes(system.lifecycleStatus)?button('Delete…',()=>deleteSystemDialog(system),'small danger'):null));};
   return node('div',{class:'system-management'},head,state.managementError?title('p',state.managementError,{class:'error-text'}):null,...pending.map(record=>panel(`Creation in progress: ${record.input.name}`,title('p','This tab saved the original details. Review status or retry the same creation.',{class:'help'}),button('Resume creation',()=>createSystemDialog(record),'small'))),
     active.length?node('div',{class:'list'},...active.map(systemRow)):panel(deleted.length?'No active Design Systems':'Create your first Design System',title('p','Start with a hosted starter, then open a session and ask the designer to make it yours.',{class:'help'}),button('Create Design System',()=>createSystemDialog(),'primary')),
     deleted.length?node('details',{class:'details'},title('summary',`Deleted Design Systems (${deleted.length})`),node('div',{class:'list'},...deleted.map(systemRow))):null);
@@ -255,6 +255,67 @@ function renameOrganizationDialog(organization){
   },'primary');
   host.append(title('p','This changes the organization name for every Design System that uses it, including systems sharing an existing organization. Organization IDs and Design System identities remain fixed.'),field('Organization name',name),errorText,node('div',{class:'dialog-actions'},cancelButton(),rename));
   const dialog=showDialog('Rename organization',host);
+}
+// ---- Source access ---------------------------------------------------------
+// Who can read, write or publish a Design System. Each change is a durable
+// authority operation: the operation UUID and exact command are saved per
+// principal and source before the request leaves the tab and reused unchanged
+// after an ambiguous response. The host rechecks administrator authority on
+// every call and closes that person's live sessions so they reconnect with
+// their new permissions. Studio never matches emails or creates identities.
+const accessKey=(sourceId,principalId)=>`access.${state.principal.id}.${sourceId}.${principalId}`;
+const accessVisible=tracker=>state.principal?.id===tracker.principalId&&tracker.host.isConnected&&$('#dialog').open;
+async function cursorPages(path,key,cursorKey){const rows=[],seen=new Set();let cursor='',first;do{const result=await api(path+(cursor?`/${enc(cursor)}`:''));first??=result;rows.push(...(result[key]||[]));cursor=result[cursorKey]||'';if(cursor&&seen.has(cursor))throw new Error('The access list could not finish loading. Refresh to try again.');seen.add(cursor);}while(cursor);return{...first,[key]:rows};}
+const describeAccess=command=>{const granted=['read','write','publish'].filter(key=>command[key]);return granted.length?`can ${granted.join(', ')}`:'no longer has access';};
+async function accessDialog(system){
+  if(!state.principal?.admin)throw new Error('An active administrator is required.');
+  const host=node('div',{class:'access-dialog'}),tracker={system:{id:system.id,name:system.name,systemId:system.systemId},host,principalId:state.principal.id,data:null,error:null,selected:'',flags:null};
+  showDialog(`Access to ${system.name}`,host);host.append(loadingLine('Reading who has access…'),node('div',{class:'dialog-actions'},cancelButton()));
+  await readAccess(tracker);
+}
+async function readAccess(tracker){
+  const base=`/api/timds/admin/systems/${enc(tracker.system.id)}`;
+  try{
+    const [publishers,principals,directory]=await Promise.all([cursorPages(`${base}/authority`,'publishers','nextPublisherCursor'),cursorPages(`${base}/principals`,'principals','nextPrincipalCursor'),api(`/api/timds/design-systems/${enc(tracker.system.id)}/principals`)]);
+    if(!accessVisible(tracker))return;
+    if(publishers.sourceId!==tracker.system.id||directory.sourceId!==tracker.system.id)throw new Error('The host returned access for a different Design System. Refresh before continuing.');
+    tracker.data={version:publishers.authorityVersion,publishers:new Set(publishers.publishers.map(row=>row.id)),principals:principals.principals.filter(row=>row&&typeof row.id==='string'),directory:(directory.principals||[]).filter(row=>row&&typeof row.id==='string')};tracker.error=null;
+  }catch(error){if(!accessVisible(tracker))return;tracker.error=error.message;}
+  renderAccess(tracker);
+}
+function renderAccess(tracker){
+  if(!accessVisible(tracker))return;
+  const {host,data,system}=tracker,close=button('Close',()=>$('#dialog').close());
+  if(!data){replaceContent(host,title('p',tracker.error||'The access list could not load.',{class:'error-text',role:'alert'}),node('div',{class:'dialog-actions'},close,button('Try again',()=>readAccess(tracker))));return;}
+  const byId=new Map(data.principals.map(row=>[row.id,row])),rows=data.directory.map(row=>({id:row.id,name:row.name||row.id,type:row.type,active:row.active!==false,publisher:data.publishers.has(row.id)}));
+  for(const id of data.publishers)if(!rows.some(row=>row.id===id)){const row=byId.get(id);rows.push({id,name:row?.name||id,type:row?.type||'user',active:row?.status==='active',publisher:true});}
+  rows.sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id));
+  const errorText=title('p','',{class:'error-text',role:'alert'}),choices=data.principals.filter(row=>row.status==='active').sort((a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id)));
+  const select=node('select',{id:'access-principal'},node('option',{value:''},'Choose a person or agent…'),...choices.map(row=>node('option',{value:row.id,selected:row.id===tracker.selected},`${row.name||row.id} (${row.type})`)));
+  const check=(id,label,checked)=>{const input=node('input',{type:'checkbox',id,checked});return{input,row:node('label',{class:'check',htmlFor:id},input,label)};};
+  const flags=tracker.flags||{read:true,write:true,publish:false},canRead=check('access-read','Read',flags.read),canWrite=check('access-write','Write',flags.write),canPublish=check('access-publish','Publish',flags.publish);
+  const sync=()=>{if(canWrite.input.checked)canRead.input.checked=true;tracker.flags={read:canRead.input.checked,write:canWrite.input.checked,publish:canPublish.input.checked};const any=tracker.flags.read||tracker.flags.write||tracker.flags.publish;apply.textContent=any?'Apply permissions':'Remove all access';apply.className=any?'primary':'danger';};
+  canWrite.input.addEventListener('change',sync);canRead.input.addEventListener('change',()=>{if(!canRead.input.checked)canWrite.input.checked=false;sync();});canPublish.input.addEventListener('change',sync);
+  select.addEventListener('change',()=>{tracker.selected=select.value;const current=rows.find(row=>row.id===select.value);if(current){canRead.input.checked=true;canWrite.input.checked=true;canPublish.input.checked=current.publisher;}sync();});
+  const apply=button('Apply permissions',async()=>{
+    const principalId=select.value;if(!principalId)throw new Error('Choose who should have access.');
+    const command={principalId,read:canRead.input.checked,write:canWrite.input.checked,publish:canPublish.input.checked},key=accessKey(system.id,principalId),saved=read(key),operationId=saved?.operationId&&JSON.stringify(saved.command)===JSON.stringify(command)?saved.operationId:crypto.randomUUID();
+    save(key,{operationId,command});errorText.textContent='';
+    try{
+      const receipt=await api(`/api/timds/admin/systems/${enc(system.id)}/authority`,{operationId,command});
+      if(!accessVisible(tracker))return;
+      if(receipt.source_id!==system.id||receipt.command?.principalId!==principalId||!Number.isSafeInteger(receipt.confirmed_version))throw new Error('The host did not confirm this change. Refresh the list and review current access before retrying.');
+      sessionStorage.removeItem(prefix+key);tracker.selected='';tracker.flags=null;
+      notice(`${byId.get(principalId)?.name||principalId} ${describeAccess(command)}.`);
+      await readAccess(tracker);
+    }catch(error){if(accessVisible(tracker))errorText.textContent=error.message;}
+  },'primary');
+  const personRow=row=>node('div',{class:'access-row'},node('div',{class:'access-who'},title('strong',row.name),title('span',`${row.type}${row.active?'':' · inactive'}`,{class:'muted'})),node('div',{class:'access-flags'},row.publisher?badge('publisher'):badge('access'),row.active&&byId.has(row.id)?button('Change…',()=>{tracker.selected=row.id;tracker.flags={read:true,write:true,publish:row.publisher};renderAccess(tracker);host.querySelector('#access-principal')?.focus();},'small quiet'):null));
+  replaceContent(host,title('p',`${system.systemId||system.id} · authority version ${data.version??'unknown'}`,{class:'mono help break'}),
+    panel('Who has access',rows.length?node('div',{class:'access-list'},...rows.map(personRow)):empty('Nobody yet','Only host administrators can reach this Design System.'),title('p','Everyone who can read, write or publish, plus the designer agent. Publishers can release to the public address; the host requires that grant explicitly, even for administrators.',{class:'help'})),
+    panel('Set permissions',field('Person or agent',select,'Only identities that have already signed in to this host appear here. Studio never creates an identity from an email address.'),node('div',{class:'checks'},canRead.row,canWrite.row,canPublish.row),title('p','Permissions are set exactly as checked. Write includes read. Unchecking everything removes this identity’s access; published releases and recorded history stay.',{class:'help'}),errorText),
+    node('div',{class:'dialog-actions'},close,button('Refresh',()=>readAccess(tracker)),apply));
+  sync();
 }
 async function createSystemDialog(record=null){
   if(!state.principal?.admin)throw new Error('An active administrator is required.');

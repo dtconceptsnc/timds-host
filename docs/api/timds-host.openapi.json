@@ -2178,7 +2178,7 @@
           "Host administration"
         ],
         "summary": "Grant or revoke source permissions",
-        "description": "Current host admin only. Uses a durable coordinator barrier and current D1 authority. Reuse operationId and identical command after uncertain outcomes. Publishing requires a separate explicit grant even for administrators.",
+        "description": "Current host admin only. Uses a durable coordinator barrier and current D1 authority. Reuse operationId and identical command after uncertain outcomes. Publishing requires a separate explicit grant even for administrators. The receipt carries apiVersion 1, the operation id, source_id, expected_version, confirmed_version and the applied command.",
         "parameters": [
           {
             "name": "sourceId",
