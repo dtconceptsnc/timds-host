@@ -54,35 +54,24 @@ Studio does not invent replacement hostnames; the host operator configures and
 deploys the canonical public origin as described in
 [public-facing domains](../docs/operations.md#public-facing-domains-and-client-handoff).
 
-Below the collection, **Keep creating** explains the three ways to make a
-change, each as a card:
+Below the collection, **Keep creating** explains the two ways to make a
+change, each as a card. Neither card steers a designer to MCP, and neither
+names a toolkit version:
 
 1. **Open Studio.** The primary button creates a working session on the
    current system (`POST /api/timds/sessions` with a per-card idempotency key,
    regenerated after each success) and opens the Studio for it. **Start from a
    draft…** opens the same dialog as the Sessions page.
-2. **Send your agent** (badged `preview`). The primary button, **Send to your
-   agent…**, opens the agent handoff dialog described under "Agent handoff"
-   below, scoped to the selected Design System. The host's authenticated MCP
-   endpoint, `<origin>/api/timds/mcp`, lets an agent read published guidance,
-   edit files in a hosted session, submit changes for review, or send a Request
-   to the designer. The client signs in with OAuth and requests read/write
-   access; existing Design System permissions still apply. Remote MCP also
-   supports checks, invitations and explicit publisher preflight, publication
-   and rollback, sharing Studio's host lifecycle. Deployed acceptance remains
-   owed; the card keeps its preview badge until that is verified. See
-   [designer MCP](../docs/api/designer-mcp.md) for the tools and
-   [contributor setup](../docs/contributing-design-systems.md) for installation,
-   connection and the complete workflow.
-3. **Edit locally with npm.** Install `@dtconcepts/timds` globally, log in
+2. **Edit locally with npm.** Install `@dtconcepts/timds@latest` globally, log in
    with OAuth against this origin, `timds start <systemId>` to pull a new
    session to disk, `npm ci`, `timds dev`, and `timds submit` to send it back
    for review. The card says that this starts a new session and points at the
    join command under **Invite…** for one that is already open.
 
 Each snippet has a **Copy** button (the Clipboard API; no inline script). The
-toolkit version in the snippets is the `TOOLKIT` constant at the top of
-`app.js`; keep it in step with the root `package.json`. `timds start` carries
+snippets name the package as `@dtconcepts/timds@latest` and never a version
+number, so the CLI is always the current release; `app.js` has no toolkit pin
+to keep in step with the root `package.json`. `timds start` carries
 `--portal-url <origin>`, because a toolkit that has no workspace yet does not
 otherwise know which host to call. Below the cards the
 Overview lists drafts and sessions, recent Requests and the last releases. The
@@ -230,11 +219,10 @@ the bundle, and give an AI tool the same context. It matches the developer
 guides under [`docs/consuming/`](../docs/consuming/README.md): the copyable
 command is `npx --yes @dtconcepts/timds@latest consumer init` with the system
 ID and the public base, no toolkit version and no `--version`, so `init` pins
-the release that is current when it runs. The `TOOLKIT` constant is not used
-here. The command is offered only when the captured release has an immutable
-version base and a matching bundle at the artifact root. Custom nested bundles
-and imported same-label republications instead direct clients to the actual
-file manifest. The AI step names no server and no tool names: it points at the
+the release that is current when it runs. The command is offered only when
+the captured release has an immutable version base and a matching bundle at
+the artifact root. Custom nested bundles and imported same-label
+republications instead direct clients to the actual file manifest. The AI step names no server and no tool names: it points at the
 published guide and the AI guide (`llms.txt`), which lead to the tokens, brand
 data and guidance pages, and the client handoff text repeats that pointer under
 **AI TOOLS**. The main guide follows the current release; an immutable release
@@ -366,12 +354,12 @@ areas (claims) are shown read-only; agents declare them as they edit.
   before the join so a reload does not repeat it, and the hash survives the
   sign-in round trip; a failed join shows the host's error and the page then
   opens as usual. **Terminal** is the same invitation in the toolkit's words,
-  `npx --yes --package @dtconcepts/timds timds join "<studio link>"`: the
+  `npx --yes --package @dtconcepts/timds@latest timds join "<studio link>"`: the
   command signs in through the link's host origin if needed, calls the same
   join route as itself, and pulls the session into a new `./session-<id
   prefix>` folder. `timds join` takes a session id in every release and the
-  link from toolkit `0.1.476`, the release `TOOLKIT` names; an older pin
-  would break this row. Membership grants session access, not
+  link in current releases, which `@latest` resolves to; the row names no
+  toolkit version. Membership grants session access, not
   publication. There is no principal picker; owners, publishers and host
   administrators can destroy sessions using the host's current permissions.
   The invite dialog also offers **Send to your agent…** for the same session.
@@ -380,8 +368,11 @@ areas (claims) are shown read-only; agents declare them as they edit.
 
 Designers direct agents, so the shortest path into the host is a button that
 hands the designer's own agent everything it needs. **Send to your agent…**
-on the Overview (scoped to the Design System) and in the Studio rail (scoped
-to that session) open the same dialog. Nothing in it is sent anywhere by
+in the Studio rail and in the invite dialog, both scoped to that session, open
+the same dialog. The Overview does not offer it: designers are not steered to
+MCP from the Overview, so the dialog is reached only from inside a session,
+and its system-scoped variant (no session) has no entry point in Studio
+today. Nothing in it is sent anywhere by
 Studio; every action copies text, downloads a file or opens the client's own
 install link, and the agent then signs in as the designer through the host's
 OAuth flow. The dialog contains:
