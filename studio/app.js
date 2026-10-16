@@ -1,8 +1,14 @@
 const $=selector=>document.querySelector(selector);
 const $$=selector=>[...document.querySelectorAll(selector)];
 const prefix='timds.studio.v1.';
-const read=(key,fallback=null)=>{try{return JSON.parse(sessionStorage.getItem(prefix+key))??fallback;}catch{return fallback;}};
-const save=(key,value)=>sessionStorage.setItem(prefix+key,JSON.stringify(value));
+// The sign-in ('token') and the registered OAuth client ('client') are shared by
+// every Studio tab at this origin through localStorage; everything else, including
+// the one-time PKCE transaction, is per tab in sessionStorage.
+const shared=key=>key==='token'||key==='client';
+const store=key=>shared(key)?localStorage:sessionStorage;
+const read=(key,fallback=null)=>{try{return JSON.parse(store(key).getItem(prefix+key))??fallback;}catch{return fallback;}};
+const save=(key,value)=>{try{store(key).setItem(prefix+key,JSON.stringify(value));}catch{}};
+const remove=key=>{try{store(key).removeItem(prefix+key);}catch{}};
 // Agents are the only writers. Studio directs them with Requests and decides with
 // publish, rollback, close and invite; it never holds source files.
 const state={token:read('token'),principal:null,systems:[],management:null,managementError:null,source:null,view:'overview',work:null,delivery:null,submissions:[],session:null,composer:{here:''},requestRows:[],generation:0,polling:false,requestPolling:false,polledAt:0,presence:[],routeHash:location.hash,waking:new Map(),conflicts:new Map(),resolving:new Set(),previews:new Set(),destructions:new Map(),directory:null,inviteChoice:'',studio:{filter:'all',width:'desktop'}};
@@ -50,23 +56,31 @@ function safeDeletionBlockers(value){
   return{sourceId:value.sourceId,total:Math.max(value.total,sessions.length),sessions};
 }
 // Sign-in lifetime. The access token lasts about an hour; the rotating refresh
-// token (offline_access) renews it in the background while this tab is open.
-// Both live only in this tab's sessionStorage and are gone when it closes.
+// token (offline_access) renews it in the background for up to 30 days. The pair
+// is shared by every Studio tab at this origin: a rotation or disconnect in one
+// tab reaches the others through the storage event, and the newest issued pair
+// wins so no tab posts a stale refresh token the host has already rotated away.
 const renewAhead=5*60*1000,renewal={promise:null};
+const newer=(candidate,current)=>Boolean(candidate?.refreshToken&&candidate.expiresAt>(current?.expiresAt??0));
+function adoptToken(next){const stored=read('token');state.token=newer(stored,next)?stored:next;if(state.token===next)save('token',next);}
 const signedIn=()=>Boolean(state.token&&(state.token.expiresAt>Date.now()||state.token.refreshToken));
 function tokenResult(result){if(typeof result.access_token!=='string'||!Number.isFinite(result.expires_in)||result.expires_in<=0)throw new Error('The host did not return a valid sign-in');return{accessToken:result.access_token,expiresAt:Date.now()+result.expires_in*1000-10000,refreshToken:typeof result.refresh_token==='string'&&result.refresh_token?result.refresh_token:null};}
 async function renew(token){
+  // Another tab may have rotated the pair since this renewal was scheduled: use
+  // its newer pair rather than burning the previous-token grace on a stale one.
+  const stored=read('token');
+  if(newer(stored,token)){state.token=token=stored;if(token.expiresAt-Date.now()>renewAhead)return;}
   const response=await fetch('/token',{method:'POST',redirect:'error',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:token.refreshToken,client_id:token.clientId,resource:`${location.origin}/api/timds`})});
   if(state.token!==token)return;
   if(!response.ok){
     // A 4xx means the host refused this refresh token (expired, revoked or rotated
     // away): keep the access token while it lasts, then ask the person to connect
     // again. A 5xx is transient; the next call retries with the same token.
-    if(response.status<500){state.token={...token,refreshToken:null};save('token',state.token);}
+    if(response.status<500)adoptToken({...token,refreshToken:null});
     return;
   }
   const result=await response.json().catch(()=>null);if(!result)throw new Error('unreadable');
-  state.token={...tokenResult(result),clientId:token.clientId};save('token',state.token);
+  adoptToken({...tokenResult(result),clientId:token.clientId});
 }
 async function freshToken(){
   const token=state.token;
@@ -93,9 +107,14 @@ async function api(route,body){
 }
 const base64url=bytes=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
 async function connect(){const redirectUri=`${location.origin}/studio/`;let client=read('client');if(!client?.clientId){const result=await responseJson(await fetch('/register',{method:'POST',redirect:'error',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_name:'TimDS Studio',client_uri:redirectUri,redirect_uris:[redirectUri],grant_types:['authorization_code','refresh_token'],response_types:['code'],token_endpoint_auth_method:'none',scope:'timds:read timds:write offline_access'})}));if(typeof result.client_id!=='string')throw new Error('Client registration did not return an identity');client={clientId:result.client_id};save('client',client);}const verifier=base64url(crypto.getRandomValues(new Uint8Array(32))),nonce=base64url(crypto.getRandomValues(new Uint8Array(32))),challenge=base64url(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))));save('authorization',{verifier,nonce,redirectUri,clientId:client.clientId,createdAt:Date.now(),returnHash:location.hash});const url=new URL('/authorize',location.origin);url.search=new URLSearchParams({response_type:'code',client_id:client.clientId,redirect_uri:redirectUri,scope:'timds:read timds:write offline_access',resource:`${location.origin}/api/timds`,state:nonce,code_challenge:challenge,code_challenge_method:'S256'});location.assign(url);await new Promise(resolve=>setTimeout(resolve,10000));}
-async function completeAuthorization(){const url=new URL(location.href);if(!url.searchParams.has('code')&&!url.searchParams.has('error'))return;const saved=read('authorization');history.replaceState(null,'','/studio/'+(saved?.returnHash||''));sessionStorage.removeItem(prefix+'authorization');if(!saved||Date.now()-saved.createdAt>10*60*1000||url.searchParams.get('state')!==saved.nonce)throw new Error('This sign-in expired or did not match this tab. Connect again.');if(url.searchParams.has('error'))throw new Error('Connection was cancelled.');const result=await responseJson(await fetch('/token',{method:'POST',redirect:'error',credentials:'omit',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code:url.searchParams.get('code'),client_id:saved.clientId,redirect_uri:saved.redirectUri,code_verifier:saved.verifier,resource:`${location.origin}/api/timds`})}));state.token={...tokenResult(result),clientId:saved.clientId};save('token',state.token);}
-function disconnect(explicit=true){feedStop();$('#dialog')?.close();state.management=null;state.managementError=null;state.destructions.clear();state.token=null;state.principal=null;state.source=null;state.delivery=null;state.generation++;sessionStorage.removeItem(prefix+'token');if(explicit){for(const key of Object.keys(sessionStorage))if(key.startsWith(prefix))sessionStorage.removeItem(key);}renderWelcome();}
-function renderWelcome(){const main=node('main',{id:'main',class:'welcome'},node('span',{class:'wordmark'},'timds',title('span','.',{class:'brand-dot'})),title('div','YOUR DESIGN SYSTEM, TOGETHER',{class:'eyebrow'}),title('h1','A place for your next good change.'),title('p','Ask for a change, watch the agent make it live, and review the result before it goes out.'),button(signedIn()?'Try opening Studio again':'Connect to your Studio',signedIn()?boot:connect,'primary'),title('div','Your existing account permissions apply. This tab stays connected while it is open; closing it ends the sign-in.',{class:'welcome-footer'}));$('#app').replaceChildren(main);}
+async function completeAuthorization(){const url=new URL(location.href);if(!url.searchParams.has('code')&&!url.searchParams.has('error'))return;const saved=read('authorization');history.replaceState(null,'','/studio/'+(saved?.returnHash||''));remove('authorization');if(!saved||Date.now()-saved.createdAt>10*60*1000||url.searchParams.get('state')!==saved.nonce)throw new Error('This sign-in expired or did not match this tab. Connect again.');if(url.searchParams.has('error'))throw new Error('Connection was cancelled.');const result=await responseJson(await fetch('/token',{method:'POST',redirect:'error',credentials:'omit',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code:url.searchParams.get('code'),client_id:saved.clientId,redirect_uri:saved.redirectUri,code_verifier:saved.verifier,resource:`${location.origin}/api/timds`})}));state.token={...tokenResult(result),clientId:saved.clientId};save('token',state.token);}
+function disconnect(explicit=true){feedStop();$('#dialog')?.close();state.management=null;state.managementError=null;state.destructions.clear();state.token=null;state.principal=null;state.source=null;state.delivery=null;state.generation++;remove('token');if(explicit){for(const name of ['sessionStorage','localStorage'])try{const area=window[name];for(const key of Object.keys(area))if(key.startsWith(prefix))area.removeItem(key);}catch{}}renderWelcome();}
+// Another Studio tab at this origin rotated, set or cleared the shared sign-in.
+window.addEventListener('storage',event=>{if(event.storageArea!==localStorage||event.key!==prefix+'token')return;const next=read('token');if(!next){if(state.token)disconnect(false);return;}
+  // An older pair another tab saved last loses to the one this tab already holds.
+  const same=next.accessToken===state.token?.accessToken;if(state.principal&&!same&&!newer(next,state.token))return;
+  state.token=next;if(!state.principal)boot().catch(loadFailure);});
+function renderWelcome(){const main=node('main',{id:'main',class:'welcome'},node('span',{class:'wordmark'},'timds',title('span','.',{class:'brand-dot'})),title('div','YOUR DESIGN SYSTEM, TOGETHER',{class:'eyebrow'}),title('h1','A place for your next good change.'),title('p','Ask for a change, watch the agent make it live, and review the result before it goes out.'),button(signedIn()?'Try opening Studio again':'Connect to your Studio',signedIn()?boot:connect,'primary'),title('div','Your existing account permissions apply. Every Studio tab in this browser shares the sign-in for up to 30 days; Disconnect ends it.',{class:'welcome-footer'}));$('#app').replaceChildren(main);}
 function navigate(view,sessionId=''){const params=new URLSearchParams({...(state.source?{source:state.source.id}:{}),view,...(sessionId?{session:sessionId}:{})});const next=params.toString();if(location.hash.slice(1)===next)return route().catch(loadFailure);location.hash=next;}
 function renderShell(){if(state.view==='studio'&&state.source){$('#app').replaceChildren(node('div',{class:'studio-shell'},studioTop(),node('main',{id:'main',class:'studio-main',tabIndex:-1})));renderMain();return;}const current=state.source;
   const systems=node('nav',{class:'navigation','aria-label':'Design Systems'},...(state.systems.length?state.systems.map(system=>{const active=system.id===current?.id,hash=new URLSearchParams({source:system.id,view:'overview'}).toString();return node('a',{href:'#'+hash,class:`nav-link system-link ${active?'active':''}`,'aria-current':active?'page':null,onclick:event=>{event.preventDefault();if(!active)location.hash=hash;}},title('span',system.name,{class:'system-name'}),title('span',system.systemId,{class:'system-id'}));}):[title('p','No Design Systems yet.',{class:'help'})]));

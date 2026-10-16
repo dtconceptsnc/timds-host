@@ -1028,8 +1028,10 @@ binds a stable operation to the reviewed target and expected current version.
 A fresh server per request keeps
 actor, source and release selection out of another caller's MCP session.
 Studio static assets consume the same host API and OAuth session; Studio asks
-for `offline_access` and renews its hour-long access token through the refresh
-grant while the tab is open (see [`studio/README.md`](../studio/README.md)). Deployed MCP
+for `offline_access`, keeps the token pair in `localStorage` shared by every
+Studio tab at the origin, and renews its hour-long access token through the
+refresh grant for up to 30 days until Disconnect or a refused refresh ends the
+sign-in (see [`studio/README.md`](../studio/README.md)). Deployed MCP
 client acceptance and phone/browser verification remain separate from local
 build and smoke checks.
 
