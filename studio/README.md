@@ -236,9 +236,12 @@ version base and a matching bundle at the artifact root. Custom nested bundles
 and imported same-label republications instead direct clients to the actual
 file manifest. The AI step gives the public, read-only MCP server at `/mcp` on
 the published origin, the system ID and the first reads (`describe_system`,
-`get_tokens`, `read_page`), with the AI guide (`llms.txt`) as the path for
-tools without MCP; the client handoff text repeats both under **AI TOOLS**. The
-authenticated designer MCP is never part of the client handoff. The main guide
+`get_tokens`, `read_page`), says that `consumer init` installs the
+`timds-consume-design-system` skill for an agent working inside the product,
+and gives the AI guide (`llms.txt`) as the path for tools without MCP. The
+client handoff text repeats all of this under **AI TOOLS**: the MCP URL, the
+system ID, the first reads, the init command with its skill, and the AI guide.
+The authenticated designer MCP is never part of the client handoff. The main guide
 follows the current release; an immutable release link appears only when the
 derived layer confirms that it represents the captured publication.
 
