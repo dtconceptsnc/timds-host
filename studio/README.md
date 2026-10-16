@@ -234,12 +234,16 @@ the release that is current when it runs. The `TOOLKIT` constant is not used
 here. The command is offered only when the captured release has an immutable
 version base and a matching bundle at the artifact root. Custom nested bundles
 and imported same-label republications instead direct clients to the actual
-file manifest. The AI step names no server and no tool names: it points at the
-published guide and the AI guide (`llms.txt`), which lead to the tokens, brand
-data and guidance pages, and the client handoff text repeats that pointer under
-**AI TOOLS**. The main guide follows the current release; an immutable release
-link appears only when the derived layer confirms that it represents the
-captured publication.
+file manifest. The AI step gives the public, read-only MCP server at `/mcp` on
+the published origin, the system ID and the first reads (`describe_system`,
+`get_tokens`, `read_page`), says that `consumer init` installs the
+`timds-consume-design-system` skill for an agent working inside the product,
+and gives the AI guide (`llms.txt`) as the path for tools without MCP. The
+client handoff text repeats all of this under **AI TOOLS**: the MCP URL, the
+system ID, the first reads, the init command with its skill, and the AI guide.
+The authenticated designer MCP is never part of the client handoff. The main guide
+follows the current release; an immutable release link appears only when the
+derived layer confirms that it represents the captured publication.
 
 The client first reads the existing source view to distinguish an unpublished
 system from a failed read, then calls `read_derived_layer` over the fixed
