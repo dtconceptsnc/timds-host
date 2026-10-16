@@ -6,10 +6,11 @@ A system can hold whole-page designs: each design has routes, and each route
 has states (default, a sent form, an empty list, an error). They are the
 reference a product route must match.
 
-- `list_designs` lists the designs with their routes and states;
-  `read_design` returns one page state as the authored HTML and JavaScript
-  together with the system stylesheets, scripts and media it loads. Without
-  MCP, `designs.json` under the public root lists the same.
+- `designs.json` under the public root lists the designs with their routes
+  and states, and gives each page state as the authored HTML and JavaScript
+  together with the system stylesheets, scripts and media it loads. In a
+  pinned product the same designs sit in the synced bundle when the system
+  includes them.
 - Port the design: rebuild the route in the product's own layouts and
   components so it matches the design's structure, composed from the system's
   classes and tokens, with the product's routing, data, metadata and
@@ -30,24 +31,23 @@ enables it, shows the same pairing.
 
 ## Guidance
 
-- `search_guidance` answers a question with the blocks that contain every
-  term, guidance groups first, each cited by page and block. `read_page`
-  returns a whole page as Markdown when you need the surrounding context;
-  `list_pages` is the directory.
 - `llms.txt` under the public root is the brand essentials and page directory
-  in the llms.txt convention, and `llms-full.txt` the pages in full. Either
-  works for a tool that reads a URL rather than MCP.
+  in the llms.txt convention, and `llms-full.txt` the pages in full. Read the
+  full file when you need the surrounding context of a rule; `index.json` is
+  the same directory as structured blocks.
+- The guidance groups in `brand.json` name the pages and blocks that hold
+  `voice` and `compliance`. Start there for a question about copy; cite the
+  page you relied on.
 - Compliance guidance is binding; voice guidance shapes copy. When a request
   conflicts with either, say so.
 
 ## Media
 
-- `list_media` returns the reviewed catalog: logical keys, titles, kinds,
-  tags, stable public URLs, sizes, and measured dimensions or durations.
-  Reference assets by stable URL or key.
-- Logos and brand imagery are in `get_brand`, with their intended
-  backgrounds. Do not draw, recolour or stretch a mark. Do not substitute
-  stock, generated or third-party imagery unless guidance allows it.
+- Logos and brand imagery are in `brand.json`, each with its intended
+  background, format and stable public URL; `index.json` joins each page's
+  assets to the media they reference. Reference assets by stable URL or key.
+- Do not draw, recolour or stretch a mark. Do not substitute stock, generated
+  or third-party imagery unless guidance allows it.
 - Media masters, video, audio and full-resolution photography belong in the
   system, published from its repository. A product references them; it does
   not commit copies.
@@ -56,6 +56,5 @@ enables it, shows the same pairing.
 
 A missing token, an unfilled role, a format the catalog lacks, guidance that
 reads wrong: these are gaps in the system, not things to invent in the
-product. Report them. With an authenticated host connection, `report_gap`
-files one as a Request stamped with the version observed; identical reports
-reuse their Request. Opinions about style are not gaps.
+product. Tell the system's owner; the fix is made in the system's repository
+and published through its review. Opinions about style are not gaps.

@@ -9,28 +9,29 @@ release's bundle at install time. No system bytes are committed; a clone and
 From the product repository root:
 
 ```sh
-npx --yes @dtconcepts/timds@0.1.476 consumer init \
+npx --yes @dtconcepts/timds@latest consumer init \
   --system timds-example/core \
-  --version 2026.10.14-1 \
   --url https://public.example.com/systems/timds-example/core
 ```
 
 `--url` is the system's public root without a trailing slash. Without it the
 toolkit assumes a different host layout and sync fails with `fetch failed`.
-Studio's Deliverables view offers this command filled in when the release
-has an immutable address and a bundle it can name.
+Without `--version` the pin is the label of the release that is current at
+that moment, read from the root; pass `--version current` to follow every
+release instead. Studio's Deliverables view offers this command filled in
+when the release has an immutable address and a bundle it can name.
 
 `consumer init` writes and manages:
 
 - `timds.consumer.json`: the pin, each app, how to run it, the routes to
   review, and the paths a designer change may touch.
-- A `postinstall` script that runs `timds consumer sync`, and a `.gitignore`
-  entry for `design-system/`.
+- In `package.json`, the toolkit as a dev dependency, a `timds` script, and a
+  `postinstall` that runs `timds consumer sync`; plus a `.gitignore` entry for
+  `design-system/`. From then on `npm run timds -- consumer …` runs the
+  product's own copy of the CLI, which is what the commands below mean by
+  `timds`.
 - The `timds-consume-design-system` skill, the preview and designer-change
   workflows, and `.claude/launch.json` entries.
-- An `.mcp.json` server entry. The managed entry points at a portal route this
-  host does not serve; replace it with the stdio or HTTP entry in
-  [connect an agent](connect.md).
 
 Managed files are tracked by digest; your own edits are kept unless you pass
 `--force`.
@@ -41,14 +42,15 @@ Managed files are tracked by digest; your own edits are kept unless you pass
 "designSystem": {
   "path": "design-system",
   "systemId": "timds-example/core",
-  "version": "2026.10.14-1",
+  "version": "<release label>",
   "url": "https://public.example.com/systems/timds-example/core"
 }
 ```
 
-- A **version label** pins one release. Moving it is an explicit developer
-  decision, made with `timds consumer update 2026.10.20-1` or by hand, and
-  reviewed like any dependency bump.
+- A **release label** pins one release; `consumer init` fills in the one it
+  resolved. Moving it is an explicit developer decision, made with
+  `timds consumer update <label>` or by hand, and reviewed like any dependency
+  bump.
 - `"current"` follows every release at the next install. Use it for internal
   tools, not for a production site that reviewers sign off on.
 - A **git submodule** at `design-system/` is the older form. `timds consumer
@@ -71,8 +73,8 @@ The product then imports the files as its own:
 @import "../design-system/src/styles/site.css";
 ```
 
-Paths are whatever the system's `bundle.json` lists; `describe_system` and the
-system's guidance say which stylesheet belongs to which surface.
+Paths are whatever the system's `bundle.json` lists; the system's `llms.txt`
+and guidance say which stylesheet belongs to which surface.
 
 ## In CI
 
@@ -87,8 +89,8 @@ loudly:
 | `…bundle is stamped <other version>` | The manifest at that address belongs to another release. | Report it to the system's operator; do not pin the other version blindly. |
 | A SHA-256 mismatch | A downloaded file differs from the manifest. | Retry once; if it persists the release is damaged and the operator needs to know. |
 
-Lock the toolkit to a `0.1.x` release in the root `package.json`;
-`consumer check` warns when the lock predates published pins.
+Keep the toolkit current with `npm install --save-dev @dtconcepts/timds@latest`;
+`consumer check` warns when the lockfile's toolkit predates published pins.
 
 ## Check, update, preview
 
@@ -96,10 +98,10 @@ Lock the toolkit to a `0.1.x` release in the root `package.json`;
   synced bundle is at the pinned version, and with `--base origin/main`
   fails on any change outside a declared design surface or any move of the
   pin. `--require-token=--name` checks a custom property the product needs.
-- `timds consumer update [VERSION]` moves the pin and syncs. Read
-  `changelog.json` between the old and new labels first; the
-  `timds-update-design-system` skill walks an agent through porting what
-  changed.
+- `timds consumer update [LABEL]` moves the pin and syncs; without a label it
+  moves to the current release. Read `changelog.json` between the old and new
+  labels first; the `timds-update-design-system` skill walks an agent through
+  porting what changed.
 - `timds consumer preview --app NAME` builds or serves an app and writes a
   review folder with captures per route, width and scheme, paired with the
   system's designs where `timds.consumer.json` declares a pairing.

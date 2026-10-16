@@ -19,14 +19,14 @@ work in the repository and which checks apply to a change.
 
 | Document | Read it when |
 | --- | --- |
-| [consuming/README.md](consuming/README.md) | You build from a published system: where it lives, three ways to consume it, the version rule, and the map of these guides. |
-| [consuming/connect.md](consuming/connect.md) | You are connecting an agent and need the tools, resources and first calls. |
+| [consuming/README.md](consuming/README.md) | You build from a published system: the CLI, where it lives, two ways to consume it, the version rule, and the map of these guides. |
+| [consuming/connect.md](consuming/connect.md) | You are pointing an agent or a script at a published system and need the CLI setup, the documents to read and the first reads. |
 | [consuming/styles.md](consuming/styles.md) | You are implementing a product's styles or deciding whether to include CSS at all. |
 | [consuming/pin-and-sync.md](consuming/pin-and-sync.md) | You are pinning a release in a repository and want install and CI to fetch it. |
 | [consuming/produce-assets.md](consuming/produce-assets.md) | You are producing an email, deck, social post, print sheet or video board from the system. |
 | [consuming/designs-and-guidance.md](consuming/designs-and-guidance.md) | You are porting a website design or need the voice, compliance and media rules. |
 | [consuming/versions-and-releases.md](consuming/versions-and-releases.md) | You need what current, pinned, `latest` and a release label mean, and how rollback affects them. |
-| [consuming/what-a-system-publishes.md](consuming/what-a-system-publishes.md) | A tool says a document is not published and you need to tell "not yet" from "not supported". |
+| [consuming/what-a-system-publishes.md](consuming/what-a-system-publishes.md) | A document is missing from a release and you need to tell "not yet" from "not supported". |
 
 ## API and contract
 
