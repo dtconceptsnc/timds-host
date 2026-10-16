@@ -19,8 +19,8 @@ work in the repository and which checks apply to a change.
 
 | Document | Read it when |
 | --- | --- |
-| [consuming/README.md](consuming/README.md) | You build from a published system: the CLI, where it lives, two ways to consume it, the version rule, and the map of these guides. |
-| [consuming/connect.md](consuming/connect.md) | You are pointing an agent or a script at a published system and need the CLI setup, the documents to read and the first reads. |
+| [consuming/README.md](consuming/README.md) | You build from a published system: the CLI, where it lives, three ways to consume it, the version rule, and the map of these guides. |
+| [consuming/connect.md](consuming/connect.md) | You are connecting an agent to a published system and need the MCP connection, the CLI setup, the documents and the first reads. |
 | [consuming/styles.md](consuming/styles.md) | You are implementing a product's styles or deciding whether to include CSS at all. |
 | [consuming/pin-and-sync.md](consuming/pin-and-sync.md) | You are pinning a release in a repository and want install and CI to fetch it. |
 | [consuming/produce-assets.md](consuming/produce-assets.md) | You are producing an email, deck, social post, print sheet or video board from the system. |

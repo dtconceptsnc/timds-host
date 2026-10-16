@@ -40,20 +40,24 @@ every developer and CI job; refresh it with
 | `https://public.example.com/systems/timds-example/core/` | The current release: browsable guide, derived documents, stamp | Five minutes, revalidated |
 | `https://public.example.com/systems/timds-example/core/v/<label>/` | One release, immutable | One year |
 | `https://public.example.com/systems/timds-example/core/v/latest/…` | A tag for the current release; answers 307 to the immutable address | Five minutes, revalidated |
+| `https://public.example.com/mcp` | Anonymous read-only MCP over HTTP, `systemId` as a tool argument | none |
 
 A system id with more than two segments uses one URL-encoded segment instead,
 `/systems/a%2Fb%2Fc/`. Beside the root sits `.timds-artifact.json`, the stamp
 that names the version, the source commit, the artifact entry and where each
 derived document is.
 
-## Two ways to consume
+## Three ways to consume
 
-1. **A product pinning a release.** `timds consumer init` pins a release and
+1. **An agent reading through MCP.** The CLI's read server gives an agent
+   the whole consumer tool set (brand roles, tokens, guidance, formats,
+   designs, media) from the published files, and the public origin answers
+   read-only MCP at `/mcp`. See [connect an agent](connect.md).
+2. **A product pinning a release.** `timds consumer init` pins a release and
    fetches the system's stylesheets and assets into the product at install
    time, verified by digest. See [pin and sync](pin-and-sync.md) and
    [implement styles](styles.md).
-2. **Reading the published documents.** Anything that can fetch a URL, an
-   agent included, reads `llms.txt`, `brand.json`, `tokens.json`,
+3. **Reading the published documents.** Anything that can fetch a URL reads `llms.txt`, `brand.json`, `tokens.json`,
    `index.json`, `formats.json`, `designs.json`, `changelog.json` and
    `bundle.json` under the root. See [connect an agent](connect.md); the
    documents are described in
@@ -70,7 +74,7 @@ the current one; that is a fact to report, not to hide.
 
 | Guide | Read it when |
 | --- | --- |
-| [connect.md](connect.md) | You are pointing an agent or a script at a system and need the documents to read and the first reads to make. |
+| [connect.md](connect.md) | You are connecting an agent to a system and need the MCP connection, the documents and the first reads. |
 | [styles.md](styles.md) | You are implementing a product's styles from the system, or deciding whether to include CSS at all. |
 | [pin-and-sync.md](pin-and-sync.md) | You are pinning a release in a repository and want install and CI to fetch it. |
 | [produce-assets.md](produce-assets.md) | You are producing something that is not a web page: an email, a deck, a social post, a print sheet, a video board. |
