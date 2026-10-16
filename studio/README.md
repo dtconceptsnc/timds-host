@@ -7,20 +7,29 @@ registration, authorization-code flow with PKCE S256, and API v1; no portal
 backend or frontend is involved. API and WebSocket URLs always derive from
 `location.origin`, never from a host origin the server reports.
 
-The access token, its rotating refresh token and the one-time PKCE transaction
-live only in this tab's `sessionStorage`; closing the tab ends the sign-in. The
-client requests `timds:read timds:write offline_access`, clears the code from
-the URL before exchange, checks state and expiry, and sends the bearer token
-only to fixed same-origin API routes with redirects rejected. The access token
-lasts about an hour. When a call finds it within five minutes of expiry, or
-already expired after the tab was in the background, the client first renews it
-through the same-origin `/token` refresh grant (one renewal in flight at a
-time, bound to the registered client and the API resource) and stores the
-rotated pair. The host issues refresh tokens for 30 days, so an open tab stays
-connected for up to that long. A refused refresh drops the refresh token and
-the tab asks the person to connect again once the access token expires; a
-`401` from the API disconnects at once. Disconnect clears this tab's Studio
-state. Rendered data uses DOM text.
+The access token, its rotating refresh token and the registered OAuth client
+live in `localStorage` under the `timds.studio.v1.` prefix, shared by every
+Studio tab at this origin, so a new tab, a link opened from an agent and a
+browser restart all land signed in; the one-time PKCE transaction stays in the
+starting tab's `sessionStorage`. The client requests
+`timds:read timds:write offline_access`, clears the code from the URL before
+exchange, checks state and expiry, and sends the bearer token only to fixed
+same-origin API routes with redirects rejected. The access token lasts about an
+hour. When a call finds it within five minutes of expiry, or already expired
+after the tab was in the background, the client first renews it through the
+same-origin `/token` refresh grant (one renewal in flight per tab, bound to the
+registered client and the API resource) and stores the rotated pair. Before
+posting the grant a tab re-reads the stored pair and uses a newer one another
+tab rotated in, and every tab listens to the `storage` event to adopt a
+rotation and to treat a cleared token as a disconnect, so tabs never race the
+host's one-time previous-token grace. The host issues refresh tokens for 30
+days, so the sign-in lasts up to that long and ends with Disconnect or a
+refused refresh. A refused refresh drops the refresh token and Studio asks the
+person to connect again once the access token expires; a `401` from the API
+disconnects at once. Disconnect clears the shared sign-in, so every tab signs
+out, along with this tab's Studio state. The trade-off is that the token now
+persists on disk at the origin until then; the CSP and the same-origin-only
+sends are unchanged. Rendered data uses DOM text.
 
 ## The dashboard
 
