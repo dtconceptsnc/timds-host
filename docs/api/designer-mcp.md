@@ -8,7 +8,8 @@ Connect an MCP client to the host's authenticated `/api/timds/mcp` endpoint.
 For example, `https://timds-example.example.com/api/timds/mcp` uses the same
 OAuth authorization and existing Design System grants as Studio and the CLI.
 Read access uses `timds:read`; contribution tools additionally require
-`timds:write`. The host also accepts its explicitly configured Studio origin.
+`timds:write`, and the endpoint's sign-in challenge asks for both so a client
+that follows it can contribute. The host also accepts its explicitly configured Studio origin.
 The anonymous `/mcp` endpoint on the public origin exposes published reads
 only, with `systemId` as a tool argument; the same files are also readable
 without MCP at `/systems/<org>/<name>/` (see

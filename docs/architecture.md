@@ -900,7 +900,7 @@ The compatibility target for toolkit PR #100 is:
 | Endpoints | Same-origin HTTPS `/authorize`, `/token`, `/register`; token requests do not require a browser challenge or redirect. |
 | Metadata | `response_types_supported` includes `code`; `code_challenge_methods_supported` includes `S256`; advertise public `none` token authentication. |
 | Resource | `<host-origin>/api/timds`; validate audience/resource at authorization and token use. |
-| Scope | Advertise `timds:read`, `timds:write`, `offline_access`; handlers enforce them. Write scope never implies publisher grant. |
+| Scope | The authorization server advertises `timds:read`, `timds:write`, `offline_access`. The MCP resource's `401` challenge and protected-resource metadata name `timds:read timds:write`, so a client that requests what is advertised can contribute; handlers enforce what a token holds. Write scope never implies publisher grant. |
 | Public CLI client | DCR accepts `application_type:native`, code/refresh grants, response type code and `token_endpoint_auth_method:none`; no client secret. Pre-registered `--client-id` also works. |
 | Redirect | Exact registered `http://127.0.0.1:<random-port>/callback`; verify provider loopback-port behavior in integration. CLI binds loopback, checks Host/path/state and consumes one callback. |
 | Refresh | Bearer access token, expiry and optional rotating refresh token; preserve resource/client binding. |
@@ -1015,9 +1015,12 @@ covers Studio, the CLI and remote/local MCP connections.
 
 Every authenticated contribution tool uses the existing coordinator operations
 and current D1 authority. Each mutation enforces `timds:write` and dispatches
-with write access; the MCP HTTP endpoint itself admits `timds:read` so that
-read-only clients can connect. Scope never supplies a missing source grant or
-publisher grant. File tools enforce the toolkit's authored/protected-path
+with write access. The MCP endpoint's `401` challenge and protected-resource
+metadata name `timds:read timds:write`: MCP clients request exactly the
+advertised scopes, and a client offered only read could never reach the
+contribution tools. The endpoint itself still admits a token holding only
+`timds:read`, which sees the read tools alone. Scope never supplies a missing
+source grant or publisher grant. File tools enforce the toolkit's authored/protected-path
 boundaries and bound their output; snapshot storage references stay internal.
 Contributor checks use the isolated build runtime and never move a public
 pointer. Publication retains its separate publisher checks, while rollback
