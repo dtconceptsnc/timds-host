@@ -13,7 +13,7 @@ work in the repository and which checks apply to a change.
 | [operations.md](operations.md) | You are provisioning, configuring, deploying or operating a host, or need the pinned `cf` limitations. |
 | [ci.md](ci.md) | You want to know what the GitHub Actions workflows prove and how to dispatch live conformance. |
 | [verification.md](verification.md) | You are deciding what counts as validation and what must stay in private operator storage. |
-| [contributing-design-systems.md](contributing-design-systems.md) | You need Studio, CLI or MCP installation/connection instructions and the full contribution, review, publication and rollback lifecycle. |
+| [contributing-design-systems.md](contributing-design-systems.md) | You contribute to a Design System through Studio or the TimDS CLI and need sign-in, install and the full contribution, review, publication and rollback lifecycle. |
 
 ## Consuming a published system
 
