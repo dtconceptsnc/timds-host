@@ -523,6 +523,13 @@ matching creates identities or grants. Revoke a publish grant with the same
 saved `grant.json` shape and `publish:false`, using a new operation UUID for the
 new intent. Keep that UUID and body unchanged through an uncertain retry.
 
+Studio offers the same grant through **Access…** on each ready system in
+**Manage Design Systems** and beside the Overview heading; it reads the
+publisher and identity catalogs above and posts the same authority operation
+with a tab-saved operation UUID (see [`studio/README.md`](../studio/README.md)).
+The grant receipt carries `apiVersion: 1` with the operation `id`, `source_id`,
+`expected_version`, `confirmed_version` and the applied `command`.
+
 Archive and restore use durable coordinator authority operations:
 
 ```sh
